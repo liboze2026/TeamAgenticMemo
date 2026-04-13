@@ -245,11 +245,46 @@ AI做对的时刻——与纠正时刻互补，构建正面知识。
 ### 知识编译（Knowledge Compilation）
 
 将知识条目编译为目标AI工具可消费的格式。同一份知识，多种输出：
-- CLAUDE.md（Claude Code）
+- CLAUDE.md（Claude Code）— Phase 1唯一的分发渠道
 - skill文件（Claude Code Skills）
 - Hook规则（Claude Code Hooks）
 - .cursorrules（Cursor，远期）
 - AGENTS.md（Codex，远期）
+
+#### CLAUDE.md编译策略（Phase 1核心）
+
+**容量限制**: 研究表明CLAUDE.md在~100行（约2000 tokens）时效果最佳，超过后AI逐渐忽略规则。TeamAgent管理的区块上限为**50行**（给用户自己的内容留空间）。
+
+**内容共存**: 不覆盖用户已有内容。在CLAUDE.md中维护一个标记区块：
+```markdown
+<!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
+## TeamAgent 经验
+...（自动编译的知识，最多50行）
+<!-- TEAMAGENT:END -->
+```
+用户在标记区块外的内容不受影响。
+
+**优先级排序**: 50行预算内，按以下优先级选取知识条目：
+1. enforcement=block的规则（必须包含，通常很少）
+2. confidence最高 + hit_count最多的规则（经过验证的高频知识）
+3. 最近被触发的规则（当前活跃的知识）
+4. 与当前项目技术栈匹配的规则
+
+**编译时机**:
+- 每次会话结束后，如果知识库有变更 → 重新编译
+- 用户执行 /teamagent compile → 手动触发重新编译
+- 不在会话进行中重新编译（避免mid-session不一致）
+
+**编译格式**: 简洁的规则列表，每条一行，最重要的在前：
+```markdown
+<!-- TEAMAGENT:START -->
+## TeamAgent 经验（23条活跃知识，为你编译了Top 15）
+- 本机使用python3而非python [置信度0.95, 拦截47次]
+- Prisma日期过滤使用gte/lte（闭区间），不是gt/lt [0.92, 34次]
+- 本项目状态管理使用Zustand，不引入Redux [团队约定]
+- ...
+<!-- TEAMAGENT:END -->
+```
 
 ### 三层知识架构
 
@@ -501,37 +536,60 @@ Session Monitor实现:
 
 ## 七、MVP功能范围
 
-### Phase 1: 个人层核心（第1-4周）
+### Phase 1: 最小可行循环（第1-4周）
 
-目标: 单个用户使用，AI不再犯同样的错误。**Day 1即有价值。**
+目标: **一个循环跑通**: 用户纠正AI → 系统学到 → 下次AI不再犯。
+
+核心功能（仅6项，聚焦单一循环）:
+1. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
+2. 纠正时刻识别器 — 多信号融合检测
+3. 知识提取引擎 — 调用Claude API结构化提取经验
+4. 本地知识库 — JSONL存储 + 基础关键词检索
+5. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新（见编译策略）
+6. PostToolUse Hook — 记录工具执行结果用于学习
+
+辅助功能:
+7. /pitfall命令 — 用户主动记录踩坑（兜底采集通道）
+8. /teamagent stats — 终端统计摘要（最简版感知）
+
+**不在Phase 1**（移到后面）:
+- 预置知识包 → Phase 1.5
+- 成功模式捕获 → Phase 2
+- MCP Server → Phase 2
+- Session Monitor → Phase 2
+- PreToolUse Hook拦截 → Phase 1.5
+
+验证指标: 一个具体的坑被学到，下次会话不再犯。这是最小的成功标准。
+
+开发时间分配:
+- 60%: 会话分析+纠正识别+知识提取（核心IP）
+- 25%: 知识库+CLAUDE.md编译
+- 15%: Hook+CLI命令
+
+### Phase 1.5: 冷启动+主动拦截（第5-6周）
+
+目标: 解决冷启动问题，加入PreToolUse拦截能力。
 
 功能:
-1. 预置知识包 — 按技术栈预构建的经验库，随安装分发（解决冷启动）
-2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，自动激活对应知识
-3. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
-4. 纠正时刻识别器 — 多信号融合检测（负面信号）
-5. 成功模式捕获器 — 检测成功完成/表扬/重复使用（正面信号）
-6. 知识提取引擎 — 调用Claude API结构化提取经验（avoidance+practice）
-7. 本地知识库 — JSONL存储 + 基础检索
-8. Hook拦截器 — PreToolUse/PostToolUse hook脚本
-9. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新
-10. /pitfall命令 — 用户主动记录踩坑
-11. /teamagent stats — 终端统计摘要（最简版Portal）
+1. 预置知识包 — 按技术栈预构建50+条经验，随安装分发
+2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，自动激活
+3. PreToolUse Hook — 基于已有知识主动拦截错误命令
 
-验证指标: 坑重现率下降; Day 1预置知识生效
+验证指标: 新用户Day 1即有预置知识生效体验
 
-### Phase 2: 实时防护（第5-8周）
+### Phase 2: 实时防护（第7-10周）
 
-目标: MCP Server上线，智能体自主运行时也能实时守护。
+目标: MCP Server上线，成功模式捕获，智能体自主运行守护。
 
 功能:
 1. MCP Server — check_pitfall / get_best_practice / report_correction / get_stats
-2. Session Monitor — 旁路监控 + 模式匹配告警
-3. Hook自动触发MCP — 解决长会话退化问题
-4. 置信度自动校准 — 闭环追踪干预效果
-5. 知识衰减引擎 — 过期知识自动降级
-6. /teamagent override — 临时绕过规则
-7. /teamagent rules — 管理活跃规则
+2. 成功模式捕获器 — 检测成功/表扬/重复使用（正面信号）
+3. Session Monitor — 旁路监控 + 模式匹配告警
+4. Hook自动触发MCP — 解决长会话退化问题
+5. 置信度自动校准 — 闭环追踪干预效果
+6. 知识衰减引擎 — 过期知识自动降级
+7. /teamagent override — 临时绕过规则
+8. /teamagent rules — 管理活跃规则
 
 验证指标: 首次正确率上升
 
