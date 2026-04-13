@@ -235,6 +235,11 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 │                                                           │
 │  知识编译器: 知识库 → CLAUDE.md / skill / hook规则 /       │
 │             .cursorrules(远期) / AGENTS.md(远期)           │
+│                                                           │
+│  Knowledge Portal（活的团队Wiki）:                         │
+│  • /teamagent portal — 静态HTML快照                       │
+│  • /teamagent portal --live — 实时HTTP服务+WebSocket      │
+│  • 仪表盘 / 知识浏览器 / 详情页 / 实时流 / 周报            │
 └─────────────────────────┬────────────────────────────────┘
                           ▼
 ┌──────────────────────────────────────────────────────────┐
@@ -440,6 +445,34 @@ AI编码工具在自主运行时（连续几十次工具调用无人介入），
 8. 周报生成 — 团队AI进化周报
 
 验证指标: 跨用户避坑率(Cross-User Pitfall Prevention Rate)
+
+### Phase 3.5: Knowledge Portal — 活的团队Wiki（第12-16周）
+
+目标: 让知识可见可浏览，替代传统wiki和技术分享会。
+
+Knowledge Portal不是传统wiki——它是自生长的、实时更新的、由系统运行过程自动填充的知识展示层。
+
+功能:
+1. /teamagent portal — 生成静态HTML知识快照，浏览器打开
+2. /teamagent portal --live — 启动本地HTTP服务，WebSocket实时推送更新
+3. 仪表盘 — 知识库总览、进化曲线、今日拦截数、活跃贡献者
+4. 知识浏览器 — 按分类(C/E/S/K)、技术栈、项目、状态多维浏览
+5. 知识详情页 — 错误做法、正确做法、原因、生效记录、时间线、关联知识
+6. 实时流 — 拦截事件、新发现的坑、验证通过、冲突提醒的时间线
+7. 团队周报 — 自动生成，包含拦截统计、贡献排行、进化指标
+
+Portal替代的场景:
+- Confluence/Notion wiki → 系统自动生成，永远最新
+- 技术分享会 → 打开Portal看实时流
+- 新人文档学习 → 新人AI已经知道一切，Portal用来理解"为什么"
+- 周报汇报 → Portal自动生成
+- 代码审查解释 → Portal上每条知识都有原因和时间线
+
+技术实现:
+- 快照模式: 读取JSONL → 生成单文件HTML（含内联CSS/JS）→ 打开浏览器
+- 实时模式: Node.js本地HTTP服务 → 监控知识库文件变化 → WebSocket推送
+
+验证指标: 团队wiki页面访问量对比（Portal vs 旧wiki）、技术分享会频率变化
 
 ### Phase 4: 互联网层 + 多工具（远期）
 
