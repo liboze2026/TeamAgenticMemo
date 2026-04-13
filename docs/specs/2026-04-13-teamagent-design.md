@@ -358,7 +358,7 @@ AI做对的时刻——与纠正时刻互补，构建正面知识。
 │  Layer 4: 知识库 (Knowledge Base)                         │
 │                                                           │
 │  存储: JSONL文件 (可git追踪)                               │
-│  检索: 本地嵌入向量 + 关键词混合搜索                        │
+│  检索: 分阶段检索（见知识检索策略）                          │
 │                                                           │
 │  子系统:                                                   │
 │  • 回放验证器 — A/B对比证明知识有效                         │
@@ -493,6 +493,29 @@ K4 未知更优解        ✓                       ✓
 - 团队审核门中显式展示冲突 → 团队讨论决定
 - 被否决方标记为"archived"并保留原因
 
+### 知识检索策略（知识库>50条时生效）
+
+**CLAUDE.md编译时（50行预算内选取最重要的知识）**:
+
+选取漏斗: 全部知识 → scope匹配当前项目 → 排除archived/stale → 按score排序 → Top 15
+
+score = confidence × 0.4 + hit_count归一化 × 0.3 + 时间衰减 × 0.2 + enforcement权重 × 0.1
+
+Phase 0简化版: 全部放进去，超50行截断。
+
+**MCP实时查询时（从大知识库中检索相关条目）**:
+
+Stage 1 粗筛（毫秒级）: 查询关键词 → trigger字段匹配 → ~20条候选
+Stage 2 语义排序（百毫秒级）: 本地嵌入模型 → 语义相似度排序 → Top 5
+Stage 3 上下文过滤（毫秒级）: scope.paths/file_types匹配 + confidence≥0.5 → 3-5条返回
+
+**知识库长期瘦身（1000+条时）**:
+
+- 自动合并: 语义相似条目合并
+- 层级提升: 多条具体规则泛化为一条通用规则
+- 活跃度清理: 90天未命中 + confidence<0.6 → 自动归档
+- scope收窄: 全局规则只在特定项目触发 → 自动收窄
+
 ### 闭环效果追踪
 
 - 每次干预生成 `intervention_id`
@@ -536,35 +559,40 @@ Session Monitor实现:
 
 ## 七、MVP功能范围
 
-### Phase 1: 最小可行循环（第1-4周）
+### Phase 0: 两天初稿（Day 1-2）
 
-目标: **一个循环跑通**: 用户纠正AI → 系统学到 → 下次AI不再犯。
+目标: **最短路径验证核心假设**: 从会话中自动学到知识，并让下次会话AI表现不同。
 
-核心功能（仅6项，聚焦单一循环）:
-1. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
-2. 纠正时刻识别器 — 多信号融合检测
-3. 知识提取引擎 — 调用Claude API结构化提取经验
-4. 本地知识库 — JSONL存储 + 基础关键词检索
-5. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新（见编译策略）
-6. PostToolUse Hook — 记录工具执行结果用于学习
+仅两个脚本，不超过500行代码：
 
-辅助功能:
-7. /pitfall命令 — 用户主动记录踩坑（兜底采集通道）
-8. /teamagent stats — 终端统计摘要（最简版感知）
+Day 1 — 能学（learn.ts）:
+- 读取 ~/.claude/projects/ 下的JSONL会话日志
+- 整段发送Claude API，提示："找出用户纠正AI的地方，提取结构化知识"
+- 输出追加到 ~/.teamagent/knowledge.jsonl
 
-**不在Phase 1**（移到后面）:
-- 预置知识包 → Phase 1.5
-- 成功模式捕获 → Phase 2
-- MCP Server → Phase 2
-- Session Monitor → Phase 2
-- PreToolUse Hook拦截 → Phase 1.5
+Day 2 — 能用（compile.ts）:
+- 读取 knowledge.jsonl
+- 按confidence排序，生成CLAUDE.md的TeamAgent标记区块（≤50行）
+- 自动更新项目CLAUDE.md
 
-验证指标: 一个具体的坑被学到，下次会话不再犯。这是最小的成功标准。
+验证标准: 一个具体的坑被学到，下次会话AI不再犯。
+示例: "昨天纠正AI用dayjs替代moment → 今天AI直接用dayjs"
 
-开发时间分配:
-- 60%: 会话分析+纠正识别+知识提取（核心IP）
-- 25%: 知识库+CLAUDE.md编译
-- 15%: Hook+CLI命令
+### Phase 1: 最小可行循环（第1-2周）
+
+目标: Phase 0的自动化和鲁棒化。
+
+功能:
+1. 会话日志解析器 — 自动监控新会话，会话结束后触发分析
+2. 纠正时刻识别器 — Claude API提取（Phase 0的增强版，更准确的prompt）
+3. 知识提取引擎 — 结构化提取为标准知识条目格式
+4. 本地知识库 — JSONL存储 + 关键词检索
+5. CLAUDE.md编译器 — 自动编译（见编译策略）+ 优先级排序
+6. PostToolUse Hook — 记录工具执行结果
+
+辅助: /pitfall命令、/teamagent stats
+
+开发时间分配: 60%分析引擎 / 25%知识库+编译 / 15%其余
 
 ### Phase 1.5: 冷启动+主动拦截（第5-6周）
 
