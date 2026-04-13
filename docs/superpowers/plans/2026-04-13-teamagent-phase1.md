@@ -3438,9 +3438,10 @@ git commit -m "feat(skills): add /pitfall and /teamagent-stats skill commands
 - Create: `knowledge-packs/react-nextjs.jsonl`
 - Create: `knowledge-packs/python-fastapi.jsonl`
 
-每个知识包包含10-20条高质量的常见坑，解决冷启动问题。
+每个知识包包含20-30条高质量的常见坑+最佳实践，解决冷启动问题。
+下面列出每包的前5条作为格式示范，实现时每包扩充到20-30条（见Step 4的扩充指南）。
 
-- [ ] **Step 1: 编写 TypeScript 知识包**
+- [ ] **Step 1: 编写 TypeScript 知识包（前5条示范）**
 
 `knowledge-packs/typescript.jsonl`:
 ```jsonl
@@ -3451,7 +3452,7 @@ git commit -m "feat(skills): add /pitfall and /teamagent-stats skill commands
 {"id":"pack-ts-005","scope":{"level":"global"},"category":"C","tags":["hidden-logic","async-error"],"type":"avoidance","nature":"objective","trigger":"async函数错误处理","wrong_pattern":"忘记await导致Promise未被捕获","correct_pattern":"始终await async调用，或用.catch()处理","reasoning":"未await的Promise错误不会被try-catch捕获，导致静默失败","confidence":0.88,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
 ```
 
-- [ ] **Step 2: 编写 React/Next.js 知识包**
+- [ ] **Step 2: 编写 React/Next.js 知识包（前5条示范）**
 
 `knowledge-packs/react-nextjs.jsonl`:
 ```jsonl
@@ -3462,7 +3463,7 @@ git commit -m "feat(skills): add /pitfall and /teamagent-stats skill commands
 {"id":"pack-react-005","scope":{"level":"global"},"category":"C","tags":["security","xss","react"],"type":"avoidance","nature":"objective","trigger":"React渲染用户内容","wrong_pattern":"dangerouslySetInnerHTML={{__html: userInput}}","correct_pattern":"使用文本节点渲染或DOMPurify净化","reasoning":"直接渲染用户HTML会导致XSS漏洞","confidence":0.95,"enforcement":"block","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
 ```
 
-- [ ] **Step 3: 编写 Python/FastAPI 知识包**
+- [ ] **Step 3: 编写 Python/FastAPI 知识包（前5条示范）**
 
 `knowledge-packs/python-fastapi.jsonl`:
 ```jsonl
@@ -3473,14 +3474,83 @@ git commit -m "feat(skills): add /pitfall and /teamagent-stats skill commands
 {"id":"pack-py-005","scope":{"level":"global"},"category":"E","tags":["architecture","fastapi","async"],"type":"practice","nature":"objective","trigger":"FastAPI路由定义","wrong_pattern":"","correct_pattern":"IO密集型路由使用async def，CPU密集型使用def（FastAPI自动在线程池运行sync函数）","reasoning":"混用async/sync不当会阻塞事件循环或浪费线程","confidence":0.82,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 扩充每包到20-30条**
+
+上面每包仅列了5条示范。需要按以下维度扩充到20-30条：
+
+**TypeScript 知识包扩充方向（目标25条）:**
+
+| 序号 | 子标签 | 方向 | 示例 |
+|------|--------|------|------|
+| 6-8 | api-hallucination | Node.js/Bun API幻觉 | `fs.readFile` 回调 vs Promise版, `Buffer.from` 编码参数 |
+| 9-11 | type-error | 常见泛型陷阱 | `Array<T>` vs `T[]`, `Record` key类型, 联合类型收窄 |
+| 12-14 | hidden-logic | 异步/并发陷阱 | `Promise.all` vs `Promise.allSettled`, `for await` 错用, 事件循环阻塞 |
+| 15-17 | code-quality | 编码规范 | `===` vs `==`, `const` 优先, 解构默认值 |
+| 18-20 | config-blindspot | tsconfig常见坑 | `paths` 与运行时解析, `strict` 子选项, `moduleResolution` |
+| 21-23 | performance | 性能陷阱 | JSON.parse大对象, 正则回溯, `Array.push` vs 扩展运算符 |
+| 24-25 | security | 安全 | eval/Function构造器, 不安全的反序列化 |
+
+**React/Next.js 知识包扩充方向（目标25条）:**
+
+| 序号 | 子标签 | 方向 | 示例 |
+|------|--------|------|------|
+| 6-8 | react-hooks | useEffect陷阱 | 依赖数组遗漏, cleanup函数, 竞态条件 |
+| 9-11 | performance | 渲染优化 | React.memo误用, Context导致重渲染, 虚拟列表 |
+| 12-14 | nextjs-app-router | App Router特有 | `generateStaticParams`, metadata API, Route Handlers |
+| 15-17 | architecture | 组件设计 | 受控vs非受控, 状态提升, 组合优于继承 |
+| 18-20 | hidden-logic | 状态管理坑 | 批量更新, 闭包陈旧值, 派生状态 |
+| 21-23 | security | 安全 | CSRF令牌, 服务端验证, 环境变量泄露 |
+| 24-25 | testing-strategy | 测试 | Testing Library最佳实践, MSW mock |
+
+**Python/FastAPI 知识包扩充方向（目标20条）:**
+
+| 序号 | 子标签 | 方向 | 示例 |
+|------|--------|------|------|
+| 6-8 | hidden-logic | Python陷阱 | 浅拷贝vs深拷贝, 闭包变量捕获, `is` vs `==` |
+| 9-11 | api-hallucination | 标准库幻觉 | `datetime.now()` vs `datetime.now(timezone.utc)`, `os.path` vs `pathlib` |
+| 12-14 | architecture | FastAPI模式 | Depends注入, 中间件顺序, Background Tasks |
+| 15-17 | dependency-mgmt | 包管理 | uv vs pip, lock文件, 版本约束语法 |
+| 18-20 | testing-strategy | 测试 | pytest fixtures, httpx AsyncClient, factory_boy |
+
+**扩充方法**: 使用Claude API批量生成，每条按照已有的JSONL格式，然后人工审核确认。
+生成prompt示例:
+```
+基于以下格式，为TypeScript项目生成5条关于"type-error/泛型陷阱"的知识条目。
+每条包含trigger, wrong_pattern, correct_pattern, reasoning。
+id命名: pack-ts-006 到 pack-ts-010。
+[粘贴一条现有条目作为格式参考]
+```
+
+- [ ] **Step 5: 验证知识包格式**
+
+```bash
+# 验证每个JSONL文件格式正确且条目数达标
+node -e "
+const fs = require('fs');
+for (const f of ['typescript', 'react-nextjs', 'python-fastapi']) {
+  const path = 'knowledge-packs/' + f + '.jsonl';
+  const lines = fs.readFileSync(path, 'utf8').trim().split('\n');
+  let valid = 0;
+  for (const l of lines) {
+    const e = JSON.parse(l);
+    if (e.id && e.category && e.trigger && e.confidence) valid++;
+  }
+  console.log(f + ': ' + valid + ' entries (' + (valid >= 20 ? '✅' : '❌ need more') + ')');
+}
+"
+```
+
+Expected: 每包 ≥ 20 条
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add knowledge-packs/
 git commit -m "feat: add pre-built knowledge packs for cold start
 
-TypeScript (5), React/Next.js (5), Python/FastAPI (5) packs.
-Covers common pitfalls: type errors, hooks rules, security, async patterns."
+TypeScript (25), React/Next.js (25), Python/FastAPI (20) packs.
+Covers: type errors, hooks rules, security, async patterns, config blindspots,
+performance, testing strategy, architecture patterns."
 ```
 
 ---
@@ -4136,14 +4206,753 @@ git commit -m "fix(hooks): align hook protocol with actual Claude Code format"
 
 ---
 
+## Task 17: CLAUDE.md / .cursorrules 规则导入器
+
+**Files:**
+- Create: `packages/engine/src/importer/rule-importer.ts`
+- Test: `packages/engine/src/importer/__tests__/rule-importer.test.ts`
+- Modify: `packages/cli/src/init.ts` (在 Step 4 调用导入器)
+
+安装时自动解析项目已有的 CLAUDE.md 和 .cursorrules，将规则转为知识条目导入知识库。
+这是设计文档安装流程 Step 4 "导入已有规则" 的实现。
+
+- [ ] **Step 1: 编写 rule-importer 测试**
+
+`packages/engine/src/importer/__tests__/rule-importer.test.ts`:
+```ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import {
+  parseClaudeMdRules,
+  parseCursorRules,
+  importRules,
+  type ImportResult,
+} from "../rule-importer.js";
+import { KnowledgeStore } from "../../knowledge-base/store.js";
+
+function tmpDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "ta-import-"));
+}
+
+describe("parseClaudeMdRules", () => {
+  it("extracts rules from markdown bullet list", () => {
+    const content = `# Project Rules
+
+- Always use pnpm, not npm or yarn
+- Use Zustand for state management
+- API responses must follow the standard format: { data, error, meta }
+- Run \`pnpm test\` before committing
+
+## Other stuff
+Some description here.
+`;
+    const rules = parseClaudeMdRules(content);
+    expect(rules.length).toBeGreaterThanOrEqual(3);
+    expect(rules.some((r) => r.includes("pnpm"))).toBe(true);
+    expect(rules.some((r) => r.includes("Zustand"))).toBe(true);
+  });
+
+  it("skips TeamAgent managed block", () => {
+    const content = `# Rules
+- My custom rule
+
+<!-- TEAMAGENT:START -->
+- Auto generated rule
+<!-- TEAMAGENT:END -->
+
+- Another custom rule
+`;
+    const rules = parseClaudeMdRules(content);
+    expect(rules).toHaveLength(2);
+    expect(rules.some((r) => r.includes("Auto generated"))).toBe(false);
+  });
+
+  it("returns empty for file with no rules", () => {
+    const content = "# My Project\n\nJust a description, no rules.\n";
+    const rules = parseClaudeMdRules(content);
+    expect(rules).toHaveLength(0);
+  });
+
+  it("handles numbered lists", () => {
+    const content = `# Rules
+1. Use TypeScript strict mode
+2. No any types
+3. Always handle errors
+`;
+    const rules = parseClaudeMdRules(content);
+    expect(rules.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("parseCursorRules", () => {
+  it("extracts rules from .cursorrules format", () => {
+    const content = `You are an expert TypeScript developer.
+
+Rules:
+- Always use interfaces over types for object shapes
+- Prefer named exports over default exports
+- Use async/await instead of raw promises
+
+When writing tests:
+- Use vitest
+- Prefer integration tests over unit tests
+`;
+    const rules = parseCursorRules(content);
+    expect(rules.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("importRules", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = tmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("imports CLAUDE.md rules into knowledge store", async () => {
+    const claudeMd = path.join(dir, "CLAUDE.md");
+    fs.writeFileSync(claudeMd, "# Rules\n- Always use pnpm not npm\n- Use ESM imports\n");
+
+    const store = new KnowledgeStore(path.join(dir, "knowledge.jsonl"));
+
+    const mockLLM = async (_prompt: string) =>
+      JSON.stringify({
+        category: "E",
+        tags: ["config-blindspot", "package-manager"],
+        type: "avoidance",
+        nature: "subjective",
+        trigger: "安装依赖",
+        wrong_pattern: "npm install",
+        correct_pattern: "pnpm install",
+        reasoning: "项目约定使用pnpm",
+      });
+
+    const result = await importRules(dir, store, mockLLM);
+    expect(result.rulesFound).toBeGreaterThan(0);
+    expect(result.imported).toBeGreaterThan(0);
+    expect(store.count()).toBeGreaterThan(0);
+  });
+
+  it("imports .cursorrules too", async () => {
+    const cursorRules = path.join(dir, ".cursorrules");
+    fs.writeFileSync(cursorRules, "- Use Tailwind for styling\n");
+
+    const store = new KnowledgeStore(path.join(dir, "knowledge.jsonl"));
+    const mockLLM = async (_prompt: string) =>
+      JSON.stringify({
+        category: "E",
+        tags: ["tech-choice", "css"],
+        type: "avoidance",
+        nature: "subjective",
+        trigger: "CSS方案选择",
+        wrong_pattern: "CSS modules / styled-components",
+        correct_pattern: "Tailwind CSS",
+        reasoning: "项目约定",
+      });
+
+    const result = await importRules(dir, store, mockLLM);
+    expect(result.imported).toBeGreaterThan(0);
+  });
+
+  it("returns zero when no rule files exist", async () => {
+    const store = new KnowledgeStore(path.join(dir, "knowledge.jsonl"));
+    const mockLLM = async (_prompt: string) => "{}";
+    const result = await importRules(dir, store, mockLLM);
+    expect(result.rulesFound).toBe(0);
+    expect(result.imported).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 2: 运行测试确认失败**
+
+```bash
+pnpm test -- packages/engine/src/importer/__tests__/rule-importer.test.ts
+```
+
+Expected: FAIL
+
+- [ ] **Step 3: 实现 rule-importer**
+
+`packages/engine/src/importer/rule-importer.ts`:
+```ts
+import fs from "node:fs";
+import path from "node:path";
+import { computeEnforcement, type KnowledgeEntry } from "@teamagent/types";
+import { KnowledgeStore } from "../knowledge-base/store.js";
+import { parseExtractionResponse } from "../analyzer/knowledge-extractor.js";
+
+export interface ImportResult {
+  rulesFound: number;
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+/**
+ * 从 CLAUDE.md 中提取规则文本。
+ * 跳过 TEAMAGENT:START/END 标记块。
+ */
+export function parseClaudeMdRules(content: string): string[] {
+  const rules: string[] = [];
+  let inTeamAgentBlock = false;
+
+  for (const line of content.split("\n")) {
+    if (line.includes("TEAMAGENT:START")) {
+      inTeamAgentBlock = true;
+      continue;
+    }
+    if (line.includes("TEAMAGENT:END")) {
+      inTeamAgentBlock = false;
+      continue;
+    }
+    if (inTeamAgentBlock) continue;
+
+    // Match bullet or numbered list items
+    const match = line.match(/^\s*[-*]\s+(.+)$/) || line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (match) {
+      const text = match[1].trim();
+      // Filter out very short or non-rule items
+      if (text.length >= 10) {
+        rules.push(text);
+      }
+    }
+  }
+
+  return rules;
+}
+
+/**
+ * 从 .cursorrules 中提取规则文本。
+ * .cursorrules 格式通常是纯文本+bullet列表。
+ */
+export function parseCursorRules(content: string): string[] {
+  const rules: string[] = [];
+
+  for (const line of content.split("\n")) {
+    const match = line.match(/^\s*[-*]\s+(.+)$/) || line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (match) {
+      const text = match[1].trim();
+      if (text.length >= 10) {
+        rules.push(text);
+      }
+    }
+  }
+
+  return rules;
+}
+
+/**
+ * 构建将规则文本转为结构化知识的prompt。
+ */
+function buildImportPrompt(ruleText: string): string {
+  return `你是一个知识提取系统。将以下项目规则转化为结构化知识条目。
+
+## 规则文本
+"${ruleText}"
+
+## 分类参考
+- C (代码层): 代码本身的问题
+- E (工程层): 工程方式的问题
+- S (策略层): 决策方向的问题
+- K (认知层): 知识缺口
+
+## 输出格式
+返回一个JSON对象:
+{
+  "category": "C|E|S|K",
+  "tags": ["子标签数组"],
+  "type": "avoidance|practice",
+  "nature": "objective|subjective",
+  "trigger": "什么情况下触发",
+  "wrong_pattern": "错误的做法(如果是avoidance型)",
+  "correct_pattern": "正确/推荐的做法",
+  "reasoning": "为什么"
+}
+
+注意: 大部分项目规则是subjective（团队约定），除非是客观的技术事实。`;
+}
+
+/**
+ * 扫描项目目录的 CLAUDE.md 和 .cursorrules，
+ * 调用LLM结构化后导入知识库。
+ */
+export async function importRules(
+  projectDir: string,
+  store: KnowledgeStore,
+  callLLM: (prompt: string) => Promise<string>
+): Promise<ImportResult> {
+  const result: ImportResult = {
+    rulesFound: 0,
+    imported: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  const allRules: string[] = [];
+
+  // Parse CLAUDE.md
+  const claudeMdPath = path.join(projectDir, "CLAUDE.md");
+  if (fs.existsSync(claudeMdPath)) {
+    const content = fs.readFileSync(claudeMdPath, "utf-8");
+    allRules.push(...parseClaudeMdRules(content));
+  }
+
+  // Parse .cursorrules
+  const cursorRulesPath = path.join(projectDir, ".cursorrules");
+  if (fs.existsSync(cursorRulesPath)) {
+    const content = fs.readFileSync(cursorRulesPath, "utf-8");
+    allRules.push(...parseCursorRules(content));
+  }
+
+  result.rulesFound = allRules.length;
+  if (allRules.length === 0) return result;
+
+  // Convert each rule via LLM
+  for (const ruleText of allRules) {
+    try {
+      const prompt = buildImportPrompt(ruleText);
+      const response = await callLLM(prompt);
+      const extracted = parseExtractionResponse(response);
+
+      if (!extracted || !extracted.category || !extracted.trigger) {
+        result.skipped++;
+        continue;
+      }
+
+      const now = new Date().toISOString();
+      const nature = extracted.nature ?? "subjective";
+      const confidence = 0.7; // Imported rules start at 0.7
+
+      const entry: KnowledgeEntry = {
+        id: `imported-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        scope: { level: "personal" },
+        category: extracted.category,
+        tags: extracted.tags ?? [],
+        type: extracted.type ?? "practice",
+        nature,
+        trigger: extracted.trigger,
+        wrong_pattern: extracted.wrong_pattern ?? "",
+        correct_pattern: extracted.correct_pattern ?? "",
+        reasoning: extracted.reasoning ?? "",
+        confidence,
+        enforcement: computeEnforcement(confidence, nature),
+        status: "active",
+        hit_count: 0,
+        success_count: 0,
+        override_count: 0,
+        evidence: { success_sessions: 0, success_users: 0, correction_sessions: 0 },
+        created_at: now,
+        last_hit_at: "",
+        last_validated_at: now,
+        source: "personal",
+        conflict_with: [],
+      };
+
+      store.add(entry);
+      result.imported++;
+    } catch (err) {
+      result.errors.push(`Failed to import "${ruleText.slice(0, 50)}": ${err}`);
+      result.skipped++;
+    }
+  }
+
+  return result;
+}
+```
+
+- [ ] **Step 4: 更新 engine index.ts 导出 importer**
+
+在 `packages/engine/src/index.ts` 末尾追加:
+```ts
+export {
+  parseClaudeMdRules,
+  parseCursorRules,
+  importRules,
+  type ImportResult,
+} from "./importer/rule-importer.js";
+```
+
+- [ ] **Step 5: 更新 init.ts 集成规则导入**
+
+在 `packages/cli/src/init.ts` 的 `runInit` 函数中，在知识包加载之后、CLAUDE.md编译之前，添加规则导入步骤:
+
+```ts
+// 在 "// 5. Load knowledge packs" 之后，"// 6. Setup Claude Code hooks" 之前添加:
+
+// 5.5 Import existing rules from CLAUDE.md and .cursorrules
+import { importRules } from "@teamagent/engine";
+
+// 需要将 runInit 改为 async，并接受 callLLM 参数
+const importResult = await importRules(projectDir, store, callLLM);
+knowledgeCount += importResult.imported;
+```
+
+注意: 这要求 `runInit` 变成 `async function`，`InitOptions` 需要增加 `callLLM` 字段。
+
+- [ ] **Step 6: 运行测试确认通过**
+
+```bash
+pnpm test -- packages/engine/src/importer/__tests__/rule-importer.test.ts
+```
+
+Expected: 全部 PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/engine/src/importer/ packages/cli/src/init.ts
+git commit -m "feat(engine): add CLAUDE.md and .cursorrules rule importer
+
+Parses existing project rules, converts to structured knowledge via LLM.
+Integrated into init flow for day-1 knowledge seeding."
+```
+
+---
+
+## Task 18: 闭环验证场景
+
+**Files:**
+- Create: `packages/engine/src/__tests__/closed-loop.test.ts`
+- Create: `fixtures/scenarios/` (验证场景目录)
+- Create: `fixtures/scenarios/scenario-python-version.jsonl`
+- Create: `fixtures/scenarios/scenario-tech-choice.jsonl`
+- Create: `fixtures/scenarios/scenario-api-hallucination.jsonl`
+
+这是产品级验证——证明 TeamAgent 真的能让 AI 从踩坑→学习→不再踩坑。
+
+### 验证方法论
+
+每个场景包含3个阶段：
+
+```
+阶段A: 构造踩坑                     阶段B: 系统学习                    阶段C: 验证避坑
+┌─────────────────────┐           ┌────────────────────┐           ┌────────────────────┐
+│ 模拟会话日志         │           │ 分析管线处理        │           │ Hook/MCP应该拦截    │
+│ AI犯了已知的错       │  ──→     │ 提取出知识条目      │  ──→     │ 同样的错不会再犯    │
+│ 用户纠正了AI        │           │ 存入知识库          │           │ 或AI直接做对        │
+└─────────────────────┘           └────────────────────┘           └────────────────────┘
+```
+
+- [ ] **Step 1: 创建场景fixture — python版本坑**
+
+`fixtures/scenarios/scenario-python-version.jsonl`:
+```jsonl
+{"_meta":{"scenario":"python-version","description":"AI用python而非python3，用户纠正","phase":"A-pitfall"}}
+{"type":"user","uuid":"u1","timestamp":"2026-04-13T10:00:00Z","sessionId":"scenario-python-ver","message":{"role":"user","content":"运行一下这个脚本 main.py"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-04-13T10:00:05Z","sessionId":"scenario-python-ver","message":{"role":"assistant","content":[{"type":"text","text":"好的，我来运行它。"},{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"python main.py"}}]}}
+{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2026-04-13T10:00:20Z","sessionId":"scenario-python-ver","message":{"role":"user","content":"不对，这台机器要用python3，不是python"}}
+{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2026-04-13T10:00:25Z","sessionId":"scenario-python-ver","message":{"role":"assistant","content":[{"type":"text","text":"抱歉，改用python3。"},{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"python3 main.py"}}]}}
+```
+
+- [ ] **Step 2: 创建场景fixture — 技术选型坑**
+
+`fixtures/scenarios/scenario-tech-choice.jsonl`:
+```jsonl
+{"_meta":{"scenario":"tech-choice","description":"AI建议moment，用户要求dayjs","phase":"A-pitfall"}}
+{"type":"user","uuid":"u1","timestamp":"2026-04-13T11:00:00Z","sessionId":"scenario-tech-choice","message":{"role":"user","content":"帮我加一个日期格式化功能"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-04-13T11:00:05Z","sessionId":"scenario-tech-choice","message":{"role":"assistant","content":[{"type":"text","text":"好的，我用moment.js来实现。"},{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm install moment"}}]}}
+{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2026-04-13T11:00:20Z","sessionId":"scenario-tech-choice","message":{"role":"user","content":"别用moment，太重了，用dayjs"}}
+{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2026-04-13T11:00:25Z","sessionId":"scenario-tech-choice","message":{"role":"assistant","content":[{"type":"text","text":"好的，改用dayjs。"},{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"npm install dayjs"}}]}}
+```
+
+- [ ] **Step 3: 创建场景fixture — API幻觉坑**
+
+`fixtures/scenarios/scenario-api-hallucination.jsonl`:
+```jsonl
+{"_meta":{"scenario":"api-hallucination","description":"AI使用已废弃的Stripe API","phase":"A-pitfall"}}
+{"type":"user","uuid":"u1","timestamp":"2026-04-13T12:00:00Z","sessionId":"scenario-api-hallu","message":{"role":"user","content":"帮我写一个Stripe支付接口"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-04-13T12:00:05Z","sessionId":"scenario-api-hallu","message":{"role":"assistant","content":[{"type":"text","text":"好的，我用Stripe的charges API来创建支付。"},{"type":"tool_use","id":"t1","name":"Write","input":{"file_path":"src/payment.ts","content":"import Stripe from 'stripe';\nconst stripe = new Stripe(process.env.STRIPE_KEY!);\nawait stripe.charges.create({ amount: 1000, currency: 'usd' });"}}]}}
+{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2026-04-13T12:00:30Z","sessionId":"scenario-api-hallu","message":{"role":"user","content":"charges API已经废弃了，要用paymentIntents"}}
+{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2026-04-13T12:00:35Z","sessionId":"scenario-api-hallu","message":{"role":"assistant","content":[{"type":"text","text":"抱歉，改用PaymentIntents API。"},{"type":"tool_use","id":"t2","name":"Write","input":{"file_path":"src/payment.ts","content":"import Stripe from 'stripe';\nconst stripe = new Stripe(process.env.STRIPE_KEY!);\nawait stripe.paymentIntents.create({ amount: 1000, currency: 'usd', payment_method_types: ['card'] });"}}]}}
+```
+
+- [ ] **Step 4: 编写闭环验证测试**
+
+`packages/engine/src/__tests__/closed-loop.test.ts`:
+```ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import {
+  KnowledgeStore,
+  analyzeSession,
+  compileCLAUDEmd,
+  queryKnowledge,
+} from "../index.js";
+import { matchRules, type ToolCallContext } from "@teamagent/hooks/matcher.js";
+
+// --- 注意: 如果 hooks 包没有单独导出 matcher，
+// --- 可以直接 import { matchRules } from "../../../hooks/src/matcher.js"
+// --- 或将 matchRules 也挂到 engine 的 re-export 上。
+
+function tmpDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "ta-closed-loop-"));
+}
+
+/**
+ * 闭环测试结构:
+ * 1. 喂入踩坑会话 → analyzeSession → 知识库新增条目
+ * 2. 模拟同样的工具调用 → matchRules → 应该被拦截/警告
+ * 3. compileCLAUDEmd → 应该包含这条知识
+ */
+describe("Closed-loop: 踩坑 → 学习 → 避坑", () => {
+  let dir: string;
+  let store: KnowledgeStore;
+
+  // Mock LLM 根据场景返回不同的结构化知识
+  const scenarioLLM: Record<string, string> = {
+    "python": JSON.stringify({
+      category: "C",
+      tags: ["syntax-error", "python-version"],
+      type: "avoidance",
+      nature: "objective",
+      trigger: "执行python命令",
+      wrong_pattern: "python ",
+      correct_pattern: "python3",
+      reasoning: "本机python指向Python 2.7",
+    }),
+    "tech-choice": JSON.stringify({
+      category: "E",
+      tags: ["tech-choice", "date-library"],
+      type: "avoidance",
+      nature: "subjective",
+      trigger: "日期处理库选择",
+      wrong_pattern: "moment",
+      correct_pattern: "dayjs",
+      reasoning: "dayjs更轻量，moment已停止维护",
+    }),
+    "api-hallu": JSON.stringify({
+      category: "C",
+      tags: ["api-hallucination", "stripe"],
+      type: "avoidance",
+      nature: "objective",
+      trigger: "Stripe支付接口",
+      wrong_pattern: "stripe.charges",
+      correct_pattern: "stripe.paymentIntents",
+      reasoning: "charges API已废弃",
+    }),
+  };
+
+  beforeEach(() => {
+    dir = tmpDir();
+    store = new KnowledgeStore(path.join(dir, "knowledge.jsonl"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("场景1: python → python3 闭环", async () => {
+    // ===== 阶段A: 踩坑 =====
+    const sessionPath = path.resolve("fixtures/scenarios/scenario-python-version.jsonl");
+    expect(store.count()).toBe(0);
+
+    // ===== 阶段B: 学习 =====
+    const mockLLM = async (_prompt: string) => scenarioLLM["python"];
+    const result = await analyzeSession(sessionPath, store, mockLLM);
+
+    expect(result.correctionsFound).toBeGreaterThan(0);
+    expect(result.knowledgeAdded).toBeGreaterThan(0);
+    expect(store.count()).toBeGreaterThan(0);
+
+    // 知识库中应有python相关条目
+    const pythonRules = queryKnowledge(store, { keyword: "python" });
+    expect(pythonRules.length).toBeGreaterThan(0);
+    expect(pythonRules[0].wrong_pattern).toContain("python");
+    expect(pythonRules[0].correct_pattern).toContain("python3");
+
+    // ===== 阶段C: 避坑 =====
+    // 模拟下次AI又要执行 "python script.py"
+    const toolCall: ToolCallContext = {
+      toolName: "Bash",
+      input: { command: "python main.py" },
+    };
+    const matches = matchRules(store.getActive(), toolCall);
+
+    // 应该匹配到规则
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches[0].correct_pattern).toContain("python3");
+
+    // CLAUDE.md中也应包含这条知识
+    const block = compileCLAUDEmd(store.getActive());
+    expect(block).toContain("python3");
+  });
+
+  it("场景2: moment → dayjs 闭环", async () => {
+    // 阶段A+B
+    const sessionPath = path.resolve("fixtures/scenarios/scenario-tech-choice.jsonl");
+    const mockLLM = async (_prompt: string) => scenarioLLM["tech-choice"];
+    await analyzeSession(sessionPath, store, mockLLM);
+
+    // 阶段C: Hook应拦截 "npm install moment"
+    const toolCall: ToolCallContext = {
+      toolName: "Bash",
+      input: { command: "npm install moment" },
+    };
+    const matches = matchRules(store.getActive(), toolCall);
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches[0].correct_pattern).toContain("dayjs");
+  });
+
+  it("场景3: stripe.charges → paymentIntents 闭环", async () => {
+    // 阶段A+B
+    const sessionPath = path.resolve("fixtures/scenarios/scenario-api-hallucination.jsonl");
+    const mockLLM = async (_prompt: string) => scenarioLLM["api-hallu"];
+    await analyzeSession(sessionPath, store, mockLLM);
+
+    // 阶段C: 写包含 stripe.charges 的代码应被匹配
+    const toolCall: ToolCallContext = {
+      toolName: "Write",
+      input: {
+        file_path: "src/billing.ts",
+        content: "await stripe.charges.create({ amount: 500 })",
+      },
+    };
+    const matches = matchRules(store.getActive(), toolCall);
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches[0].correct_pattern).toContain("paymentIntents");
+  });
+
+  it("验证坑重现率(PRR): 学习后同一坑不再出现", async () => {
+    // 场景1: 学习python坑
+    const mockLLM = async (_prompt: string) => scenarioLLM["python"];
+    await analyzeSession(
+      path.resolve("fixtures/scenarios/scenario-python-version.jsonl"),
+      store,
+      mockLLM
+    );
+
+    // 模拟10次 "python xxx" 调用，都应被匹配
+    const commands = [
+      "python app.py",
+      "python -m pytest",
+      "python manage.py migrate",
+      "python setup.py install",
+      "python -c 'print(1)'",
+    ];
+
+    let blocked = 0;
+    for (const cmd of commands) {
+      const matches = matchRules(store.getActive(), {
+        toolName: "Bash",
+        input: { command: cmd },
+      });
+      if (matches.length > 0) blocked++;
+    }
+
+    // PRR = blocked / total → 应趋近 100%
+    const prr = blocked / commands.length;
+    expect(prr).toBeGreaterThanOrEqual(0.8); // 允许false negative但至少80%
+    console.log(`PRR (坑重现拦截率): ${(prr * 100).toFixed(0)}% (${blocked}/${commands.length})`);
+  });
+
+  it("验证知识精度(KP): 提取的知识与原始纠正语义一致", async () => {
+    const mockLLM = async (_prompt: string) => scenarioLLM["tech-choice"];
+    await analyzeSession(
+      path.resolve("fixtures/scenarios/scenario-tech-choice.jsonl"),
+      store,
+      mockLLM
+    );
+
+    const entries = store.getActive();
+    expect(entries.length).toBeGreaterThan(0);
+
+    for (const entry of entries) {
+      // 每条知识都应有完整字段
+      expect(entry.trigger.length).toBeGreaterThan(0);
+      expect(entry.correct_pattern.length).toBeGreaterThan(0);
+      expect(entry.reasoning.length).toBeGreaterThan(0);
+      expect(entry.category).toMatch(/^[CESK]$/);
+      expect(entry.tags.length).toBeGreaterThan(0);
+      expect(entry.confidence).toBeGreaterThanOrEqual(0.5);
+      expect(entry.confidence).toBeLessThanOrEqual(1.0);
+    }
+  });
+});
+
+describe("CLAUDE.md 编译后的知识可见性", () => {
+  it("学到的知识出现在编译结果中", async () => {
+    const dir = tmpDir();
+    const store = new KnowledgeStore(path.join(dir, "knowledge.jsonl"));
+
+    // 学习3个场景
+    const scenarios = [
+      { file: "scenario-python-version.jsonl", key: "python" },
+      { file: "scenario-tech-choice.jsonl", key: "tech-choice" },
+      { file: "scenario-api-hallucination.jsonl", key: "api-hallu" },
+    ];
+
+    const scenarioLLM: Record<string, string> = {
+      python: JSON.stringify({ category: "C", tags: ["syntax-error"], type: "avoidance", nature: "objective", trigger: "python命令", wrong_pattern: "python ", correct_pattern: "python3", reasoning: "python指向2.7" }),
+      "tech-choice": JSON.stringify({ category: "E", tags: ["tech-choice"], type: "avoidance", nature: "subjective", trigger: "日期库", wrong_pattern: "moment", correct_pattern: "dayjs", reasoning: "更轻量" }),
+      "api-hallu": JSON.stringify({ category: "C", tags: ["api-hallucination"], type: "avoidance", nature: "objective", trigger: "Stripe API", wrong_pattern: "charges", correct_pattern: "paymentIntents", reasoning: "已废弃" }),
+    };
+
+    for (const s of scenarios) {
+      const llm = async (_p: string) => scenarioLLM[s.key];
+      await analyzeSession(
+        path.resolve("fixtures/scenarios", s.file),
+        store,
+        llm
+      );
+    }
+
+    // 编译CLAUDE.md
+    const block = compileCLAUDEmd(store.getActive());
+
+    // 三条知识都应出现
+    expect(block).toContain("python3");
+    expect(block).toContain("dayjs");
+    expect(block).toContain("paymentIntents");
+    expect(block).toContain("TEAMAGENT:START");
+
+    // 行数应在预算内
+    const lines = block.split("\n");
+    expect(lines.length).toBeLessThanOrEqual(50);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+```
+
+- [ ] **Step 5: 运行闭环测试确认通过**
+
+```bash
+pnpm test -- packages/engine/src/__tests__/closed-loop.test.ts
+```
+
+Expected: 全部 PASS，控制台输出 `PRR (坑重现拦截率): 100% (5/5)`
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/engine/src/__tests__/closed-loop.test.ts fixtures/scenarios/
+git commit -m "test: add closed-loop validation scenarios
+
+3 scenarios: python-version, tech-choice, api-hallucination.
+Each validates full cycle: pitfall → learn → avoid.
+Includes PRR (pitfall recurrence rate) and KP (knowledge precision) checks."
+```
+
+---
+
 ## 自审结果
 
 **Spec覆盖检查:**
 
 | 设计文档要求 | 对应Task | 状态 |
 |-------------|---------|------|
-| 预置知识包 | Task 13 | ✅ |
+| 预置知识包(20-30条/包) | Task 13 | ✅ |
 | 项目环境推断 | Task 11 (detect-stack) | ✅ |
+| 导入已有规则(CLAUDE.md/.cursorrules) | Task 17 (rule-importer) | ✅ |
 | 会话日志解析器 | Task 7 | ✅ |
 | 纠正时刻识别器 | Task 8 | ✅ |
 | 成功模式捕获器 | Task 9 | ✅ |
@@ -4156,6 +4965,8 @@ git commit -m "fix(hooks): align hook protocol with actual Claude Code format"
 | PostSession分析管线 | Task 15 (pipeline + analyze) | ✅ |
 | CLI入口(bin.ts) | Task 15 | ✅ |
 | Hook协议验证 | Task 16 | ✅ |
+| 闭环验证(踩坑→学习→避坑) | Task 18 | ✅ |
+| 产品指标(PRR/KP) | Task 18 | ✅ |
 
 **类型一致性:** 所有类型定义在 `@teamagent/types` 统一管理，各包通过 workspace 依赖引用。`KnowledgeEntry`, `ParsedSession`, `SessionTurn`, `ToolCall` 等类型在所有任务中保持一致。所有跨包导入统一通过 barrel export（`import { ... } from "@teamagent/engine"`），不使用深路径。
 
