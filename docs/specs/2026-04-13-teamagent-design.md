@@ -559,69 +559,41 @@ Session Monitor实现:
 
 ## 七、MVP功能范围
 
-### Phase 0: 两天初稿（Day 1-2）
+### Phase 1: 个人层核心
 
-目标: **最短路径验证核心假设**: 从会话中自动学到知识，并让下次会话AI表现不同。
-
-仅两个脚本，不超过500行代码：
-
-Day 1 — 能学（learn.ts）:
-- 读取 ~/.claude/projects/ 下的JSONL会话日志
-- 整段发送Claude API，提示："找出用户纠正AI的地方，提取结构化知识"
-- 输出追加到 ~/.teamagent/knowledge.jsonl
-
-Day 2 — 能用（compile.ts）:
-- 读取 knowledge.jsonl
-- 按confidence排序，生成CLAUDE.md的TeamAgent标记区块（≤50行）
-- 自动更新项目CLAUDE.md
-
-验证标准: 一个具体的坑被学到，下次会话AI不再犯。
-示例: "昨天纠正AI用dayjs替代moment → 今天AI直接用dayjs"
-
-### Phase 1: 最小可行循环（第1-2周）
-
-目标: Phase 0的自动化和鲁棒化。
+目标: 单个用户使用，AI不再犯同样的错误。Day 1即有价值。
 
 功能:
-1. 会话日志解析器 — 自动监控新会话，会话结束后触发分析
-2. 纠正时刻识别器 — Claude API提取（Phase 0的增强版，更准确的prompt）
-3. 知识提取引擎 — 结构化提取为标准知识条目格式
-4. 本地知识库 — JSONL存储 + 关键词检索
-5. CLAUDE.md编译器 — 自动编译（见编译策略）+ 优先级排序
-6. PostToolUse Hook — 记录工具执行结果
+1. 预置知识包 — 按技术栈预构建的经验库，随安装分发（解决冷启动）
+2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，自动激活对应知识
+3. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
+4. 纠正时刻识别器 — 多信号融合检测（负面信号）
+5. 成功模式捕获器 — 检测成功完成/表扬/重复使用（正面信号）
+6. 知识提取引擎 — 调用Claude API结构化提取经验（avoidance+practice）
+7. 本地知识库 — JSONL存储 + 关键词检索
+8. PreToolUse/PostToolUse Hook — 拦截已知错误 + 记录执行结果
+9. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新（见编译策略）
+10. /pitfall命令 — 用户主动记录踩坑
+11. /teamagent stats — 终端统计摘要
 
-辅助: /pitfall命令、/teamagent stats
+验证指标: 坑重现率下降; Day 1预置知识生效
 
-开发时间分配: 60%分析引擎 / 25%知识库+编译 / 15%其余
+### Phase 2: 实时防护
 
-### Phase 1.5: 冷启动+主动拦截（第5-6周）
-
-目标: 解决冷启动问题，加入PreToolUse拦截能力。
-
-功能:
-1. 预置知识包 — 按技术栈预构建50+条经验，随安装分发
-2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，自动激活
-3. PreToolUse Hook — 基于已有知识主动拦截错误命令
-
-验证指标: 新用户Day 1即有预置知识生效体验
-
-### Phase 2: 实时防护（第7-10周）
-
-目标: MCP Server上线，成功模式捕获，智能体自主运行守护。
+目标: MCP Server上线，智能体自主运行时也能实时守护。
 
 功能:
 1. MCP Server — check_pitfall / get_best_practice / report_correction / get_stats
-2. 成功模式捕获器 — 检测成功/表扬/重复使用（正面信号）
-3. Session Monitor — 旁路监控 + 模式匹配告警
-4. Hook自动触发MCP — 解决长会话退化问题
-5. 置信度自动校准 — 闭环追踪干预效果
-6. 知识衰减引擎 — 过期知识自动降级
-7. /teamagent override — 临时绕过规则
-8. /teamagent rules — 管理活跃规则
+2. Session Monitor — 旁路监控 + 模式匹配告警
+3. Hook自动触发MCP — 解决长会话退化问题
+4. 置信度自动校准 — 闭环追踪干预效果
+5. 知识衰减引擎 — 过期知识自动降级
+6. /teamagent override — 临时绕过规则
+7. /teamagent rules — 管理活跃规则
 
 验证指标: 首次正确率上升
 
-### Phase 3: 团队层（第9-14周）
+### Phase 3: 团队层
 
 目标: 团队知识共享，新人即老员工。
 
