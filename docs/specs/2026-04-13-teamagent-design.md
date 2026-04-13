@@ -105,6 +105,8 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
   },
   "category": "C|E|S|K",
   "subcategory": "1-4",
+  "type": "avoidance|practice",
+  "nature": "objective|subjective",
   "trigger": "触发模式",
   "wrong_pattern": "错误的做法",
   "correct_pattern": "正确的做法",
@@ -115,6 +117,11 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
   "hit_count": 0,
   "success_count": 0,
   "override_count": 0,
+  "evidence": {
+    "success_sessions": 0,
+    "success_users": 0,
+    "correction_sessions": 0
+  },
   "created_at": "",
   "last_hit_at": "",
   "last_validated_at": "",
@@ -401,19 +408,22 @@ AI编码工具在自主运行时（连续几十次工具调用无人介入），
 
 ### Phase 1: 个人层核心（第1-4周）
 
-目标: 单个用户使用，AI不再犯同样的错误。
+目标: 单个用户使用，AI不再犯同样的错误。**Day 1即有价值。**
 
 功能:
-1. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
-2. 纠正时刻识别器 — 多信号融合检测
-3. 知识提取引擎 — 调用Claude API结构化提取经验
-4. 本地知识库 — JSONL存储 + 基础检索
-5. Hook拦截器 — PreToolUse/PostToolUse hook脚本
-6. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新
-7. /pitfall命令 — 用户主动记录踩坑
-8. /teamagent stats — 查看统计信息
+1. 预置知识包 — 按技术栈预构建的经验库，随安装分发（解决冷启动）
+2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，自动激活对应知识
+3. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
+4. 纠正时刻识别器 — 多信号融合检测（负面信号）
+5. 成功模式捕获器 — 检测成功完成/表扬/重复使用（正面信号）
+6. 知识提取引擎 — 调用Claude API结构化提取经验（avoidance + practice两类）
+7. 本地知识库 — JSONL存储 + 基础检索
+8. Hook拦截器 — PreToolUse/PostToolUse hook脚本
+9. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新
+10. /pitfall命令 — 用户主动记录踩坑
+11. /teamagent stats — 查看统计信息
 
-验证指标: 坑重现率(Pitfall Recurrence Rate)下降
+验证指标: 坑重现率(Pitfall Recurrence Rate)下降; Day 1用户有预置知识生效体验
 
 ### Phase 2: 实时防护（第5-8周）
 
@@ -521,7 +531,61 @@ Portal替代的场景:
 
 ---
 
-## 八、竞品分析
+## 八、风险分析与缓解
+
+### 致命风险
+
+#### 风险1：冷启动——Day 1无价值感
+
+问题: 知识库需要时间积累，但用户在第一天就评估工具。
+
+缓解（Phase 1前置条件）:
+1. 预置知识包: 按技术栈预构建50+条经验（React/Python/TypeScript/Prisma/DevOps等），随系统安装分发
+2. 项目环境自动推断: 安装时扫描package.json/CLAUDE.md/.cursorrules/tsconfig/git log，自动激活对应知识包并导入已有规则
+3. 首次会话即有感知: 明确告知用户加载了多少条经验
+
+#### 风险2：只学负面不学正面
+
+问题: 仅从纠正时刻学习会导致知识库成为纯"不要做X"列表。Trace2Skill研究证明成功+失败结合才有效。
+
+缓解: 增加成功模式捕获。
+
+知识条目增加:
+- `type`: "avoidance"(避坑型，来自纠正) | "practice"(实践型，来自成功)
+- `evidence.success_sessions`: 验证成功的会话数
+- `evidence.success_users`: 验证的不同用户数
+
+成功信号: 一次成功完成(权重0.3) / 用户显式表扬(0.8) / 重复使用模式(0.6) / 多人使用模式(0.9)
+
+#### 风险3：个人偏好被当成团队最佳实践
+
+问题: "python→python3"是客观事实，但"Zustand vs Redux"是主观偏好。不区分会导致团队抵触。
+
+缓解: 知识分两种性质。
+
+知识条目增加:
+- `nature`: "objective"(客观事实，有可验证的对错) | "subjective"(主观偏好，多种方案可行)
+
+不同处理:
+- objective: 可自动升级enforcement，团队审核快速确认
+- subjective: enforcement上限为warn（不block），团队提交需≥2人支持，Portal标注为"团队约定"
+
+### 工程风险
+
+| # | 风险 | 缓解措施 |
+|---|------|---------|
+| 1 | 会话日志格式依赖 | 解析层版本适配抽象，CC更新时回归测试 |
+| 2 | 分析API成本 | 分级：本地模式匹配免费，LLM深度分析按需触发 |
+| 3 | Hook延迟 | Hook检查<10ms（纯本地匹配），语义查询异步 |
+| 4 | 反馈环振荡 | 标记受干预会话，设置单日知识新增上限 |
+| 5 | 隐私顾虑 | 个人数据不上传，团队层仅共享结构化条目不共享原始对话 |
+| 6 | 误学习撤销 | 支持"撤回"操作并通知受影响成员 |
+| 7 | 沉默错误盲区 | 互联网层弥补 + 回放验证发现 |
+| 8 | 知识爆炸 | 衰减清理 + 合并相似 + scope知识上限 |
+
+---
+
+## 九、竞品分析
 
 | 产品/论文 | 与TeamAgent的差异 |
 |----------|------------------|
