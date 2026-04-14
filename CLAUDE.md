@@ -41,7 +41,7 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（9条活跃知识）
+## TeamAgent 经验（14条活跃知识）
 - 使用 通过目标包 package.json 的 exports 字段暴露 subpath（例如 "./contracts"）再 import 而非 import ... from "@teamagent/ports/src/__tests__/xxx.js"——workspace 包的 exports 字段是 API 边界，pnpm/vite 不会解析未暴露的深路径；深路径 import 会在安装后构建阶段失败 [0.70]
 - 使用 passive 在打分公式里仍有 0.1 权重，所以 passive 条目 score 最低为 0.01（0.1 × 0.1） 而非 期望 passive 条目 score=0——spec v5.2 评分公式: confidence×0.4 + hit×0.3 + recency×0.2 + enforcement×0.1；passive 不是 0 分，只是最小分 [0.70]
 - 使用 先检查下载目录（~/Downloads、./data、./models、./vendor、node_modules 等可能的位置）是否已有目标内容；已有就复用，避免重复下载 而非 wget|curl|git clone|pip download|pip install -t|huggingface-cli download——重复下载浪费时间和带宽（尤其大模型权重几十 GB），可能覆盖正在使用的旧副本，甚至因网络问题下到损坏文件；先检查是一次极低成本的稳妥动作 [0.70]
@@ -51,4 +51,9 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 使用 vitest.config.ts 设置 pool:'threads' + poolOptions.threads.singleThread:true + fileParallelism:false 强制顺序跑 而非 使用默认的 thread pool 并发执行多个 test file——Windows + pnpm workspace + esbuild 组合下 vitest 多 worker 并发会出现 'Worker exited unexpectedly' / 'Out of memory' / 'memory allocation failed' 错误；singleThread 顺序跑可避免 [0.70]
 - 使用 CLI E2E 测试脱离 vitest runner——用独立 shell 脚本跑，或等有长驻进程后在外层测；或改为函数级单元测试覆盖 bin 的分发逻辑 而非 vitest worker 内用 spawnSync('npx tsx', ...) 嵌套执行 CLI bin 文件做 E2E 测试——vitest worker 里再 fork tsx 加载 ESM loader 会放大内存占用，在 Windows 低内存环境下直接 OOM；vitest 不是做进程级 E2E 的合适场所 [0.70]
 - 使用 完全退出当前 Claude Code 会话（Ctrl+D / 关窗口），重新启动后进入项目目录才能加载新 settings；subagent 沿用主会话 settings 缓存也无法验证 而非 在当前 Claude Code 会话内尝试触发 hook，或派发 subagent 来试——Claude Code 在会话启动时一次性载入 .claude/settings*.json，运行中不热加载。装完 hook 在原会话内调 Bash/Write/Edit 仍走旧配置（无 hook），容易陷入"以为装好实际没生效"的循环。直接验证 hook 进程本身正确性的方法：echo JSON | npx tsx <hook-bin>，如返回符合协议的 JSON 即逻辑无误，剩下只能等新会话 [0.70]
+- 使用 用 tsup bundle 成单文件 .cjs（noExternal 所有 workspace 依赖和 zod 等），用 node <绝对正斜杠路径> 直接跑 而非 npx tsx——Claude Code 在 C:\Users\tianhaoxuan\AppData\Local\Temp cwd 里 spawn hook，npx 找不到 workspace；且 tsx 冷启动 1-2s，远超 Hook 50ms 延迟预算。bundle 后 node 启动毫秒级 [0.70]
+- 使用 用正斜杠路径 C:/bzli/foo （Windows Node 和 bash 都认） 而非 用 Windows 反斜杠路径如 C:\\bzli\\foo 传给 bash 或 Claude Code hook——Git Bash 把 \\ 当转义符，C:\\bzli\\foo 在 shell 里会被解释为 Cbzlifoo，找不到文件；Claude Code 在 Windows 下默认通过 Git Bash 执行 hook command [0.70]
+- 使用 入口处规范化：把 /c/foo 转成 C:/foo 再传给 Node IO API 而非 直接把 /c/bzli/teamagent 传给 path.join / fs.existsSync / path.resolve——Node on Windows 把 /c/... 当成根目录下的 c 文件夹（path.join 结果是 \\c\\...），不是 C 盘。Claude Code 在 Windows 下传给 hook 的 cwd 字段是 Git Bash 风格 /c/... 必须规范化 [0.70]
+- 使用 务必加 scope.paths 或 scope.file_types 精确范围，例如 "scope.paths":["packages/core/**"] 或 "scope.file_types":["*.ts"] 而非 只写 wrong_pattern 不加 scope 范围限制——否则 matcher 对所有文件的命中关键词都拦，产生 false positive 打扰其他正当使用。例：no-fs-in-core 规则没限定 scope.paths 时，对任何 import fs 都拦，包括 install-hook.ts 这种本就该用 fs 的 adapter 层 [0.70]
+- 使用 用精炼的字面关键词列表，用管道符分隔多个候选；例如 wget|curl|legacy-tool（这些就是 matcher 会做子串匹配的 token） 而非 用散文句子描述错误做法，例如 "直接调用下载类命令而不检查"——matcher 是子串匹配不是语义匹配。散文不会命中真实命令字符串。且含特殊符号的散文（中文括号、点号、斜杠）还可能被错切成无效 token [0.70]
 <!-- TEAMAGENT:END -->
