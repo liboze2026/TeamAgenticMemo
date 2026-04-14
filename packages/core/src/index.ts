@@ -14,6 +14,7 @@ export { ruleBasedSuccessDetector } from "./success-detector/rule-based.js";
 export { parseSessionFile } from "./session-parser/index.js";
 export { buildExtractionPrompt } from "./extractor/prompt.js";
 export { extractRuleBullets } from "./importer/claude-md-parser.js";
+export { extractCursorRules } from "./importer/cursor-rules-parser.js";
 export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
