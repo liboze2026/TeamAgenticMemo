@@ -60,7 +60,9 @@ npx teamagent init
 
 **早上9:00 — 开始工作**
 
-打开Claude Code，照常写代码。CLAUDE.md中已包含TeamAgent编译的知识摘要，AI从第一句话开始就"知道"项目约定和团队经验。
+打开Claude Code，照常写代码。CLAUDE.md中已包含TeamAgent编译的知识摘要——几条通用工作原则，加上从本项目CLAUDE.md/.cursorrules导入的团队约定，加上之前积累的个人经验。AI从第一句话开始就"知道"项目约定。
+
+（首次安装时，这部分知识主要来自已有规则导入；使用几天后会明显增加积累的经验。）
 
 **9:15 — AI差点犯错但被挡住了（无感）**
 
@@ -295,21 +297,21 @@ AI做对的时刻——与纠正时刻互补，构建正面知识。
 
 #### 知识条目示例
 
-**示例1: 代码层 + objective + avoidance**
+**示例1: 认知层 + subjective + practice（预置元原则）**
 ```json
 {
-  "id": "personal-001",
-  "scope": {"level": "global"},
-  "category": "C", "tags": ["syntax-error", "python-version"],
-  "type": "avoidance", "nature": "objective",
-  "trigger": "执行python命令",
-  "wrong_pattern": "python script.py",
-  "correct_pattern": "python3 script.py",
-  "reasoning": "本机的python指向Python 2.7，python3才是Python 3.11",
-  "confidence": 0.95, "enforcement": "block",
-  "status": "active", "hit_count": 47, "success_count": 47, "override_count": 0,
-  "evidence": {"correction_sessions": 1, "success_sessions": 47, "success_users": 1},
-  "source": "personal"
+  "id": "meta-004",
+  "scope": {"level": "personal"},
+  "category": "K", "tags": ["metacognition", "stop-and-investigate"],
+  "type": "practice", "nature": "subjective",
+  "trigger": "结果与预期不符、遇到意外文件/状态、工具报错",
+  "wrong_pattern": "",
+  "correct_pattern": "先停下来查清楚根因，理解了再动手；不要用删除/重建/--force绕过",
+  "reasoning": "绕过式修复经常掩盖真问题，代价是后面以更严重的形式爆发",
+  "confidence": 0.80, "enforcement": "suggest",
+  "status": "active", "hit_count": 0, "success_count": 0, "override_count": 0,
+  "evidence": {"correction_sessions": 0, "success_sessions": 0, "success_users": 0},
+  "source": "internet"
 }
 ```
 
@@ -480,8 +482,9 @@ AI做对的时刻——与纠正时刻互补，构建正面知识。
 │                                                           │
 │  五种帮助方式:                                             │
 │                                                           │
-│  ① 预装知识 — "AI从一开始就很懂"                           │
-│    实现: CLAUDE.md编译 + skill文件                         │
+│  ① 工作习惯基线 — "AI开箱即有工作习惯"                     │
+│    实现: CLAUDE.md编译（含元原则 + 导入的已有规则 +        │
+│          已积累的团队/个人知识）                            │
 │    时机: 每次会话开始                                      │
 │                                                           │
 │  ② 实时顾问 — "AI做事前会先想想有没有坑"（核心）           │
@@ -531,36 +534,44 @@ AI做对的时刻——与纠正时刻互补，构建正面知识。
 
 以初始子标签为例展示覆盖范围（实际子标签随系统进化动态扩展）：
 
+说明：
+- ① 工作习惯基线：通过 CLAUDE.md 编译分发。内容包括 **预置元原则**（仅K/S层的少数几条）+ **导入的已有规则** + **已积累的团队/个人知识**。除元原则外，其他条目都来自用户实际使用，不是随安装预置。
+- ② ③ ④ ⑤：不依赖预置，只要知识库有对应条目就能起作用。
+
 ```
-                    预装  实时  安全  全局  持续
-                    知识  顾问  护栏  视野  学习
-                    ①    ②    ③    ④    ⑤
-────────────────────────────────────────────────
-C syntax-error                 ✓              ✓
-C api-hallucination      ✓    ✓              ✓
-C hidden-logic           ✓          ✓        ✓
-C security               ✓    ✓    ✓        ✓
-C performance            ✓          ✓        ✓
-────────────────────────────────────────────────
-E tech-choice            ✓          ✓        ✓
-E architecture     ✓     ✓          ✓        ✓
-E workflow-order         ✓    ✓     ✓        ✓
-E config-blindspot ✓     ✓    ✓              ✓
-E testing-strategy       ✓          ✓        ✓
-E deployment       ✓     ✓    ✓              ✓
-────────────────────────────────────────────────
-S wrong-direction        ✓          ✓        ✓
-S over-engineering       ✓          ✓        ✓
-S under-engineering      ✓          ✓        ✓
-S context-blindness ✓    ✓          ✓        ✓
-────────────────────────────────────────────────
-K version-lag      ✓     ✓    ✓              ✓
-K domain-gap       ✓     ✓                   ✓
-K team-tacit       ✓     ✓                   ✓
-K unknown-better         ✓                   ✓
-────────────────────────────────────────────────
-所有初始子标签均被至少2种方式覆盖
-新发现的子标签自动继承所属大类的覆盖模式
+                         工作   实时  安全  全局  持续
+                         习惯   顾问  护栏  视野  学习
+                         ①     ②    ③    ④    ⑤
+────────────────────────────────────────────────────
+C syntax-error                      ✓              ✓
+C api-hallucination          ✓     ✓              ✓
+C hidden-logic               ✓           ✓        ✓
+C security                   ✓     ✓     ✓        ✓
+C performance                ✓           ✓        ✓
+────────────────────────────────────────────────────
+E tech-choice                ✓           ✓        ✓
+E architecture               ✓           ✓        ✓
+E workflow-order             ✓     ✓     ✓        ✓
+E config-blindspot           ✓     ✓              ✓
+E testing-strategy           ✓           ✓        ✓
+E deployment                 ✓     ✓              ✓
+────────────────────────────────────────────────────
+S wrong-direction            ✓           ✓        ✓
+S over-engineering           ✓           ✓        ✓
+S under-engineering          ✓           ✓        ✓
+S context-blindness          ✓           ✓        ✓
+────────────────────────────────────────────────────
+K version-lag                ✓     ✓              ✓
+K domain-gap                 ✓                    ✓
+K team-tacit                 ✓                    ✓
+K unknown-better             ✓                    ✓
+────────────────────────────────────────────────────
+K metacognition       ✓      ✓                    ✓   ← 唯一预置即生效
+S workflow-principles ✓      ✓                    ✓   ← 唯一预置即生效
+────────────────────────────────────────────────────
+① 列的 ✓ 表示"如果知识库中有这类知识，会通过CLAUDE.md编译进来"，
+  而非"系统预装了这类知识"。预装仅限最后两行（K metacognition /
+  S workflow-principles 的元原则）。
 ```
 
 ### 规则的作用域(Scope)
