@@ -160,6 +160,26 @@ export function formatCorrectionContext(moment: CorrectionMoment): string {
 }
 
 /**
+ * LLM 提取的 accumulated 条目默认 scope.file_types：只覆盖代码文件，
+ * 排除文档（.md / .txt / .rst）。避免规则在讨论自己的文档里反噬（自指拦截）。
+ *
+ * 背景：M4 dogfood 时发现 LLM 抽出的"禁用 axios"类规则会在评测文档里拦住
+ * 本文档的写入（文档 content 含 "axios" 触发 matcher）。加默认 file_types
+ * 使 matcher 在 scope 检查阶段跳过非代码文件。
+ *
+ * 调用方若在 deps.scope 上已经设置 file_types 或 paths，则不覆盖。
+ */
+export const DEFAULT_CODE_FILE_TYPES: readonly string[] = [
+  "*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs",
+  "*.py", "*.go", "*.rs", "*.java", "*.kt",
+  "*.c", "*.cpp", "*.h", "*.hpp",
+  "*.sh", "*.bash",
+  "*.rb", "*.php", "*.cs",
+  "*.json", "*.yaml", "*.yml", "*.toml",
+  "*.sql",
+];
+
+/**
  * 把 LLM 抽取结果补完成 KnowledgeEntry。
  */
 function assembleEntry(
@@ -172,9 +192,17 @@ function assembleEntry(
   const enforcement = computeEnforcement(confidence, nature);
   const nowIso = isoNow(deps.now);
 
+  // 若调用方没有显式给 scope 加范围，加默认代码文件范围
+  const scopeHasExplicitRange =
+    (deps.scope.paths && deps.scope.paths.length > 0) ||
+    (deps.scope.file_types && deps.scope.file_types.length > 0);
+  const scope = scopeHasExplicitRange
+    ? deps.scope
+    : { ...deps.scope, file_types: [...DEFAULT_CODE_FILE_TYPES] };
+
   return {
     id: deps.idGen(),
-    scope: deps.scope,
+    scope,
     category: partial.category ?? "E",
     tags: partial.tags ?? [],
     type: partial.type ?? "avoidance",

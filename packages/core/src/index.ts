@@ -20,6 +20,7 @@ export {
 export {
   runExtractPipeline,
   formatCorrectionContext,
+  DEFAULT_CODE_FILE_TYPES,
   type ExtractPipelineDeps,
   type ExtractPipelineResult,
 } from "./pipeline/extract-pipeline.js";

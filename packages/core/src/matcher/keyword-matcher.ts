@@ -93,18 +93,25 @@ function splitPatterns(raw: string): string[] {
   return tokens.length > 0 ? tokens : [raw.trim()];
 }
 
-/** 检查 scope.file_types / paths 限制（如果 rule 设置了的话）*/
+/**
+ * 检查 scope.file_types / paths 限制（如果 rule 设置了的话）。
+ *
+ * 语义：scope 只限制"哪些文件"被这条规则覆盖，不阻止"非文件操作"被匹配。
+ * 因此当 ctx 没有 file_path（典型如 Bash 命令）时，file_types / paths 不适用，
+ * 直接放行。例如一条范围是 `*.ts` 的"禁用 axios"规则，Write *.md 不会命中
+ * （scope 过滤），但 Bash `npm install axios` 仍会命中（没有 file_path）。
+ */
 function checkScope(rule: KnowledgeEntry, filePath: string | undefined): boolean {
+  if (!filePath) return true;
+
   const fileTypes = rule.scope.file_types;
   if (fileTypes && fileTypes.length > 0) {
-    if (!filePath) return false;
     const ok = fileTypes.some((ft) => matchesGlob(ft, filePath));
     if (!ok) return false;
   }
 
   const paths = rule.scope.paths;
   if (paths && paths.length > 0) {
-    if (!filePath) return false;
     const ok = paths.some((p) => matchesGlob(p, filePath));
     if (!ok) return false;
   }

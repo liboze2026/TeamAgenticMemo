@@ -259,6 +259,47 @@ describe("matchRules — scope filtering", () => {
     ).toEqual([]);
   });
 
+  it("scope restrictions don't block ops with no file_path (e.g. Bash)", () => {
+    // Regression: a rule scoped to *.ts used to block ALL Bash commands
+    // because checkScope returned false when filePath was absent.
+    // Correct semantics: scope restricts which FILES the rule covers;
+    // non-file operations (Bash, WebFetch, etc.) should still match.
+    const tsRule = makeRule({
+      wrong_pattern: "deprecated-lib",
+      scope: { level: "team", file_types: ["*.ts"] },
+    });
+    expect(
+      matchRules(
+        {
+          toolName: "Bash",
+          input: { command: "npm install deprecated-lib" },
+        },
+        [tsRule],
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("scope.file_types blocks matches on excluded file types", () => {
+    // A rule scoped to *.ts should NOT match Write on a .md file
+    // even if the content contains the trigger keyword (the self-reference bug).
+    const tsRule = makeRule({
+      wrong_pattern: "deprecated-lib",
+      scope: { level: "team", file_types: ["*.ts", "*.tsx"] },
+    });
+    expect(
+      matchRules(
+        {
+          toolName: "Write",
+          input: {
+            file_path: "docs/evaluation.md",
+            content: "we replaced deprecated-lib with a new approach",
+          },
+        },
+        [tsRule],
+      ),
+    ).toEqual([]);
+  });
+
   it("scope.paths filters by path glob (prefix match Phase 1 simple)", () => {
     const rule = makeRule({
       wrong_pattern: "import",

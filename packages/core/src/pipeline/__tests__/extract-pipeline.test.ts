@@ -167,7 +167,7 @@ describe("runExtractPipeline", () => {
 
     const entry = result.extracted[0]!;
     expect(entry.id).toBe("test-1");
-    expect(entry.scope).toEqual(SCOPE);
+    expect(entry.scope.level).toBe(SCOPE.level);
     expect(entry.category).toBe("E");
     expect(entry.wrong_pattern).toBe("axios");
     expect(entry.correct_pattern).toBe("fetch");
@@ -333,6 +333,80 @@ describe("runExtractPipeline", () => {
       skipped: 0,
       failed: 0,
     });
+  });
+
+  it("adds default code-file scope.file_types when scope has no range", async () => {
+    const deps = makeDeps({
+      detector: new StubDetector([makeMoment()]),
+      extractor: new QueuedExtractor([
+        {
+          kind: "ok",
+          partial: {
+            category: "E",
+            type: "avoidance",
+            nature: "subjective",
+            trigger: "t",
+            correct_pattern: "c",
+            reasoning: "r",
+          },
+        },
+      ]),
+      // scope has level only, no paths/file_types
+      scope: { level: "team" },
+    });
+    const r = await runExtractPipeline(makeSession(), deps);
+    const entry = r.extracted[0]!;
+    expect(entry.scope.file_types).toBeDefined();
+    expect(entry.scope.file_types).toContain("*.ts");
+    expect(entry.scope.file_types).toContain("*.py");
+    expect(entry.scope.file_types).not.toContain("*.md");
+  });
+
+  it("preserves explicit scope.paths without adding defaults", async () => {
+    const deps = makeDeps({
+      detector: new StubDetector([makeMoment()]),
+      extractor: new QueuedExtractor([
+        {
+          kind: "ok",
+          partial: {
+            category: "E",
+            type: "avoidance",
+            nature: "subjective",
+            trigger: "t",
+            correct_pattern: "c",
+            reasoning: "r",
+          },
+        },
+      ]),
+      scope: { level: "team", paths: ["packages/core/**"] },
+    });
+    const r = await runExtractPipeline(makeSession(), deps);
+    const entry = r.extracted[0]!;
+    expect(entry.scope.paths).toEqual(["packages/core/**"]);
+    expect(entry.scope.file_types).toBeUndefined();
+  });
+
+  it("preserves explicit scope.file_types without overriding", async () => {
+    const deps = makeDeps({
+      detector: new StubDetector([makeMoment()]),
+      extractor: new QueuedExtractor([
+        {
+          kind: "ok",
+          partial: {
+            category: "E",
+            type: "avoidance",
+            nature: "subjective",
+            trigger: "t",
+            correct_pattern: "c",
+            reasoning: "r",
+          },
+        },
+      ]),
+      scope: { level: "team", file_types: ["*.css"] },
+    });
+    const r = await runExtractPipeline(makeSession(), deps);
+    const entry = r.extracted[0]!;
+    expect(entry.scope.file_types).toEqual(["*.css"]);
   });
 
   it("respects injected scope and source", async () => {
