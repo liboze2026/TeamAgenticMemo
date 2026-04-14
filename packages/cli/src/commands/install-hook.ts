@@ -33,13 +33,27 @@ interface HookCommand {
 }
 
 function defaultHookEntry(): string {
-  // 当前 bin-pre-tool-use.ts 的位置：packages/cli/src/bin-pre-tool-use.ts
-  // 通过 import.meta.url 找到自身后回溯到项目根
+  // 通过 import.meta.url 找到 install-hook.ts 自身位置
+  // → 退到 packages/cli/，再指向 dist/bin-pre-tool-use.cjs（预编译的单文件 bundle）
+  // 用 .cjs 而非 .ts 的原因：
+  // - Hook 被 Claude Code 在 %TEMP% 目录里 spawn，npx tsx 找不到 workspace
+  // - 启动速度（毫秒 vs tsx 1-2 秒）
+  // 使用者必须先 `pnpm --filter @teamagent/cli build:hook`
   const here = fileURLToPath(import.meta.url);
   // here = .../packages/cli/src/commands/install-hook.ts
-  // -> 退到 packages/cli/src/bin-pre-tool-use.ts
-  const cliSrc = path.dirname(path.dirname(here));
-  return path.join(cliSrc, "bin-pre-tool-use.ts");
+  // or    .../packages/cli/dist/commands/install-hook.cjs
+  // 统一退到 packages/cli/ 根
+  const cliRoot = path.dirname(path.dirname(path.dirname(here)));
+  return path.join(cliRoot, "dist", "bin-pre-tool-use.cjs");
+}
+
+/**
+ * 把 Windows 反斜杠路径转为正斜杠格式。
+ * Git Bash 会吞掉路径里的反斜杠（视为转义），所以 hook command 必须用 /。
+ * `C:\bzli\foo` → `C:/bzli/foo`
+ */
+function toForwardSlash(p: string): string {
+  return p.replace(/\\/g, "/");
 }
 
 function readSettings(file: string): ClaudeSettings {
@@ -83,9 +97,9 @@ export function installHook(opts: InstallHookOptions = {}): {
     return { settingsPath, hookEntry, alreadyInstalled: true };
   }
 
-  // 用 tsx 跑 .ts 文件——避免 Phase 1 的额外 build 步骤
-  // M5 init 会编译为 .cjs 单文件提升启动速度
-  const command = `npx tsx ${shellQuote(hookEntry)}`;
+  // 必须用正斜杠路径 + .cjs 单文件：Git Bash 吞反斜杠，%TEMP% cwd 里 npx tsx 找不到 workspace
+  const forwardPath = toForwardSlash(hookEntry);
+  const command = `node ${shellQuote(forwardPath)}`;
 
   settings.hooks.PreToolUse.push({
     matcher: "Bash|Write|Edit|WebFetch",

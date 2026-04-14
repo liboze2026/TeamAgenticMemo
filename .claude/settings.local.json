@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx tsx C:\\bzli\\teamagent\\packages\\cli\\src\\bin-pre-tool-use.ts",
+            "command": "node C:/bzli/teamagent/packages/cli/dist/bin-pre-tool-use.cjs",
             "timeout": 30
           }
         ]

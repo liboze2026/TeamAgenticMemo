@@ -7,7 +7,8 @@
     "teamagent": "./src/bin.ts"
   },
   "scripts": {
-    "build": "tsup src/bin.ts --format esm",
+    "build": "tsup src/bin.ts --format esm && pnpm build:hook",
+    "build:hook": "tsup --config tsup.hook.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

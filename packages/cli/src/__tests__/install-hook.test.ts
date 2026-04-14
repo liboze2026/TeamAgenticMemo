@@ -33,7 +33,7 @@ describe("installHook", () => {
     expect(content.hooks.PreToolUse).toBeDefined();
     expect(content.hooks.PreToolUse[0]._teamagentTag).toBe("teamagent-pre-tool-use");
     expect(content.hooks.PreToolUse[0].matcher).toContain("Bash");
-    expect(content.hooks.PreToolUse[0].hooks[0].command).toContain("tsx");
+    expect(content.hooks.PreToolUse[0].hooks[0].command).toContain("node");
     expect(content.hooks.PreToolUse[0].hooks[0].command).toContain(FAKE_HOOK_ENTRY);
   });
 

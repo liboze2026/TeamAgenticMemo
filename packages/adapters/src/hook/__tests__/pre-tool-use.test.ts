@@ -219,6 +219,36 @@ describe("handlePreToolUse", () => {
     expect(out).toEqual({});
   });
 
+  it("normalizes Git Bash style cwd (/c/...) to Windows (C:/...)", () => {
+    // 在 cwd 下放一条 team 规则
+    seedRule(teamPath, {
+      wrong_pattern: "console.log",
+      correct_pattern: "use structured logger",
+      reasoning: "no console pollution",
+      scope: { level: "team" },
+    });
+
+    // Claude Code 在 Windows 上传来 /c/... 风格 cwd
+    const winCwd = tmp.cwd.replace(/^[A-Z]:/, (m) => "/" + m[0]!.toLowerCase()).replace(/\\/g, "/");
+    const out = handlePreToolUse(
+      makeInput({
+        cwd: winCwd, // 不传 opts.cwd，走 input.cwd 归一化
+        tool_input: { file_path: "x.ts", content: 'console.log("x")' },
+        tool_name: "Write",
+      }),
+      {
+        personalPath,
+        // 不传 teamPath，让它从规范化后的 cwd 推导
+        globalPath,
+        eventsPath,
+        homeDir: tmp.home,
+        now: () => "2026-04-14T00:00:00Z",
+      },
+    );
+    // 只有规范化成功才能找到 teamPath 下的规则
+    expect(out.systemMessage).toContain("structured logger");
+  });
+
   it("merges rules from personal + team + global stores", () => {
     seedRule(personalPath, { wrong_pattern: "personal-rule", correct_pattern: "p-c", reasoning: "r" });
     seedRule(teamPath, {
