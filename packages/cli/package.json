@@ -16,5 +16,8 @@
     "@teamagent/ports": "workspace:*",
     "@teamagent/core": "workspace:*",
     "@teamagent/adapters": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
   }
 }
