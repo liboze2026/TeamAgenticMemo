@@ -7,3 +7,4 @@ dist/
 coverage/
 .install-log
 *.tsbuildinfo
+packages/*/.teamagent/
