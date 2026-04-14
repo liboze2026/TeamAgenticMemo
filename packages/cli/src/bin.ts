@@ -15,6 +15,13 @@ import {
   parseInitArgs,
   renderInitResult,
 } from "./commands/init.js";
+import {
+  disable,
+  enable,
+  uninstall,
+  parseUninstallArgs,
+  renderUninstallResult,
+} from "./commands/uninstall.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -96,6 +103,30 @@ async function main(): Promise<void> {
       if (!result.ok) process.exit(1);
       return;
     }
+    case "disable": {
+      const r = disable();
+      if (r.removed) {
+        process.stdout.write(`✓ Hook 已禁用: ${r.settingsPath}\n  数据保留；用 'teamagent enable' 恢复\n`);
+      } else {
+        process.stdout.write(`未找到已注册的 TeamAgent hook，无需禁用\n`);
+      }
+      return;
+    }
+    case "enable": {
+      const r = enable();
+      if (r.alreadyInstalled) {
+        process.stdout.write(`✓ Hook 已启用（无变化）: ${r.settingsPath}\n`);
+      } else {
+        process.stdout.write(`✅ Hook 已重新启用: ${r.settingsPath}\n  下次开 Claude Code 时生效\n`);
+      }
+      return;
+    }
+    case "uninstall": {
+      const opts = parseUninstallArgs(rest);
+      const r = uninstall(opts);
+      process.stdout.write(renderUninstallResult(r));
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -121,6 +152,10 @@ async function main(): Promise<void> {
           "                                   列出最近 N 条知识（默认 10），供人工复核",
           "  teamagent init [--dry-run] [--skip-import] [--skip-hook]",
           "                                   一键安装到当前项目：建目录 + 注入元原则 + 导入已有规则 + 注册 Hook + 编译 CLAUDE.md",
+          "  teamagent disable                临时禁用 Hook（保留数据）",
+          "  teamagent enable                 重新启用 Hook",
+          "  teamagent uninstall [--delete-data] [--dry-run]",
+          "                                   完全卸载：移除 Hook 注册 + 清掉 CLAUDE.md 区块；加 --delete-data 同时清数据",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",
