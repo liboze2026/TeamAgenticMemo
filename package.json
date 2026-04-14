@@ -1,0 +1,24 @@
+{
+  "name": "teamagent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "团队AI自进化引擎",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.base.json",
+    "teamagent": "tsx packages/cli/src/bin.ts"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

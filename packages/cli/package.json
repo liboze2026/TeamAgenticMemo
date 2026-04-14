@@ -1,0 +1,20 @@
+{
+  "name": "@teamagent/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "teamagent": "./src/bin.ts"
+  },
+  "scripts": {
+    "build": "tsup src/bin.ts --format esm",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@teamagent/types": "workspace:*",
+    "@teamagent/ports": "workspace:*",
+    "@teamagent/core": "workspace:*",
+    "@teamagent/adapters": "workspace:*"
+  }
+}
