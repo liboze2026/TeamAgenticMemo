@@ -15,3 +15,10 @@ export {
   ClaudeSessionSource,
   parseSessionFile,
 } from "./session-source/claude-session-source.js";
+export {
+  ClaudeCodeLLMClient,
+  parseClaudeJsonOutput,
+  type ClaudeCodeLLMClientOptions,
+  type Spawner,
+  type SpawnResult,
+} from "./llm/claude-code-client.js";

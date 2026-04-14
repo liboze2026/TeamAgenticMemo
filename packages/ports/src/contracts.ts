@@ -4,3 +4,5 @@
  */
 export { runKnowledgeStoreContract } from "./__tests__/knowledge-store-contract.js";
 export { runAttributionBusContract } from "./__tests__/attribution-bus-contract.js";
+export { runLLMClientContract } from "./__tests__/llm-client-contract.js";
+export type { LLMBehavior } from "./__tests__/llm-client-contract.js";
