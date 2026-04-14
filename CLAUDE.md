@@ -41,13 +41,16 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（15条活跃知识）
+## TeamAgent 经验（20条活跃知识）
 - 使用 通过目标包 package.json 的 exports 字段暴露 subpath（例如 "./contracts"）再 import 而非 import ... from "@teamagent/ports/src/__tests__/xxx.js"——workspace 包的 exports 字段是 API 边界，pnpm/vite 不会解析未暴露的深路径；深路径 import 会在安装后构建阶段失败 [0.70]
 - 使用 passive 在打分公式里仍有 0.1 权重，所以 passive 条目 score 最低为 0.01（0.1 × 0.1） 而非 期望 passive 条目 score=0——spec v5.2 评分公式: confidence×0.4 + hit×0.3 + recency×0.2 + enforcement×0.1；passive 不是 0 分，只是最小分 [0.70]
 - 使用 先检查下载目录（~/Downloads、./data、./models、./vendor、node_modules 等可能的位置）是否已有目标内容；已有就复用，避免重复下载 而非 wget|curl|git clone|pip download|pip install -t|huggingface-cli download——重复下载浪费时间和带宽（尤其大模型权重几十 GB），可能覆盖正在使用的旧副本，甚至因网络问题下到损坏文件；先检查是一次极低成本的稳妥动作 [0.70]
 - 使用 只用 | 作为分隔符。/ 在 unix 路径里太常见，会把含路径的 wrong_pattern 错切成超短 token，导致规则乱命中无关代码 而非 把 / 作为多模式分隔符之一（如 a|b|c 或 a/b/c 都视为多个候选）——0 号用户用 wget|curl|git clone|... 这种带 / 的合法字符串作为 wrong_pattern，被切成 src/__tests__/foo.js 这种短 token 后，每条含 src/ 的代码都被错误匹配 [0.70]
 - 使用 把 IO 移到 adapter 层；core 必须保持纯函数。需要 IO 时通过依赖注入传入 而非 import fs——Functional Core Imperative Shell 是本项目的核心架构原则（CLAUDE.md 元约束）；core 含 IO 会破坏可测性和复用性 [0.70]
 - 使用 通过 AttributionBus 发结构化事件；要 trace 用 process.stderr 或独立 logger 而非 console.log——Hook 进程的 stdout 是协议通道（返回 JSON 给 Claude Code），任何 console.log 都会污染协议导致解析失败 [0.70]
+- 使用 core 只能依赖 @teamagent/types 和 @teamagent/ports；纯函数逻辑必须放在 core，adapter 只做 IO 包装 而非 @teamagent/adapters——Hexagonal Architecture 依赖方向: core 依赖 ports 接口，adapters 实现 ports。core import adapters 会反转依赖方向，打破可测性和组合性 [0.70]
+- 使用 用相对路径 import { x } from "../packages/core/src/index.js"；或给 scripts/ 建 package.json 加入 pnpm-workspace.yaml 而非 在 scripts/*.ts 里 import { x } from "@teamagent/core"——pnpm workspace 只把 pnpm-workspace.yaml 中声明的目录视为可 resolve 的 @scope/name；顶层 scripts/ 不在其中，tsx/node 会 ERR_MODULE_NOT_FOUND [0.70]
+- 使用 让依赖方直接 import 源头 detector.detect() 拿结果作为输入；纯函数间互相调用是安全的 而非 在每个 detector 内各自复制 denial/praise 等关键词表，并各自判定一遍——重复的关键词表会在一处更新时漏改，导致两个 detector 语义分歧；依赖调用比复制逻辑更耦合但更正确——单一事实源 [0.70]
 - 使用 vitest.config.ts 设置 pool:'threads' + poolOptions.threads.singleThread:true + fileParallelism:false 强制顺序跑 而非 使用默认的 thread pool 并发执行多个 test file——Windows + pnpm workspace + esbuild 组合下 vitest 多 worker 并发会出现 'Worker exited unexpectedly' / 'Out of memory' / 'memory allocation failed' 错误；singleThread 顺序跑可避免 [0.70]
 - 使用 CLI E2E 测试脱离 vitest runner——用独立 shell 脚本跑，或等有长驻进程后在外层测；或改为函数级单元测试覆盖 bin 的分发逻辑 而非 vitest worker 内用 spawnSync('npx tsx', ...) 嵌套执行 CLI bin 文件做 E2E 测试——vitest worker 里再 fork tsx 加载 ESM loader 会放大内存占用，在 Windows 低内存环境下直接 OOM；vitest 不是做进程级 E2E 的合适场所 [0.70]
 - 使用 完全退出当前 Claude Code 会话（Ctrl+D / 关窗口），重新启动后进入项目目录才能加载新 settings；subagent 沿用主会话 settings 缓存也无法验证 而非 在当前 Claude Code 会话内尝试触发 hook，或派发 subagent 来试——Claude Code 在会话启动时一次性载入 .claude/settings*.json，运行中不热加载。装完 hook 在原会话内调 Bash/Write/Edit 仍走旧配置（无 hook），容易陷入"以为装好实际没生效"的循环。直接验证 hook 进程本身正确性的方法：echo JSON | npx tsx <hook-bin>，如返回符合协议的 JSON 即逻辑无误，剩下只能等新会话 [0.70]
@@ -57,4 +60,6 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 使用 务必加 scope.paths 或 scope.file_types 精确范围，例如 "scope.paths":["packages/core/**"] 或 "scope.file_types":["*.ts"] 而非 只写 wrong_pattern 不加 scope 范围限制——否则 matcher 对所有文件的命中关键词都拦，产生 false positive 打扰其他正当使用。例：no-fs-in-core 规则没限定 scope.paths 时，对任何 import fs 都拦，包括 install-hook.ts 这种本就该用 fs 的 adapter 层 [0.70]
 - 使用 用精炼的字面关键词列表，用管道符分隔多个候选；例如 wget|curl|legacy-tool（这些就是 matcher 会做子串匹配的 token） 而非 用散文句子描述错误做法，例如 "直接调用下载类命令而不检查"——matcher 是子串匹配不是语义匹配。散文不会命中真实命令字符串。且含特殊符号的散文（中文括号、点号、斜杠）还可能被错切成无效 token [0.70]
 - 使用 直接 claude （默认会话）；Hook 会被正常调用；只有 --bare 或 --dangerously-skip-permissions 会跳过 Hook 机制 而非 使用 --dangerously-skip-permissions 启动——今天 0 号用户实证：--dangerously-skip-permissions 启动的会话里 PreToolUse Hook 不会被执行——events.jsonl 零新增、对话里无 additional context。证据：claude -p（默认模式）新进程立刻产生 session-级别 events；--dangerously-skip-permissions 模式下同样操作零 event [0.70]
+- 使用 用 process.cwd() —— vitest 从 repo 根启动，cwd 可靠。或直接用 packages-local 相对路径 而非 path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../../..")——多层 ".." 退路径容易少退一层或多退一层，且 url.pathname 在 Windows 上前缀 / 还需处理。process.cwd() 零歧义 [0.70]
+- 使用 中文场景去掉 \\b，用显式锚点或前后文字符类。\\b 只在 ASCII 单词字符边界工作 而非 正则用 \\b 包裹中文词，例如 /\\b(用|改用|上)\\s*X\\b/——\\b 定义为 \\w 与非 \\w 之间的边界；中文字符不属于 JavaScript 的 \\w（默认没开 /u 标志时），"用" 前后不产生 boundary，正则永远不会命中 [0.70]
 <!-- TEAMAGENT:END -->
