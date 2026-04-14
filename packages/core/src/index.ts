@@ -22,6 +22,11 @@ export {
   type RuleStructureResult,
 } from "./importer/rule-structurer.js";
 export {
+  detectStack,
+  type FilePresence,
+  type StackFingerprint,
+} from "./detect-stack/index.js";
+export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
 } from "./extractor/llm-based.js";
