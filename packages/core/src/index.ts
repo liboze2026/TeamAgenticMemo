@@ -13,6 +13,7 @@ export { ruleBasedCorrectionDetector } from "./correction-detector/rule-based.js
 export { ruleBasedSuccessDetector } from "./success-detector/rule-based.js";
 export { parseSessionFile } from "./session-parser/index.js";
 export { buildExtractionPrompt } from "./extractor/prompt.js";
+export { extractRuleBullets } from "./importer/claude-md-parser.js";
 export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
