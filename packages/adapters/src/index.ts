@@ -11,3 +11,7 @@ export {
   handlePreToolUse,
   type PreToolUseOptions,
 } from "./hook/pre-tool-use.js";
+export {
+  ClaudeSessionSource,
+  parseSessionFile,
+} from "./session-source/claude-session-source.js";
