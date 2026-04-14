@@ -1,6 +1,6 @@
 # TeamAgent — 团队AI自进化引擎 设计文档
 
-> 版本: 5.0 | 日期: 2026-04-14 | 状态: 设计完成，待实施
+> 版本: 5.1 | 日期: 2026-04-14 | 状态: 设计完成，待实施
 
 ---
 
@@ -22,7 +22,7 @@
 
 1. **个人层** — 我踩过的坑，AI不再犯第二次
 2. **团队层** — 我的经验自动流入团队，新同事的AI像老员工一样懂
-3. **互联网层** — 系统主动分析外部最佳实践，AI未卜先知
+3. **互联网层** — 系统主动引入业界最佳实践，AI在团队踩坑前就已知晓
 4. **终结技术分享** — 知识自动流动，分享会不再需要存在
 
 ### 工具策略
@@ -41,19 +41,14 @@ TeamAgent是一个**常驻后台的智能知识服务**，以MCP Server为核心
 
 ### 运行形态
 
-```
-TeamAgent = MCP Server（核心——AI的实时知识顾问）
-          + Hook脚本（执行臂——工具调用的安全护栏）
-          + Skill命令（用户接口——可选的主动操作）
-          + 知识引擎（大脑——采集/分析/存储/编译/衰减）
-          + Knowledge Portal（可视化窗口——活的团队wiki）
-```
+TeamAgent 由 **知识引擎、Hook 脚本、Skill 命令、MCP Server（Phase 2）、Knowledge Portal** 五部分组成，各组件的职责和协作见"四、系统架构"。
 
 通过一条命令安装，之后完全后台运行：
 
 ```bash
 npx teamagent init
-# 扫描项目 → 加载知识包 → 注册MCP/Hook/Skill → 完成
+# 扫描项目 → 加载元原则 → 导入已有规则 → 注册 Hook/Skill → 完成
+# （MCP Server 在 Phase 2 上线后由 init 一并注册）
 ```
 
 ### 用户旅程：三个关键场景
@@ -147,6 +142,7 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 | over-engineering | 做了不需要做的事 | 未被要求的功能、过度设计 |
 | under-engineering | 该做的没做 | 缺少错误处理、安全验证、日志 |
 | context-blindness | 无视项目/业务约束 | 忽略性能预算、合规要求 |
+| workflow-principles | 工作流层面的通用原则 | 先读代码再动手、小步提交、改前改后都跑测试 |
 
 **认知层 K — 知识缺口**
 
@@ -156,6 +152,9 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 | domain-gap | 缺少专业领域知识 | 不了解金融幂等要求 |
 | team-tacit | 不了解团队约定和历史决策 | "我们试过X方案放弃了" |
 | unknown-better-solution | 有更好方案但AI不知道 | 社区新库、成熟设计模式 |
+| metacognition | 知道何时该谨慎、该停下查清楚 | 结果与预期不符时先查根因而非绕过 |
+
+`workflow-principles` 和 `metacognition` 是预置元原则的归属子标签，也是除"预置条目"之外唯一预装即生效的知识。
 
 ### AI成长的五个维度
 
@@ -366,7 +365,7 @@ AI做对的时刻——与纠正时刻互补，构建正面知识。
 1. enforcement=block的规则（必须包含，通常很少）
 2. confidence最高 + hit_count最多的规则（经过验证的高频知识）
 3. 最近被触发的规则（当前活跃的知识）
-4. 与当前项目技术栈匹配的规则
+4. scope 匹配当前上下文的规则（`scope.project` / `scope.paths` / `scope.file_types` / `scope.branches`）
 
 **编译时机**:
 - 每次会话结束后，如果知识库有变更 → 重新编译
@@ -516,15 +515,20 @@ global —— ~/.teamagent/global/knowledge.jsonl
 
 新规则起始置信度为0.7。subjective知识的enforcement上限为warn。
 
-置信度变化:
-- 干预成功 +0.05 / 用户确认有效 +0.1 / 团队成员验证 +0.1
-- 干预后仍失败 -0.1 / 用户override -0.15 / 用户标记错误 → 直接归档
+#### 置信度校准（唯一权威来源）
 
-### 知识衰减
+每次知识被应用都会产生对其置信度的反馈信号，由此驱动 confidence 涨落。这也是"闭环效果追踪"的落地：每次建议生成 `intervention_id`，PostToolUse 关联执行结果到该 id，再据此调整 confidence。
 
-- 被动衰减: 超过N天未触发 → enforcement降级
-- 主动失效: 依赖文件(package.json等)变更 → 相关知识标记"待验证"
-- 反向信号: override或干预失败 → 置信度下降
+| 事件 | confidence 变化 |
+|------|----------------|
+| 干预成功（建议被采纳且执行成功） | +0.05 |
+| 用户显式确认有效 | +0.10 |
+| 同团队成员独立验证 | +0.10 |
+| 干预后仍失败 | −0.10 |
+| 用户 override | −0.15 |
+| 用户标记为错误 | 直接归档 (status=archived) |
+| 超过 90 天未被触发 | −0.05（被动衰减，配合 enforcement 降级） |
+| 依赖文件（package.json、tsconfig 等）变更且规则明确关联 | 标记为 `stale`，enforcement 暂降为 suggest，等待重新验证 |
 
 ### 冲突处理
 
@@ -542,11 +546,13 @@ score = confidence × 0.4 + hit_count归一化 × 0.3 + 时间衰减 × 0.2 + en
 
 初期简化版: 知识库<50条时全部放进去，超50行时启用优先级排序。
 
-**MCP实时查询时（从大知识库中检索相关条目）**:
+**实时查询时（从大知识库中检索相关条目）**:
 
-Stage 1 粗筛（毫秒级）: 查询关键词 → trigger字段匹配 → ~20条候选
-Stage 2 语义排序（百毫秒级）: 本地嵌入模型 → 语义相似度排序 → Top 5
+Stage 1 粗筛（毫秒级）: 查询关键词 → trigger / tags / wrong_pattern / correct_pattern 字段匹配 → ~20条候选
+Stage 2 相关性排序（毫秒级，Phase 1）: BM25 / TF-IDF 打分 + `enforcement` 权重 → Top 5
 Stage 3 上下文过滤（毫秒级）: scope.paths/file_types匹配 + confidence≥0.5 → 3-5条返回
+
+**Phase 2 增强**: Stage 2 引入本地嵌入模型（如 bge-small 级别，<100MB）做语义相似度排序，解决纯关键词匹配错过的同义表达。Phase 1 不引入嵌入依赖——Day 1 知识库规模（几十条）下关键词匹配已足够，引入本地模型的工程成本不划算。
 
 **知识库长期瘦身（1000+条时）**:
 
@@ -557,9 +563,7 @@ Stage 3 上下文过滤（毫秒级）: scope.paths/file_types匹配 + confidenc
 
 ### 闭环效果追踪
 
-- 每次干预生成 `intervention_id`
-- PostToolUse关联执行结果到 `intervention_id`
-- 干预成功 → confidence↑ | 干预失败 → confidence↓
+每次干预生成 `intervention_id`；PostToolUse 关联执行结果到该 id；由此触发"置信度校准"里定义的变化。详细规则见第三章"置信度校准"表。
 
 ### MCP Server 工具规格
 
@@ -591,12 +595,13 @@ AI编码工具在自主运行时（连续几十次工具调用无人介入），
 
 Session Monitor 是旁路进程，不在工具调用关键路径上。每次 PostToolUse 写入 `~/.teamagent/sessions/{session_id}.jsonl` 后，Monitor 扫描最近 N 步（默认 N=5）的轨迹，匹配以下偏离模式：
 
-| 模式 | 判定 | 示例 |
-|------|------|------|
-| **连续失败** | 同一工具连续调用失败 ≥ 3 次（`succeeded=false`） | `npm test` 连续3次退出码非零 |
-| **打转** | 相同 `(tool_name, input_hash)` 在最近 10 步内重复 ≥ 2 次 | 反复 Read 同一个文件改又改回去 |
-| **反模式命中** | 当前工具 input 命中一条 `scope.paths` 匹配的 avoidance 规则 | Write 到了规则禁止的路径 |
-| **目标漂移** | AI assistantText 主题与最初 userMessage 语义距离持续扩大 3 步以上 | 用户让改登录，AI 开始改无关模块 |
+| 模式 | Phase | 判定 | 示例 |
+|------|:-----:|------|------|
+| **连续失败** | 2 | 同一工具连续调用失败 ≥ 3 次（`succeeded=false`） | `npm test` 连续3次退出码非零 |
+| **打转** | 2 | 相同 `(tool_name, input_hash)` 在最近 10 步内重复 ≥ 2 次 | 反复 Read 同一个文件改又改回去 |
+| **反模式命中** | 2 | 当前工具 input 命中一条 `scope.paths` 匹配的 avoidance 规则 | Write 到了规则禁止的路径 |
+| **作用域突变** | 2 | 最近 N 步涉及的文件/模块集合与起始 3 步相比突变（无语义，用路径集合的 Jaccard 距离） | 用户让改登录，AI 开始改无关模块 |
+| **目标漂移** | 3+ | assistantText 主题与最初 userMessage 的语义距离持续扩大 3 步以上（需嵌入模型） | 同上，但基于语义而非路径 |
 
 任一模式触发 → 写入 `~/.teamagent/sessions/{session_id}_alerts.json`（一个JSON数组），下次 PreToolUse 会读取这个文件并把警告拼接进 Hook 返回的 `reason` 字段，AI 在下一个工具调用前就能看到。
 
@@ -632,10 +637,10 @@ teamagent/
 │   ├── mcp-server/            # MCP Server
 │   │   └── tools/             # check_pitfall / get_best_practice / ...
 │   │
-│   ├── hooks/                 # Hook脚本
-│   │   ├── pre-tool-use.sh
-│   │   ├── post-tool-use.sh
-│   │   └── session-monitor.sh
+│   ├── hooks/                 # Hook 脚本（Node.js，Claude Code 调用时一次性运行）
+│   │   ├── pre-tool-use.ts
+│   │   ├── post-tool-use.ts
+│   │   └── session-monitor.ts # Phase 2，旁路进程
 │   │
 │   ├── skills/                # Claude Code skill命令
 │   │   ├── pitfall.md
@@ -657,15 +662,16 @@ teamagent/
 
 执行后系统做的事：
 
-1. 扫描项目：读package.json/tsconfig/CLAUDE.md等 → 识别技术栈
+1. 扫描项目：读package.json/tsconfig/CLAUDE.md等 → 识别技术栈（仅作日志）
 2. 创建目录：`~/.teamagent/`（全局）和 `{project}/.teamagent/`（项目级）
-3. 加载预置元原则：复制 meta-principles.jsonl 到知识库（不区分技术栈——语法级知识不预置，等从用户使用中学习）
+3. 加载预置元原则：复制 meta-principles.jsonl 到知识库
 4. 导入已有规则：解析项目已有的CLAUDE.md/.cursorrules → 转为知识条目
-5. 注册MCP Server：写入 `.claude/settings.json` 的 mcpServers 配置
-6. 安装Hook：写入 `.claude/settings.json` 的 hooks 配置
-7. 安装Skill命令：复制skill文件到 `.claude/commands/`
-8. 更新CLAUDE.md：追加TeamAgent标记区块
-9. 更新.gitignore：确保 `~/.teamagent/personal/` 不被提交
+5. 安装Hook：写入 `.claude/settings.json` 的 hooks 配置
+6. 安装Skill命令：复制skill文件到 `.claude/commands/`
+7. 更新CLAUDE.md：追加TeamAgent标记区块
+8. 更新.gitignore：确保 `~/.teamagent/personal/` 不被提交
+
+**Phase 2 后**：init 额外执行"注册 MCP Server"（写入 `.claude/settings.json` 的 mcpServers 配置）、启动 Session Monitor 旁路进程等。Phase 1 的 init 不涉及 MCP——此时 MCP Server 组件尚不存在。
 
 安装后生成的文件：
 ```
@@ -718,10 +724,10 @@ npx teamagent uninstall
 |------|------|------|
 | 主语言 | TypeScript | Claude Code生态、MCP SDK原生支持 |
 | 知识存储 | JSONL文件 | 简单、可git追踪、与gstack格式兼容 |
-| 知识检索 | 本地嵌入向量 + 关键词混合 | 精准且轻量 |
+| 知识检索 | Phase 1: 关键词 + BM25；Phase 2: 叠加本地嵌入向量 | Phase 1 避免嵌入模型依赖；Phase 2 再引入语义能力 |
 | 会话分析 | Claude API | 用LLM分析LLM的会话 |
 | MCP Server | TypeScript + @modelcontextprotocol/sdk | Claude Code原生支持 |
-| Hook脚本 | Bash + Node.js | Claude Code hooks机制 |
+| Hook脚本 | Node.js（直接注册为 Claude Code hook 命令） | 纯 Node 避免 Windows 上 bash spawn node 的启动延迟 |
 | 知识编译 | 模板引擎(Handlebars) | 简单灵活 |
 | Session Monitor | Node.js后台进程 | 轻量、与主系统同语言 |
 | 团队同步 | git | 零基础设施 |
@@ -736,20 +742,20 @@ npx teamagent uninstall
 目标: 单个用户使用，AI不再犯同样的错误。Day 1即有价值。
 
 功能:
-1. 预置元原则知识包 — 仅含跨项目通用的工作流/元认知原则（4-8条），不做语法级预置
-2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，识别技术栈（仅用于日志和未来的互联网检索）
-2.5. 导入已有规则 — 解析项目已有的CLAUDE.md/.cursorrules转为知识条目（冷启动主要靠这里）
-3. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
-4. 纠正时刻识别器 — 多信号融合检测（负面信号）
-5. 成功模式捕获器 — 检测成功完成/表扬/重复使用（正面信号）
-6. 知识提取引擎 — 调用Claude API结构化提取经验（avoidance+practice）
-7. 本地知识库 — JSONL存储 + 关键词检索
-8. PreToolUse/PostToolUse Hook — 拦截已知错误 + 记录执行结果
-9. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新（见编译策略）
-10. /pitfall命令 — 用户主动记录踩坑
-11. /teamagent stats — 终端统计摘要
+1. 预置元原则知识包 — 跨项目通用的工作流/元认知原则，4 条（meta-principles.jsonl）
+2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，识别技术栈（仅用于日志，未来给互联网检索做信号）
+3. 导入已有规则 — 解析项目已有的CLAUDE.md/.cursorrules转为知识条目（冷启动的主要来源）
+4. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
+5. 纠正时刻识别器 — 多信号融合检测（负面信号）
+6. 成功模式捕获器 — 检测成功完成/表扬/重复使用（正面信号）
+7. 知识提取引擎 — 调用Claude API结构化提取经验（avoidance+practice）
+8. 本地知识库 — JSONL存储 + 关键词/BM25检索
+9. PreToolUse/PostToolUse Hook — 拦截已知错误 + 记录执行结果 + 本地检索注入相关知识
+10. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新（见编译策略）
+11. /pitfall命令 — 用户主动记录踩坑
+12. /teamagent stats — 终端统计摘要
 
-验证指标: 坑重现率下降; Day 1预置知识生效
+验证指标: 坑重现率下降; 闭环场景（踩坑→学习→避坑）跑通
 
 ### Phase 2: 实时防护
 
@@ -823,11 +829,13 @@ npx teamagent uninstall
 - 20个"有坑的任务"，对照组(无TeamAgent) vs 实验组(有TeamAgent)
 - 度量: 踩坑总数、对话轮数、工具调用次数、任务成功率
 
-**纵向成长测试:**
-- 模拟30天使用，绘制AI成长曲线(PRR/FTRR/CD随时间变化)
+**纵向成长测试（脚本化模拟）:**
+- 构造 30 天的交互脚本（每天若干任务，按 V1/V2 测试集展开），用自动化 runner 回放，绘制 PRR/FTRR/CD 曲线
+- 目的：验证系统在持续使用下的行为是否符合预期（不替代真实用户）
 
 **真实用户验证:**
-- 3-5个开发者使用1-2周，收集系统指标+主观评分+NPS
+- 3-5 个开发者用 1-2 周的真实开发任务验证，收集系统指标 + 主观评分 + NPS
+- 目的：暴露脚本模拟覆盖不到的真实交互复杂度
 
 ### 测试集
 
