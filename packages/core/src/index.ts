@@ -26,6 +26,7 @@ export {
   type FilePresence,
   type StackFingerprint,
 } from "./detect-stack/index.js";
+export { getMetaPrinciples } from "./init/meta-principles.js";
 export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,

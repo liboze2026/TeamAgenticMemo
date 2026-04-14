@@ -10,6 +10,11 @@ import { executeDemoHook, parseDemoHookArgs } from "./commands/demo-hook.js";
 import { installHook, uninstallHook } from "./commands/install-hook.js";
 import { executeAnalyze, parseAnalyzeArgs } from "./commands/analyze.js";
 import { executeReview, parseReviewArgs } from "./commands/review.js";
+import {
+  executeInit,
+  parseInitArgs,
+  renderInitResult,
+} from "./commands/init.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -84,6 +89,13 @@ async function main(): Promise<void> {
       process.stdout.write(executeReview(opts));
       return;
     }
+    case "init": {
+      const opts = parseInitArgs(rest);
+      const result = await executeInit(opts);
+      process.stdout.write(renderInitResult(result));
+      if (!result.ok) process.exit(1);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -107,6 +119,8 @@ async function main(): Promise<void> {
           "                                   --commit: 通过 LLM 提取成知识条目并写入知识库 + 重编译 CLAUDE.md",
           "  teamagent review [N] [--scope=personal|team|global]",
           "                                   列出最近 N 条知识（默认 10），供人工复核",
+          "  teamagent init [--dry-run] [--skip-import] [--skip-hook]",
+          "                                   一键安装到当前项目：建目录 + 注入元原则 + 导入已有规则 + 注册 Hook + 编译 CLAUDE.md",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",

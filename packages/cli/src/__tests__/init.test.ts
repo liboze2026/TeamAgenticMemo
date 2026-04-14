@@ -1,0 +1,283 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import nodeFs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { executeInit, parseInitArgs, renderInitResult } from "../commands/init.js";
+import type { LLMClient } from "@teamagent/ports";
+
+function mkTmp() {
+  const root = nodeFs.mkdtempSync(path.join(os.tmpdir(), "init-"));
+  const cwd = path.join(root, "project");
+  const home = path.join(root, "home");
+  nodeFs.mkdirSync(cwd, { recursive: true });
+  nodeFs.mkdirSync(home, { recursive: true });
+  return {
+    root,
+    cwd,
+    home,
+    cleanup: () => nodeFs.rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+const OK_LLM_RESPONSE = JSON.stringify({
+  category: "E",
+  tags: ["imported"],
+  type: "practice",
+  nature: "subjective",
+  trigger: "imported trigger",
+  wrong_pattern: "",
+  correct_pattern: "imported correct",
+  reasoning: "imported reason",
+});
+
+const stubLLM = (r: string): LLMClient => ({ complete: async () => r });
+
+describe("executeInit", () => {
+  let tmp: ReturnType<typeof mkTmp>;
+  let ctr = 0;
+  beforeEach(() => {
+    tmp = mkTmp();
+    ctr = 0;
+  });
+  afterEach(() => tmp.cleanup());
+
+  const commonOpts = () => ({
+    cwd: tmp.cwd,
+    homeDir: tmp.home,
+    skipHook: true,
+    idGen: () => `pers-test-${++ctr}`,
+    now: () => new Date("2026-04-14T12:00:00Z"),
+  });
+
+  it("dry-run: no files written, plans are reported", async () => {
+    // Seed a CLAUDE.md so scan has something to report
+    nodeFs.writeFileSync(
+      path.join(tmp.cwd, "CLAUDE.md"),
+      "# Rules\n- existing rule one\n- existing rule two\n",
+    );
+
+    const r = await executeInit({
+      ...commonOpts(),
+      dryRun: true,
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.dryRun).toBe(true);
+    // No knowledge files created
+    expect(
+      nodeFs.existsSync(path.join(tmp.home, ".teamagent", "global", "knowledge.jsonl")),
+    ).toBe(false);
+    expect(
+      nodeFs.existsSync(path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl")),
+    ).toBe(false);
+    // CLAUDE.md untouched (no TEAMAGENT block added)
+    const md = nodeFs.readFileSync(path.join(tmp.cwd, "CLAUDE.md"), "utf-8");
+    expect(md).not.toContain("TEAMAGENT:START");
+  });
+
+  it("happy path: preset + import + compile all succeed", async () => {
+    nodeFs.writeFileSync(
+      path.join(tmp.cwd, "CLAUDE.md"),
+      "# Team rules\n- Prefer fetch over axios\n- Use pnpm\n",
+    );
+
+    const r = await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+
+    expect(r.ok).toBe(true);
+    // 4 presets written to global
+    const globalLines = nodeFs
+      .readFileSync(
+        path.join(tmp.home, ".teamagent", "global", "knowledge.jsonl"),
+        "utf-8",
+      )
+      .trim()
+      .split("\n");
+    expect(globalLines).toHaveLength(4);
+
+    // 2 imported rules in personal (both CLAUDE.md bullets)
+    const personalLines = nodeFs
+      .readFileSync(
+        path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl"),
+        "utf-8",
+      )
+      .trim()
+      .split("\n");
+    expect(personalLines).toHaveLength(2);
+
+    // CLAUDE.md has TEAMAGENT block (6 = 4 preset + 2 imported)
+    const md = nodeFs.readFileSync(path.join(tmp.cwd, "CLAUDE.md"), "utf-8");
+    expect(md).toContain("TEAMAGENT:START");
+    expect(md).toContain("TEAMAGENT:END");
+
+    expect(r.summary.presetAdded).toBe(4);
+    expect(r.summary.importedRules).toBe(2);
+    expect(r.summary.totalActiveEntries).toBeGreaterThanOrEqual(6);
+  });
+
+  it("idempotent: running init twice doesn't duplicate presets", async () => {
+    await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    const r2 = await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    expect(r2.ok).toBe(true);
+    // Second run should add 0 new presets (all 4 already present)
+    expect(r2.summary.presetAdded).toBe(0);
+    const globalLines = nodeFs
+      .readFileSync(
+        path.join(tmp.home, ".teamagent", "global", "knowledge.jsonl"),
+        "utf-8",
+      )
+      .trim()
+      .split("\n");
+    expect(globalLines).toHaveLength(4); // still 4
+  });
+
+  it("no CLAUDE.md + no .cursorrules → import step reports '无规则可导入'", async () => {
+    const r = await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    const structureStep = r.steps.find((s) => s.step === "structure-rules")!;
+    expect(structureStep.status).toBe("ok");
+    expect(structureStep.detail).toContain("无规则");
+    expect(r.summary.importedRules).toBe(0);
+  });
+
+  it("reads .cursorrules and imports from it", async () => {
+    nodeFs.writeFileSync(
+      path.join(tmp.cwd, ".cursorrules"),
+      "- cursor rule one\n- cursor rule two\n- cursor rule three\n",
+    );
+    const r = await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    expect(r.summary.importedRules).toBe(3);
+  });
+
+  it("--skip-import skips LLM structure step but still loads presets", async () => {
+    nodeFs.writeFileSync(path.join(tmp.cwd, "CLAUDE.md"), "- one\n- two\n");
+    const r = await executeInit({
+      ...commonOpts(),
+      skipImport: true,
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.summary.presetAdded).toBe(4);
+    expect(r.summary.importedRules).toBe(0);
+    const structureStep = r.steps.find((s) => s.step === "structure-rules")!;
+    expect(structureStep.detail).toContain("skipImport");
+  });
+
+  it("LLM returning null for all rules → 0 imported, no failure", async () => {
+    nodeFs.writeFileSync(path.join(tmp.cwd, "CLAUDE.md"), "- a\n- b\n");
+    const r = await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM("null"),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.summary.importedRules).toBe(0);
+  });
+
+  it("per-rule LLM error does not abort init", async () => {
+    nodeFs.writeFileSync(path.join(tmp.cwd, "CLAUDE.md"), "- a\n- b\n");
+    let calls = 0;
+    const flakyLLM: LLMClient = {
+      complete: async () => {
+        calls++;
+        if (calls === 1) throw new Error("rate limited");
+        return OK_LLM_RESPONSE;
+      },
+    };
+    const r = await executeInit({ ...commonOpts(), llmClient: flakyLLM });
+    expect(r.ok).toBe(true);
+    expect(r.summary.importedRules).toBe(1);
+  });
+
+  it("detect-stack reports typescript + react", async () => {
+    nodeFs.writeFileSync(
+      path.join(tmp.cwd, "package.json"),
+      JSON.stringify({ dependencies: { react: "^18" } }),
+    );
+    nodeFs.writeFileSync(path.join(tmp.cwd, "tsconfig.json"), "{}");
+    nodeFs.writeFileSync(path.join(tmp.cwd, "pnpm-lock.yaml"), "");
+    const r = await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    const stackStep = r.steps.find((s) => s.step === "detect-stack")!;
+    expect(stackStep.detail).toContain("typescript");
+    expect(stackStep.detail).toContain("react");
+    expect(stackStep.detail).toContain("pnpm");
+  });
+
+  it("writes install-log on successful run", async () => {
+    await executeInit({
+      ...commonOpts(),
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    const logPath = path.join(tmp.home, ".teamagent", ".install-log");
+    expect(nodeFs.existsSync(logPath)).toBe(true);
+    const content = nodeFs.readFileSync(logPath, "utf-8").trim();
+    expect(content).toContain("pre-check");
+    expect(content).toContain("compile-claude-md");
+  });
+});
+
+describe("parseInitArgs", () => {
+  it("empty → {}", () => {
+    expect(parseInitArgs([])).toEqual({});
+  });
+  it("--dry-run", () => {
+    expect(parseInitArgs(["--dry-run"])).toEqual({ dryRun: true });
+  });
+  it("--skip-import + --skip-hook combined", () => {
+    expect(parseInitArgs(["--skip-import", "--skip-hook"])).toEqual({
+      skipImport: true,
+      skipHook: true,
+    });
+  });
+});
+
+describe("renderInitResult", () => {
+  it("success → includes step list + summary", () => {
+    const out = renderInitResult({
+      ok: true,
+      dryRun: false,
+      steps: [
+        { step: "pre-check", status: "ok", detail: "ok" },
+        { step: "detect-stack", status: "ok", detail: "lang=typescript" },
+      ],
+      summary: {
+        stack: "lang=typescript",
+        presetAdded: 4,
+        importedRules: 2,
+        totalActiveEntries: 6,
+      },
+    });
+    expect(out).toContain("TeamAgent Init");
+    expect(out).toContain("pre-check");
+    expect(out).toContain("+4 元原则");
+    expect(out).toContain("+2 导入");
+    expect(out).toContain("活跃条目: 6");
+  });
+
+  it("failure → shows warning footer", () => {
+    const out = renderInitResult({
+      ok: false,
+      dryRun: false,
+      steps: [{ step: "pre-check", status: "failed", detail: "bad permissions" }],
+      summary: { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 },
+    });
+    expect(out).toContain("未完全成功");
+    expect(out).toContain("failed");
+  });
+});
