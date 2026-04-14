@@ -1,14 +1,12 @@
 import fsPromises from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
-import type {
-  ParsedSession,
-  RawAssistantContentBlock,
-  RawSessionMessage,
-  SessionTurn,
-  ToolCall,
-} from "@teamagent/types";
+import { parseSessionFile } from "@teamagent/core";
+import type { ParsedSession } from "@teamagent/types";
 import type { SessionSource } from "@teamagent/ports";
+
+// Re-export 纯函数以保持向后兼容（测试已 import 这个名字）
+export { parseSessionFile };
 
 /**
  * 从 ~/.claude/projects/{project-dir}/*.jsonl 加载 Claude Code 会话日志。
@@ -100,92 +98,4 @@ export class ClaudeSessionSource implements SessionSource {
   }
 }
 
-/**
- * 纯函数版：给定 jsonl 文件内容，返回 ParsedSession。
- * 导出以便测试/其他 adapter 复用（无 IO）。
- */
-export function parseSessionFile(raw: string): ParsedSession {
-  const messages: RawSessionMessage[] = [];
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      messages.push(JSON.parse(trimmed) as RawSessionMessage);
-    } catch {
-      continue;
-    }
-  }
-
-  // 累积 tool_result 便于 turn 回填 succeeded 状态
-  const toolResults = new Map<string, { content: string; succeeded: boolean }>();
-  for (const m of messages) {
-    if (m.type !== "assistant" || !m.message) continue;
-    const blocks = (m.message as { content?: unknown }).content;
-    if (!Array.isArray(blocks)) continue;
-    for (const b of blocks as RawAssistantContentBlock[]) {
-      if (b.type === "tool_result") {
-        const c = String(b.content ?? "");
-        toolResults.set(b.tool_use_id, {
-          content: c,
-          // 简易启发：stderr/失败关键词在结果里 → succeeded=false
-          succeeded: !/\b(error|err!|failed|not found|exit code [1-9])/i.test(c),
-        });
-      }
-    }
-  }
-
-  const turns: SessionTurn[] = [];
-  let currentTurn: SessionTurn | null = null;
-  let sessionId = "unknown";
-
-  for (const m of messages) {
-    if (m.sessionId) sessionId = m.sessionId;
-
-    if (m.type === "user" && m.message) {
-      // 开新 turn
-      if (currentTurn) turns.push(currentTurn);
-      const userText =
-        typeof (m.message as { content?: unknown }).content === "string"
-          ? String((m.message as { content: string }).content)
-          : "";
-      currentTurn = {
-        turnIndex: turns.length,
-        userMessage: userText,
-        assistantText: "",
-        toolCalls: [],
-        timestamp: m.timestamp ?? "",
-      };
-    } else if (m.type === "assistant" && m.message) {
-      if (!currentTurn) continue; // 没 user 就来的 assistant 消息跳过
-      const blocks = (m.message as { content?: unknown }).content;
-      if (!Array.isArray(blocks)) continue;
-      for (const b of blocks as RawAssistantContentBlock[]) {
-        if (b.type === "text") {
-          if (currentTurn.assistantText) currentTurn.assistantText += "\n";
-          currentTurn.assistantText += b.text;
-        } else if (b.type === "tool_use") {
-          const tc: ToolCall = {
-            id: b.id,
-            name: b.name,
-            input: b.input,
-          };
-          const tr = toolResults.get(b.id);
-          if (tr) {
-            tc.result = tr.content;
-            tc.succeeded = tr.succeeded;
-          }
-          currentTurn.toolCalls.push(tc);
-        }
-        // tool_result 在 toolResults map 里已处理，此处跳过
-      }
-    }
-  }
-  if (currentTurn) turns.push(currentTurn);
-
-  return {
-    sessionId,
-    turns,
-    startTime: turns[0]?.timestamp ?? "",
-    endTime: turns[turns.length - 1]?.timestamp ?? "",
-  };
-}
+// parseSessionFile 现在从 @teamagent/core 导入（见文件顶部 re-export）
