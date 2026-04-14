@@ -9,6 +9,7 @@ import { executeStats } from "./commands/stats.js";
 import { executeDemoHook, parseDemoHookArgs } from "./commands/demo-hook.js";
 import { installHook, uninstallHook } from "./commands/install-hook.js";
 import { executeAnalyze, parseAnalyzeArgs } from "./commands/analyze.js";
+import { executeReview, parseReviewArgs } from "./commands/review.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -78,6 +79,11 @@ async function main(): Promise<void> {
       process.stdout.write(output);
       return;
     }
+    case "review": {
+      const opts = parseReviewArgs(rest);
+      process.stdout.write(executeReview(opts));
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -96,8 +102,11 @@ async function main(): Promise<void> {
           "                                   离线模拟 PreToolUse hook (例: teamagent demo hook Bash 'command=npm install moment')",
           "  teamagent install-hook           把 PreToolUse hook 注册到当前项目 .claude/settings.local.json",
           "  teamagent uninstall-hook         移除 PreToolUse hook 注册",
-          "  teamagent analyze [--session=<id|path>] [--verbose]",
-          "                                   分析 Claude Code 会话日志，识别纠正时刻+成功信号（dry-run，不写入）",
+          "  teamagent analyze [--session=<id|path>] [--verbose] [--commit]",
+          "                                   分析 Claude Code 会话日志，识别纠正时刻+成功信号",
+          "                                   --commit: 通过 LLM 提取成知识条目并写入知识库 + 重编译 CLAUDE.md",
+          "  teamagent review [N] [--scope=personal|team|global]",
+          "                                   列出最近 N 条知识（默认 10），供人工复核",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",
