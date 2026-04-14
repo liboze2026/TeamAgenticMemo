@@ -76,11 +76,21 @@ function stringField(input: Record<string, unknown>, key: string): string | unde
   return typeof v === "string" ? v : undefined;
 }
 
+/** 切分时丢弃的最小 token 长度。<3 字符的 token（"a"/"to"）会匹配万物，必须排除。 */
+const MIN_TOKEN_LENGTH = 3;
+
 function splitPatterns(raw: string): string[] {
-  return raw
-    .split(/[|/]/)
+  // 只用 `|` 作为多模式分隔。
+  // 早期设计也用 `/`，但 `/` 在 unix 路径里太常见，会把 `import a/b/c` 错切成
+  // `a`/`b`/`c` 这种短 token，导致规则乱命中。
+  // 同样，<3 字符的 token 也会乱命中（"b" 命中 bar.ts、baz.ts、big.zip 等所有含 b 的字符串）。
+  // 0 号用户实际使用时踩到这两个坑。
+  const tokens = raw
+    .split("|")
     .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+    .filter((s) => s.length >= MIN_TOKEN_LENGTH);
+  // 如果切分后没有合格 token，回退为整体匹配（不切分）
+  return tokens.length > 0 ? tokens : [raw.trim()];
 }
 
 /** 检查 scope.file_types / paths 限制（如果 rule 设置了的话）*/

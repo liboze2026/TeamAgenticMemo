@@ -6,5 +6,20 @@
       "Bash(cp /c/bzli/teamagent/packages/skills/teamagent-stats.md ~/.claude/skills/teamagent-stats/SKILL.md)",
       "Read(//c/Users/tianhaoxuan/.claude/skills/**)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|WebFetch",
+        "_teamagentTag": "teamagent-pre-tool-use",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx C:\\bzli\\teamagent\\packages\\cli\\src\\bin-pre-tool-use.ts",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }

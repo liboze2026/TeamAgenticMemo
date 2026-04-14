@@ -161,10 +161,70 @@ describe("matchRules — multi-pattern OR semantics", () => {
     ).toEqual([]);
   });
 
-  it("multiple patterns separated by / also match any (legacy)", () => {
-    const rule = makeRule({ wrong_pattern: "moment/lodash" });
+  it("tokens shorter than 3 chars are dropped (would otherwise match everything)", () => {
+    // wrong_pattern 含 "如 a|b|c" 这种散文 → 切出 1 字符 token a/b/c
+    // 这些不应该参与匹配，否则任何含 'a' 的代码都被命中
+    const rule = makeRule({
+      wrong_pattern: "wget|a|b|curl",
+    });
+    // 含 "b" 的内容不应命中（b 是被丢弃的短 token）
     expect(
-      matchRules({ toolName: "Bash", input: { command: "use lodash" } }, [rule]),
+      matchRules(
+        { toolName: "Bash", input: { command: "echo b just b" } },
+        [rule],
+      ),
+    ).toEqual([]);
+    // 长 token "wget" 命中
+    expect(
+      matchRules(
+        { toolName: "Bash", input: { command: "wget url" } },
+        [rule],
+      ),
+    ).toHaveLength(1);
+    // 长 token "curl" 命中
+    expect(
+      matchRules(
+        { toolName: "Bash", input: { command: "curl url" } },
+        [rule],
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("if no token survives min-length filter, fallback to whole pattern", () => {
+    // wrong_pattern 全是短 token → 不切分，整体匹配
+    const rule = makeRule({ wrong_pattern: "a|b|c" });
+    expect(
+      matchRules({ toolName: "Bash", input: { command: "a|b|c here" } }, [rule]),
+    ).toHaveLength(1);
+    expect(
+      matchRules({ toolName: "Bash", input: { command: "just a here" } }, [rule]),
+    ).toEqual([]);
+  });
+
+  it("'/' is NOT a separator (it appears in unix paths and breaks rules)", () => {
+    // wrong_pattern 含 / 应被当成单个字面 token，而不是切成 'a','b','c'
+    const rule = makeRule({
+      wrong_pattern: 'import ... from "@teamagent/ports/src/__tests__/foo.js"',
+    });
+    // 不包含完整 wrong_pattern → 不命中
+    expect(
+      matchRules(
+        {
+          toolName: "Write",
+          input: { file_path: "src/whatever.ts", content: "export const x = 1" },
+        },
+        [rule],
+      ),
+    ).toEqual([]);
+    // 完整出现 → 命中
+    expect(
+      matchRules(
+        {
+          toolName: "Write",
+          input: { file_path: "x.ts", content: 'import ... from "@teamagent/ports/src/__tests__/foo.js"' },
+        },
+        [rule],
+      ),
     ).toHaveLength(1);
   });
 });

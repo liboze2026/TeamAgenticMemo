@@ -41,10 +41,13 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（5条活跃知识）
+## TeamAgent 经验（8条活跃知识）
 - 使用 通过目标包 package.json 的 exports 字段暴露 subpath（例如 "./contracts"）再 import 而非 import ... from "@teamagent/ports/src/__tests__/xxx.js"——workspace 包的 exports 字段是 API 边界，pnpm/vite 不会解析未暴露的深路径；深路径 import 会在安装后构建阶段失败 [0.70]
 - 使用 passive 在打分公式里仍有 0.1 权重，所以 passive 条目 score 最低为 0.01（0.1 × 0.1） 而非 期望 passive 条目 score=0——spec v5.2 评分公式: confidence×0.4 + hit×0.3 + recency×0.2 + enforcement×0.1；passive 不是 0 分，只是最小分 [0.70]
 - 使用 先检查下载目录（~/Downloads、./data、./models、./vendor、node_modules 等可能的位置）是否已有目标内容；已有就复用，避免重复下载 而非 直接执行下载命令（git clone / wget / curl / pip download / huggingface-cli download 等）而不检查——重复下载浪费时间和带宽（尤其大模型权重几十 GB），可能覆盖正在使用的旧副本，甚至因网络问题下到损坏文件；先检查是一次极低成本的稳妥动作 [0.70]
+- 使用 只用 | 作为分隔符。/ 在 unix 路径里太常见，会把含路径的 wrong_pattern 错切成超短 token，导致规则乱命中无关代码 而非 把 / 作为多模式分隔符之一（如 a|b|c 或 a/b/c 都视为多个候选）——0 号用户用 wget|curl|git clone|... 这种带 / 的合法字符串作为 wrong_pattern，被切成 src/__tests__/foo.js 这种短 token 后，每条含 src/ 的代码都被错误匹配 [0.70]
+- 使用 把 IO 移到 adapter 层；core 必须保持纯函数。需要 IO 时通过依赖注入传入 而非 import fs——Functional Core Imperative Shell 是本项目的核心架构原则（CLAUDE.md 元约束）；core 含 IO 会破坏可测性和复用性 [0.70]
+- 使用 通过 AttributionBus 发结构化事件；要 trace 用 process.stderr 或独立 logger 而非 console.log——Hook 进程的 stdout 是协议通道（返回 JSON 给 Claude Code），任何 console.log 都会污染协议导致解析失败 [0.70]
 - 使用 vitest.config.ts 设置 pool:'threads' + poolOptions.threads.singleThread:true + fileParallelism:false 强制顺序跑 而非 使用默认的 thread pool 并发执行多个 test file——Windows + pnpm workspace + esbuild 组合下 vitest 多 worker 并发会出现 'Worker exited unexpectedly' / 'Out of memory' / 'memory allocation failed' 错误；singleThread 顺序跑可避免 [0.70]
 - 使用 CLI E2E 测试脱离 vitest runner——用独立 shell 脚本跑，或等有长驻进程后在外层测；或改为函数级单元测试覆盖 bin 的分发逻辑 而非 vitest worker 内用 spawnSync('npx tsx', ...) 嵌套执行 CLI bin 文件做 E2E 测试——vitest worker 里再 fork tsx 加载 ESM loader 会放大内存占用，在 Windows 低内存环境下直接 OOM；vitest 不是做进程级 E2E 的合适场所 [0.70]
 <!-- TEAMAGENT:END -->
