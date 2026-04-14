@@ -1,6 +1,6 @@
 # TeamAgent — 团队AI自进化引擎 设计文档
 
-> 版本: 4.1 | 日期: 2026-04-13 | 状态: 设计完成，待实施
+> 版本: 4.2 | 日期: 2026-04-14 | 状态: 设计完成，待实施
 
 ---
 
@@ -684,11 +684,8 @@ teamagent/
 │   └── portal/                # Knowledge Portal
 │       └── index.html
 │
-├── knowledge-packs/           # 预置知识包
-│   ├── react-nextjs.jsonl
-│   ├── python-fastapi.jsonl
-│   ├── typescript.jsonl
-│   └── ...
+├── knowledge-packs/           # 预置知识包（仅元原则，不做语法级预置）
+│   └── meta-principles.jsonl  # 跨项目通用的工作流/元认知原则
 │
 └── cli/                       # 安装/初始化CLI
     └── init.ts
@@ -700,7 +697,7 @@ teamagent/
 
 1. 扫描项目：读package.json/tsconfig/CLAUDE.md等 → 识别技术栈
 2. 创建目录：`~/.teamagent/`（全局）和 `{project}/.teamagent/`（项目级）
-3. 激活知识包：按识别的技术栈复制对应JSONL到知识库
+3. 加载预置元原则：复制 meta-principles.jsonl 到知识库（不区分技术栈——语法级知识不预置，等从用户使用中学习）
 4. 导入已有规则：解析项目已有的CLAUDE.md/.cursorrules → 转为知识条目
 5. 注册MCP Server：写入 `.claude/settings.json` 的 mcpServers 配置
 6. 安装Hook：写入 `.claude/settings.json` 的 hooks 配置
@@ -775,8 +772,9 @@ npx teamagent uninstall
 目标: 单个用户使用，AI不再犯同样的错误。Day 1即有价值。
 
 功能:
-1. 预置知识包 — 按技术栈预构建的经验库，随安装分发（解决冷启动）
-2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，自动激活对应知识
+1. 预置元原则知识包 — 仅含跨项目通用的工作流/元认知原则（4-8条），不做语法级预置
+2. 项目环境推断 — 扫描package.json/CLAUDE.md/配置文件，识别技术栈（仅用于日志和未来的互联网检索）
+2.5. 导入已有规则 — 解析项目已有的CLAUDE.md/.cursorrules转为知识条目（冷启动主要靠这里）
 3. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
 4. 纠正时刻识别器 — 多信号融合检测（负面信号）
 5. 成功模式捕获器 — 检测成功完成/表扬/重复使用（正面信号）
@@ -885,9 +883,9 @@ npx teamagent uninstall
 问题: 知识库需要时间积累，但用户在第一天就评估工具。
 
 缓解（Phase 1前置条件）:
-1. 预置知识包: 按技术栈预构建50+条经验，随系统安装分发
-2. 项目环境自动推断: 扫描package.json/CLAUDE.md等，自动激活对应知识并导入已有规则
-3. 首次会话即有感知: 明确告知用户加载了多少条经验
+1. 预置元原则: 4-8条跨项目通用的工作流/元认知原则（故意不按技术栈预置语法级知识——那些AI已经知道，且覆盖率极低）
+2. 导入已有规则: 扫描项目CLAUDE.md/.cursorrules，把团队已有约定转为结构化知识（这是冷启动的主要来源）
+3. 首次会话即有感知: 明确告知用户加载了多少条知识，哪些来自已有规则
 
 **风险2：只学负面不学正面**
 

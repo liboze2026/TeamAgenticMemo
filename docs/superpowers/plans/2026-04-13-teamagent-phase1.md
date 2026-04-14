@@ -2926,17 +2926,6 @@ describe("detectStack", () => {
     expect(stack.frameworks).toContain("fastapi");
   });
 
-  it("returns matching knowledge pack names", () => {
-    fs.writeFileSync(path.join(projectDir, "tsconfig.json"), "{}");
-    fs.writeFileSync(
-      path.join(projectDir, "package.json"),
-      JSON.stringify({ dependencies: { react: "^18.0.0" } })
-    );
-    const stack = detectStack(projectDir);
-    expect(stack.knowledgePacks).toContain("typescript");
-    expect(stack.knowledgePacks).toContain("react-nextjs");
-  });
-
   it("returns empty for unknown project", () => {
     const stack = detectStack(projectDir);
     expect(stack.languages).toHaveLength(0);
@@ -2960,10 +2949,14 @@ Expected: FAIL
 import fs from "node:fs";
 import path from "node:path";
 
+/**
+ * 检测结果仅用于日志/标记（让用户知道识别到什么）。
+ * 不再用于选择预置知识包——我们只预装通用的 meta-principles。
+ * 未来Phase 4从互联网索引知识时，可以把这个结果作为检索信号。
+ */
 export interface DetectedStack {
   languages: string[];
   frameworks: string[];
-  knowledgePacks: string[];
 }
 
 interface PackageJson {
@@ -2974,7 +2967,6 @@ interface PackageJson {
 export function detectStack(projectDir: string): DetectedStack {
   const languages: Set<string> = new Set();
   const frameworks: Set<string> = new Set();
-  const packs: Set<string> = new Set();
 
   // TypeScript
   if (
@@ -2982,7 +2974,6 @@ export function detectStack(projectDir: string): DetectedStack {
     fs.existsSync(path.join(projectDir, "tsconfig.base.json"))
   ) {
     languages.add("typescript");
-    packs.add("typescript");
   }
 
   // package.json analysis
@@ -2997,23 +2988,14 @@ export function detectStack(projectDir: string): DetectedStack {
         ...pkg.devDependencies,
       };
 
-      if (allDeps.react) {
-        frameworks.add("react");
-        packs.add("react-nextjs");
-      }
-      if (allDeps.next) {
-        frameworks.add("nextjs");
-        packs.add("react-nextjs");
-      }
-      if (allDeps.vue) {
-        frameworks.add("vue");
-      }
+      if (allDeps.react) frameworks.add("react");
+      if (allDeps.next) frameworks.add("nextjs");
+      if (allDeps.vue) frameworks.add("vue");
       if (allDeps.express || allDeps.fastify || allDeps.koa) {
         frameworks.add("node-backend");
       }
       if (!languages.has("typescript") && allDeps.typescript) {
         languages.add("typescript");
-        packs.add("typescript");
       }
     } catch {
       // Malformed package.json — skip
@@ -3031,20 +3013,14 @@ export function detectStack(projectDir: string): DetectedStack {
     const reqPath = path.join(projectDir, "requirements.txt");
     if (fs.existsSync(reqPath)) {
       const reqs = fs.readFileSync(reqPath, "utf-8").toLowerCase();
-      if (reqs.includes("fastapi")) {
-        frameworks.add("fastapi");
-        packs.add("python-fastapi");
-      }
-      if (reqs.includes("django")) {
-        frameworks.add("django");
-      }
+      if (reqs.includes("fastapi")) frameworks.add("fastapi");
+      if (reqs.includes("django")) frameworks.add("django");
     }
   }
 
   return {
     languages: Array.from(languages),
     frameworks: Array.from(frameworks),
-    knowledgePacks: Array.from(packs),
   };
 }
 ```
@@ -3208,21 +3184,19 @@ export function runInit(options: InitOptions): InitResult {
     "utf-8"
   );
 
-  // 5. Load knowledge packs
+  // 5. Load meta-principles knowledge pack (unconditional — not stack-specific)
   let knowledgeCount = 0;
   const personalKnowledgePath = path.join(personalDir, "knowledge.jsonl");
   const store = new KnowledgeStore(personalKnowledgePath);
 
-  if (knowledgePacksDir && fs.existsSync(knowledgePacksDir)) {
-    for (const packName of stack.knowledgePacks) {
-      const packFile = path.join(knowledgePacksDir, `${packName}.jsonl`);
-      if (fs.existsSync(packFile)) {
-        const packStore = new KnowledgeStore(packFile);
-        for (const entry of packStore.getAll()) {
-          if (!store.getById(entry.id)) {
-            store.add(entry);
-            knowledgeCount++;
-          }
+  if (knowledgePacksDir) {
+    const metaPackFile = path.join(knowledgePacksDir, "meta-principles.jsonl");
+    if (fs.existsSync(metaPackFile)) {
+      const packStore = new KnowledgeStore(metaPackFile);
+      for (const entry of packStore.getAll()) {
+        if (!store.getById(entry.id)) {
+          store.add(entry);
+          knowledgeCount++;
         }
       }
     }
@@ -3280,10 +3254,13 @@ export function runInit(options: InitOptions): InitResult {
     detectedStack: stack,
     knowledgeCount,
     message: `✅ TeamAgent 初始化完成！
-检测到技术栈: ${[...stack.languages, ...stack.frameworks].join(", ") || "未识别"}
-加载知识包: ${knowledgeCount}条
+检测到技术栈: ${[...stack.languages, ...stack.frameworks].join(", ") || "未识别"}（仅用于日志，不影响知识加载）
+加载元原则: ${knowledgeCount}条
 Hook已注册: PreToolUse + PostToolUse
-CLAUDE.md已更新`,
+CLAUDE.md已更新
+
+💡 TeamAgent 的核心知识来自你的实际使用——每次你纠正AI，系统就会学到新东西。
+   要手动添加经验，使用 /pitfall`,
   };
 }
 ```
@@ -3431,126 +3408,65 @@ git commit -m "feat(skills): add /pitfall and /teamagent-stats skill commands
 
 ---
 
-## Task 13: 预置知识包
+## Task 13: 预置元原则知识包
 
 **Files:**
-- Create: `knowledge-packs/typescript.jsonl`
-- Create: `knowledge-packs/react-nextjs.jsonl`
-- Create: `knowledge-packs/python-fastapi.jsonl`
+- Create: `knowledge-packs/meta-principles.jsonl`
 
-每个知识包包含20-30条高质量的常见坑+最佳实践，解决冷启动问题。
-下面列出每包的前5条作为格式示范，实现时每包扩充到20-30条（见Step 4的扩充指南）。
+### 设计思路（重要，与早期草案不同）
 
-- [ ] **Step 1: 编写 TypeScript 知识包（前5条示范）**
+早期草案为每个技术栈（TS/React/Python等）预置20-30条语法级知识（如 `python→python3`、`stripe.charges→paymentIntents`）。我们**明确放弃**这个方向，原因：
 
-`knowledge-packs/typescript.jsonl`:
+1. **覆盖率低**：99%的项目不用Stripe，就算用也早就知道API更新
+2. **AI已经懂了**：这些都在Claude训练数据里，属于"公知"
+3. **容易过时**：API变化快
+4. **价值错位**：TeamAgent的真正价值是"团队私有"的知识（我们团队的约定、我们项目的坑），不是预置语法细节
+
+**真正的冷启动策略**：
+- **预置**：仅4条跨项目通用的**元原则**（K/S类：认知层/策略层）
+- **导入**：Task 17 从用户已有的 CLAUDE.md / .cursorrules 抓取团队规则
+- **积累**：Task 15 从用户实际使用中持续学习（这才是核心价值来源）
+
+预置不是为了覆盖面，而是作为"系统能正常运作"的最小示范。
+
+- [ ] **Step 1: 编写 meta-principles.jsonl**
+
+共4条元原则，全部为 `category: "S"` 或 `"K"`（策略层/认知层），`nature: "subjective"`（软约定），`enforcement: "suggest"`（仅作为提醒，不强制）。这些知识的目的是让 AI 在做事前"想一想该怎么做"，而不是拦截具体错误。
+
+`knowledge-packs/meta-principles.jsonl`:
 ```jsonl
-{"id":"pack-ts-001","scope":{"level":"global"},"category":"C","tags":["type-error","strict-null"],"type":"avoidance","nature":"objective","trigger":"访问可能为null/undefined的属性","wrong_pattern":"直接访问 obj.prop 不做null检查","correct_pattern":"使用可选链 obj?.prop 或先做null检查","reasoning":"TypeScript strict模式下直接访问可能为null的属性会导致运行时错误","confidence":0.85,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-ts-002","scope":{"level":"global"},"category":"C","tags":["type-error","any-abuse"],"type":"avoidance","nature":"objective","trigger":"类型标注","wrong_pattern":"使用any类型绕过类型检查","correct_pattern":"使用unknown + 类型守卫，或定义具体接口","reasoning":"any会完全绕过TypeScript类型系统，失去类型安全保障","confidence":0.80,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-ts-003","scope":{"level":"global"},"category":"C","tags":["api-hallucination","node-api"],"type":"avoidance","nature":"objective","trigger":"Node.js文件操作","wrong_pattern":"fs.exists() (已废弃)","correct_pattern":"fs.existsSync() 或 fs.access()","reasoning":"fs.exists已废弃，使用fs.existsSync或fs.access替代","confidence":0.90,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-ts-004","scope":{"level":"global"},"category":"E","tags":["config-blindspot","esm"],"type":"avoidance","nature":"objective","trigger":"ESM模块导入","wrong_pattern":"import './file' 省略扩展名","correct_pattern":"import './file.js' 包含.js扩展名","reasoning":"ESM规范要求导入路径包含文件扩展名，TypeScript编译后.ts变为.js","confidence":0.85,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-ts-005","scope":{"level":"global"},"category":"C","tags":["hidden-logic","async-error"],"type":"avoidance","nature":"objective","trigger":"async函数错误处理","wrong_pattern":"忘记await导致Promise未被捕获","correct_pattern":"始终await async调用，或用.catch()处理","reasoning":"未await的Promise错误不会被try-catch捕获，导致静默失败","confidence":0.88,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
+{"id":"meta-001","scope":{"level":"global"},"category":"S","tags":["workflow","read-before-write"],"type":"practice","nature":"subjective","trigger":"开始写代码或修改现有代码","wrong_pattern":"","correct_pattern":"先读现有代码，理解当前的模式、命名、结构，再按既有风格动手","reasoning":"跟随现有模式可以降低认知负担、减少审核工作量，保持代码库的一致性","confidence":0.75,"enforcement":"suggest","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-14T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
+{"id":"meta-002","scope":{"level":"global"},"category":"S","tags":["workflow","commit-discipline"],"type":"practice","nature":"subjective","trigger":"准备提交代码","wrong_pattern":"把多个无关改动混在一个commit里","correct_pattern":"小步提交，每个commit一个清晰的意图，commit message说明why而非what","reasoning":"小而清晰的commit方便review、回滚和bisect定位问题","confidence":0.75,"enforcement":"suggest","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-14T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
+{"id":"meta-003","scope":{"level":"global"},"category":"S","tags":["workflow","test-first"],"type":"practice","nature":"subjective","trigger":"修改核心逻辑或修bug","wrong_pattern":"直接改代码而不验证","correct_pattern":"改动前先跑一遍测试确认基线，改动后再跑一遍确认没破坏其他功能","reasoning":"测试不只是验证正确，更是检查'我没有改坏别的地方'","confidence":0.75,"enforcement":"suggest","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-14T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
+{"id":"meta-004","scope":{"level":"global"},"category":"K","tags":["metacognition","stop-and-investigate"],"type":"practice","nature":"subjective","trigger":"发现结果与预期不符、遇到意外的文件/状态、工具报错","wrong_pattern":"删除、重建、--force 或重试来绕过问题","correct_pattern":"先停下来查清楚根因，理解了再动手","reasoning":"绕过式修复经常掩盖真问题，代价是后面以更严重的形式爆发","confidence":0.80,"enforcement":"suggest","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-14T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
 ```
 
-- [ ] **Step 2: 编写 React/Next.js 知识包（前5条示范）**
-
-`knowledge-packs/react-nextjs.jsonl`:
-```jsonl
-{"id":"pack-react-001","scope":{"level":"global"},"category":"C","tags":["hidden-logic","react-hooks"],"type":"avoidance","nature":"objective","trigger":"React Hook使用","wrong_pattern":"在条件语句或循环中调用Hook","correct_pattern":"Hook只能在组件顶层调用","reasoning":"React依赖Hook的调用顺序来关联状态，条件调用会破坏这个机制","confidence":0.95,"enforcement":"block","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-react-002","scope":{"level":"global"},"category":"C","tags":["performance","react-rerender"],"type":"avoidance","nature":"objective","trigger":"React组件渲染优化","wrong_pattern":"在JSX中直接定义对象/数组字面量作为props","correct_pattern":"使用useMemo/useCallback或提取为常量","reasoning":"每次渲染都创建新引用会导致子组件不必要的重渲染","confidence":0.75,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-react-003","scope":{"level":"global"},"category":"K","tags":["version-lag","react-19"],"type":"avoidance","nature":"objective","trigger":"React数据获取","wrong_pattern":"在useEffect中fetch数据（React 19+项目）","correct_pattern":"使用React Server Components或Suspense + use()","reasoning":"React 19推荐RSC和Suspense模式替代useEffect数据获取","confidence":0.70,"enforcement":"suggest","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-react-004","scope":{"level":"global"},"category":"E","tags":["architecture","nextjs-app-router"],"type":"practice","nature":"objective","trigger":"Next.js路由","wrong_pattern":"","correct_pattern":"App Router: 默认Server Component，需要交互时加'use client'","reasoning":"Next.js App Router默认是Server Component，只有需要useState/useEffect/事件处理时才标记'use client'","confidence":0.85,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-react-005","scope":{"level":"global"},"category":"C","tags":["security","xss","react"],"type":"avoidance","nature":"objective","trigger":"React渲染用户内容","wrong_pattern":"dangerouslySetInnerHTML={{__html: userInput}}","correct_pattern":"使用文本节点渲染或DOMPurify净化","reasoning":"直接渲染用户HTML会导致XSS漏洞","confidence":0.95,"enforcement":"block","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-```
-
-- [ ] **Step 3: 编写 Python/FastAPI 知识包（前5条示范）**
-
-`knowledge-packs/python-fastapi.jsonl`:
-```jsonl
-{"id":"pack-py-001","scope":{"level":"global"},"category":"C","tags":["syntax-error","python-version"],"type":"avoidance","nature":"objective","trigger":"执行python命令","wrong_pattern":"python script.py","correct_pattern":"python3 script.py（或确认python指向正确版本）","reasoning":"许多系统python指向Python2，python3才是Python3","confidence":0.85,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-py-002","scope":{"level":"global"},"category":"C","tags":["hidden-logic","mutable-default"],"type":"avoidance","nature":"objective","trigger":"Python函数默认参数","wrong_pattern":"def func(items=[]):","correct_pattern":"def func(items=None): items = items or []","reasoning":"可变默认参数在函数定义时创建一次，所有调用共享同一对象","confidence":0.90,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-py-003","scope":{"level":"global"},"category":"E","tags":["dependency-mgmt","venv"],"type":"practice","nature":"objective","trigger":"Python项目依赖管理","wrong_pattern":"","correct_pattern":"始终使用虚拟环境（venv/poetry/uv），不污染全局Python","reasoning":"全局安装包会导致版本冲突和不可复现的构建","confidence":0.88,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-py-004","scope":{"level":"global"},"category":"C","tags":["security","fastapi","sql-injection"],"type":"avoidance","nature":"objective","trigger":"FastAPI数据库查询","wrong_pattern":"f\"SELECT * FROM users WHERE id = {user_id}\"","correct_pattern":"使用参数化查询或SQLAlchemy ORM","reasoning":"字符串拼接SQL会导致SQL注入漏洞","confidence":0.95,"enforcement":"block","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-{"id":"pack-py-005","scope":{"level":"global"},"category":"E","tags":["architecture","fastapi","async"],"type":"practice","nature":"objective","trigger":"FastAPI路由定义","wrong_pattern":"","correct_pattern":"IO密集型路由使用async def，CPU密集型使用def（FastAPI自动在线程池运行sync函数）","reasoning":"混用async/sync不当会阻塞事件循环或浪费线程","confidence":0.82,"enforcement":"warn","status":"active","hit_count":0,"success_count":0,"override_count":0,"evidence":{"success_sessions":0,"success_users":0,"correction_sessions":0},"created_at":"2026-04-13T00:00:00Z","last_hit_at":"","last_validated_at":"","source":"internet","conflict_with":[]}
-```
-
-- [ ] **Step 4: 扩充每包到20-30条**
-
-上面每包仅列了5条示范。需要按以下维度扩充到20-30条：
-
-**TypeScript 知识包扩充方向（目标25条）:**
-
-| 序号 | 子标签 | 方向 | 示例 |
-|------|--------|------|------|
-| 6-8 | api-hallucination | Node.js/Bun API幻觉 | `fs.readFile` 回调 vs Promise版, `Buffer.from` 编码参数 |
-| 9-11 | type-error | 常见泛型陷阱 | `Array<T>` vs `T[]`, `Record` key类型, 联合类型收窄 |
-| 12-14 | hidden-logic | 异步/并发陷阱 | `Promise.all` vs `Promise.allSettled`, `for await` 错用, 事件循环阻塞 |
-| 15-17 | code-quality | 编码规范 | `===` vs `==`, `const` 优先, 解构默认值 |
-| 18-20 | config-blindspot | tsconfig常见坑 | `paths` 与运行时解析, `strict` 子选项, `moduleResolution` |
-| 21-23 | performance | 性能陷阱 | JSON.parse大对象, 正则回溯, `Array.push` vs 扩展运算符 |
-| 24-25 | security | 安全 | eval/Function构造器, 不安全的反序列化 |
-
-**React/Next.js 知识包扩充方向（目标25条）:**
-
-| 序号 | 子标签 | 方向 | 示例 |
-|------|--------|------|------|
-| 6-8 | react-hooks | useEffect陷阱 | 依赖数组遗漏, cleanup函数, 竞态条件 |
-| 9-11 | performance | 渲染优化 | React.memo误用, Context导致重渲染, 虚拟列表 |
-| 12-14 | nextjs-app-router | App Router特有 | `generateStaticParams`, metadata API, Route Handlers |
-| 15-17 | architecture | 组件设计 | 受控vs非受控, 状态提升, 组合优于继承 |
-| 18-20 | hidden-logic | 状态管理坑 | 批量更新, 闭包陈旧值, 派生状态 |
-| 21-23 | security | 安全 | CSRF令牌, 服务端验证, 环境变量泄露 |
-| 24-25 | testing-strategy | 测试 | Testing Library最佳实践, MSW mock |
-
-**Python/FastAPI 知识包扩充方向（目标20条）:**
-
-| 序号 | 子标签 | 方向 | 示例 |
-|------|--------|------|------|
-| 6-8 | hidden-logic | Python陷阱 | 浅拷贝vs深拷贝, 闭包变量捕获, `is` vs `==` |
-| 9-11 | api-hallucination | 标准库幻觉 | `datetime.now()` vs `datetime.now(timezone.utc)`, `os.path` vs `pathlib` |
-| 12-14 | architecture | FastAPI模式 | Depends注入, 中间件顺序, Background Tasks |
-| 15-17 | dependency-mgmt | 包管理 | uv vs pip, lock文件, 版本约束语法 |
-| 18-20 | testing-strategy | 测试 | pytest fixtures, httpx AsyncClient, factory_boy |
-
-**扩充方法**: 使用Claude API批量生成，每条按照已有的JSONL格式，然后人工审核确认。
-生成prompt示例:
-```
-基于以下格式，为TypeScript项目生成5条关于"type-error/泛型陷阱"的知识条目。
-每条包含trigger, wrong_pattern, correct_pattern, reasoning。
-id命名: pack-ts-006 到 pack-ts-010。
-[粘贴一条现有条目作为格式参考]
-```
-
-- [ ] **Step 5: 验证知识包格式**
+- [ ] **Step 2: 验证知识包格式**
 
 ```bash
-# 验证每个JSONL文件格式正确且条目数达标
 node -e "
 const fs = require('fs');
-for (const f of ['typescript', 'react-nextjs', 'python-fastapi']) {
-  const path = 'knowledge-packs/' + f + '.jsonl';
-  const lines = fs.readFileSync(path, 'utf8').trim().split('\n');
-  let valid = 0;
-  for (const l of lines) {
-    const e = JSON.parse(l);
-    if (e.id && e.category && e.trigger && e.confidence) valid++;
-  }
-  console.log(f + ': ' + valid + ' entries (' + (valid >= 20 ? '✅' : '❌ need more') + ')');
+const lines = fs.readFileSync('knowledge-packs/meta-principles.jsonl', 'utf8').trim().split('\n');
+let valid = 0;
+for (const l of lines) {
+  const e = JSON.parse(l);
+  if (e.id && e.category && e.trigger && typeof e.confidence === 'number') valid++;
 }
+console.log('meta-principles: ' + valid + ' entries (' + (valid === 4 ? '✅' : '❌ expected 4') + ')');
 "
 ```
 
-Expected: 每包 ≥ 20 条
+Expected: `meta-principles: 4 entries ✅`
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add knowledge-packs/
-git commit -m "feat: add pre-built knowledge packs for cold start
+git commit -m "feat: add pre-built meta-principles knowledge pack
 
-TypeScript (25), React/Next.js (25), Python/FastAPI (20) packs.
-Covers: type errors, hooks rules, security, async patterns, config blindspots,
-performance, testing strategy, architecture patterns."
+4 cross-project meta-principles covering: read-before-write, commit discipline,
+test-before-and-after, stop-and-investigate. No tech-stack-specific entries
+(those should come from user's own CLAUDE.md or accumulation over time)."
 ```
 
 ---
