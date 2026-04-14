@@ -17,3 +17,9 @@ export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
 } from "./extractor/llm-based.js";
+export {
+  runExtractPipeline,
+  formatCorrectionContext,
+  type ExtractPipelineDeps,
+  type ExtractPipelineResult,
+} from "./pipeline/extract-pipeline.js";
