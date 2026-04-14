@@ -1,6 +1,8 @@
 # TeamAgent — 团队AI自进化引擎 设计文档
 
-> 版本: 5.1 | 日期: 2026-04-14 | 状态: 设计完成，待实施
+> 版本: 5.2 | 日期: 2026-04-14 | 状态: 设计完成，实施中
+>
+> 实施计划见 [`2026-04-14-teamagent-phase1-plan.md`](./2026-04-14-teamagent-phase1-plan.md) (v1.2)
 
 ---
 
@@ -754,6 +756,7 @@ npx teamagent uninstall
 10. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新（见编译策略）
 11. /pitfall命令 — 用户主动记录踩坑
 12. /teamagent stats — 终端统计摘要
+13. 置信度校准引擎 — PostToolUse 关联执行结果 + intervention_id 闭环 + confidence 涨落
 
 验证指标: 坑重现率下降; 闭环场景（踩坑→学习→避坑）跑通
 
@@ -765,8 +768,8 @@ npx teamagent uninstall
 1. MCP Server — check_pitfall / get_best_practice / report_correction / get_stats
 2. Session Monitor — 旁路监控 + 模式匹配告警
 3. Hook自动触发MCP — 解决长会话退化问题
-4. 置信度自动校准 — 闭环追踪干预效果
-5. 知识衰减引擎 — 过期知识自动降级
+4. 知识衰减引擎 — 过期知识自动降级（基于时间/依赖变更）
+5. 知识检索升级 — 引入本地嵌入模型做语义相似度排序
 6. /teamagent override — 临时绕过规则
 7. /teamagent rules — 管理活跃规则
 
@@ -855,7 +858,7 @@ npx teamagent uninstall
 问题: 知识库需要时间积累，但用户在第一天就评估工具。
 
 缓解（Phase 1前置条件）:
-1. 预置元原则: 4-8条跨项目通用的工作流/元认知原则（故意不按技术栈预置语法级知识——那些AI已经知道，且覆盖率极低）
+1. 预置元原则: 4条跨项目通用的工作流/元认知原则（故意不按技术栈预置语法级知识——那些AI已经知道，且覆盖率极低）
 2. 导入已有规则: 扫描项目CLAUDE.md/.cursorrules，把团队已有约定转为结构化知识（这是冷启动的主要来源）
 3. 首次会话即有感知: 明确告知用户加载了多少条知识，哪些来自已有规则
 

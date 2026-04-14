@@ -1,6 +1,6 @@
 # TeamAgent Phase 1 实现计划
 
-> 版本: 1.1 | 日期: 2026-04-14 | 依据: 设计文档 v5.1 (`docs/specs/2026-04-13-teamagent-design.md`)
+> 版本: 1.2 | 日期: 2026-04-14 | 依据: 设计文档 v5.1 (`docs/specs/2026-04-13-teamagent-design.md`)
 
 ---
 
@@ -141,6 +141,8 @@ interface AttributionEvent {
 | **M5** | 安装闭环 | 加 adapter | ClaudeMdRuleImporter + Init orchestrator | `npx teamagent init` 对新项目一键接入，带上已有规则 |
 | **M6** | 反馈回路 | 加 adapter+策略 | PostToolUse Hook + ConfidenceCalibrator | 规则被用多次→confidence 上升；override→下降 |
 | **M7** | 验证套件 | 加工具 | ScenarioRunner + 验证 fixture | `teamagent verify` 输出 PRR/KP 报告 |
+
+**Phase 1 明确不做**（留给 Phase 2）：MCP Server、Session Monitor 旁路进程、本地嵌入模型、知识衰减引擎、/teamagent override/rules。
 
 ### Milestone 组件依赖关系
 
@@ -588,9 +590,15 @@ pnpm teamagent analyze --session fixtures/sessions/correction-explicit-deny.json
 
 1. **fixture 准备** — 放到 `fixtures/sessions/`。来源分三批：
    - **手工构造 10 条**：覆盖设计文档中每种纠正/成功信号权重的典型样本（开发 M3 时产出）
-   - **M0-M2 开发期收集的真实会话**：至少 5 条脱敏版（把你在开发 M0-M2 时 Claude Code 的 JSONL 挑几个放进来），边开发边积累
+   - **M0-M2 开发期收集的真实会话**：至少 5 条脱敏版
    - **M3 上线后补充**：M3 开发完成后，每天开发 M4+ 时发现的 FP/FN 会被加入 fixture 作为回归样本
    M3 Milestone 完成时至少需要 20 条（含手工 10 + 真实 10）
+
+   **脱敏规则**（真实会话入 fixture 前必过一遍）:
+   - 删除：API keys / tokens / 绝对路径中的用户名（`/Users/xxx/` → `/Users/USER/`）/ 邮箱 / URL 里的敏感参数
+   - 保留：消息结构（user / assistant / tool_use / tool_result）/ 工具名 / 命令形态 / 代码片段的结构
+   - 替换：真实项目名和文件名可保留（对本项目开发而言不敏感），其他项目涉及的路径改占位符
+   - 做法：手动扫一遍即可，不必写自动脱敏工具——脱敏工具本身也是 tech debt 的来源
 2. **ClaudeSessionSource** — 读取 JSONL，处理版本差异，输出 `ParsedSession`
 3. **correction-detector 纯函数** — 按信号权重表实现，返回含信号类型和权重的 `CorrectionMoment[]`
 4. **success-detector 纯函数** — 同上
@@ -760,7 +768,7 @@ pnpm teamagent stats
 2. **CursorRulesImporter** — 类似
 3. **Rule structurer** — 复用 M4 Extractor，prompt 改为"文本规则 → 结构化"
 4. **detect-stack** — 从设计文档抄过来（仅日志用途）
-5. **Init orchestrator** — 按 DoD 顺序串所有步骤，失败处理策略是"**先检查后执行，能回滚就回滚，不能则报告残留状态**"：
+5. **Init orchestrator** — 按 DoD 顺序串所有步骤。支持 `--dry-run`：只输出"会做什么"，不写任何文件，方便对新项目先看后装。失败处理策略是"**先检查后执行，能回滚就回滚，不能则报告残留状态**"：
    - **Phase A Pre-check**: 先做一遍所有前置检查（权限、已有的 .claude/settings.json 是否 parseable、CLAUDE.md 是否可写），任一失败直接退出不动任何文件
    - **Phase B 执行**: 顺序执行 8 步；每步成功后记录到 `~/.teamagent/.install-log`
    - **Phase C 失败处理**: 某步失败时，尽力回滚已执行的步骤（能回滚的：临时文件删除；难回滚的：settings.json 改动、CLAUDE.md 写入保留，通过 `.install-log` 报告给用户"以下步骤已生效、以下未生效，你可以 `teamagent uninstall` 清理"）
