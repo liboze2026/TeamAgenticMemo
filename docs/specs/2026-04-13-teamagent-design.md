@@ -725,7 +725,7 @@ npx teamagent uninstall
 | 主语言 | TypeScript | Claude Code生态、MCP SDK原生支持 |
 | 知识存储 | JSONL文件 | 简单、可git追踪、与gstack格式兼容 |
 | 知识检索 | Phase 1: 关键词 + BM25；Phase 2: 叠加本地嵌入向量 | Phase 1 避免嵌入模型依赖；Phase 2 再引入语义能力 |
-| 会话分析 | Claude API | 用LLM分析LLM的会话 |
+| 会话分析（LLM 调用）| 默认 spawn 本机 Claude Code (`claude -p`)；可切换为 Anthropic API | 自举——用 Claude Code 补强 Claude Code；零 API Key 配置；Anthropic API 作为高吞吐场景的备选 |
 | MCP Server | TypeScript + @modelcontextprotocol/sdk | Claude Code原生支持 |
 | Hook脚本 | Node.js（直接注册为 Claude Code hook 命令） | 纯 Node 避免 Windows 上 bash spawn node 的启动延迟 |
 | 知识编译 | 模板引擎(Handlebars) | 简单灵活 |
@@ -748,7 +748,7 @@ npx teamagent uninstall
 4. 会话日志解析器 — 解析 ~/.claude/ 下的JSONL会话日志
 5. 纠正时刻识别器 — 多信号融合检测（负面信号）
 6. 成功模式捕获器 — 检测成功完成/表扬/重复使用（正面信号）
-7. 知识提取引擎 — 调用Claude API结构化提取经验（avoidance+practice）
+7. 知识提取引擎 — 调用 LLM（默认 spawn 本机 Claude Code）结构化提取经验（avoidance+practice）
 8. 本地知识库 — JSONL存储 + 关键词/BM25检索
 9. PreToolUse/PostToolUse Hook — 拦截已知错误 + 记录执行结果 + 本地检索注入相关知识
 10. CLAUDE.md编译器 — 知识库→CLAUDE.md自动更新（见编译策略）
