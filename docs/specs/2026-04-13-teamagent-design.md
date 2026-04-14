@@ -1,6 +1,6 @@
 # TeamAgent — 团队AI自进化引擎 设计文档
 
-> 版本: 4.2 | 日期: 2026-04-14 | 状态: 设计完成，待实施
+> 版本: 5.0 | 日期: 2026-04-14 | 状态: 设计完成，待实施
 
 ---
 
@@ -503,6 +503,8 @@ global —— ~/.teamagent/global/knowledge.jsonl
 
 规则可限定 `scope.project`、`scope.paths`（目录）、`scope.file_types`（文件类型）、`scope.branches`（分支），实现精确生效范围。
 
+**个人知识的项目限定**：所有 `scope.level=personal` 的条目都存在 `~/.teamagent/personal/knowledge.jsonl`——跨项目和某项目专属的个人知识放同一个文件，用 `scope.project` 字段区分。例如"我这个项目的 venv 路径是 `./venv-3.11`"会是 `{ scope: { level: "personal", project: "my-saas-app" } }`，检索时只在 `my-saas-app` 项目内命中；"我习惯用 rg 而不是 grep" 则是 `{ scope: { level: "personal" } }`，所有项目都生效。
+
 ### 置信度与执行强度
 
 | 置信度 | enforcement | 行为 |
@@ -559,6 +561,21 @@ Stage 3 上下文过滤（毫秒级）: scope.paths/file_types匹配 + confidenc
 - PostToolUse关联执行结果到 `intervention_id`
 - 干预成功 → confidence↑ | 干预失败 → confidence↓
 
+### MCP Server 工具规格
+
+MCP Server 是"实时顾问"（帮助方式 ②）的实现，由 Claude Code 通过 MCP 协议加载。Phase 2 上线，暴露以下工具：
+
+| 工具 | 用途 | 输入 | 输出 |
+|------|------|------|------|
+| `check_pitfall` | AI 做事前查当前场景有没有相关的坑 | `{ context: string, tool_name?: string, file_path?: string, project?: string }` | `{ pitfalls: Array<{id, trigger, wrong_pattern, correct_pattern, reasoning, confidence, enforcement}>, intervention_id?: string }` |
+| `get_best_practice` | 查询某类任务的推荐做法（正面知识）| `{ task: string, scope?: { project?, paths? } }` | `{ practices: Array<{trigger, correct_pattern, reasoning, confidence}> }` |
+| `report_correction` | AI 主动报告自己被纠正（辅助识别器提升召回）| `{ session_id, intervention_id?, user_correction, previous_action }` | `{ acknowledged: boolean }` |
+| `get_stats` | 取知识库统计（供 Portal/stats 使用） | `{ scope?: { project?, level? } }` | `{ total, active, by_category, recent_additions, top_hits }` |
+
+**检索行为**：`check_pitfall` 和 `get_best_practice` 内部都走"知识检索策略"三阶段漏斗（关键词粗筛 → 语义排序 → 上下文过滤）。返回结果按 confidence 降序，默认上限 5 条。
+
+**intervention_id 闭环**：`check_pitfall` 每次返回非空结果时都生成一个 `intervention_id`；AI 使用了该建议后，下一次 PostToolUse Hook 会把执行结果关联回这个 id，用于置信度校准。
+
 ---
 
 ## 五、智能体模式支持
@@ -567,13 +584,35 @@ AI编码工具在自主运行时（连续几十次工具调用无人介入），
 
 - **安全护栏(③)**: 每次工具调用前后触发，拦截具体错误操作
 - **全局视野(④)**: Session Monitor旁路监控行为轨迹，每5次调用评估一次，检测连续失败和方向偏差，通过Hook注入警告
-- **实时顾问(②)**: Hook自动触发MCP查询（不依赖AI主动调用，解决长会话退化问题）
+- **实时顾问(②)**: Hook 在 PreToolUse 时本地调用检索逻辑，把相关坑/最佳实践打包进 Hook 返回体给 AI —— 不依赖 AI 主动调用 MCP，解决长会话退化问题
 - **持续学习(⑤)**: PostSession完整复盘，提取新知识，更新置信度
 
-Session Monitor实现:
-- PostToolUse记录到 `~/.teamagent/sessions/{session_id}.jsonl`
-- Monitor匹配已知模式 → 产生警告写入 `{session_id}_alerts.json`
-- 下次PreToolUse检查alerts文件并注入给AI
+### Session Monitor 的偏离检测
+
+Session Monitor 是旁路进程，不在工具调用关键路径上。每次 PostToolUse 写入 `~/.teamagent/sessions/{session_id}.jsonl` 后，Monitor 扫描最近 N 步（默认 N=5）的轨迹，匹配以下偏离模式：
+
+| 模式 | 判定 | 示例 |
+|------|------|------|
+| **连续失败** | 同一工具连续调用失败 ≥ 3 次（`succeeded=false`） | `npm test` 连续3次退出码非零 |
+| **打转** | 相同 `(tool_name, input_hash)` 在最近 10 步内重复 ≥ 2 次 | 反复 Read 同一个文件改又改回去 |
+| **反模式命中** | 当前工具 input 命中一条 `scope.paths` 匹配的 avoidance 规则 | Write 到了规则禁止的路径 |
+| **目标漂移** | AI assistantText 主题与最初 userMessage 语义距离持续扩大 3 步以上 | 用户让改登录，AI 开始改无关模块 |
+
+任一模式触发 → 写入 `~/.teamagent/sessions/{session_id}_alerts.json`（一个JSON数组），下次 PreToolUse 会读取这个文件并把警告拼接进 Hook 返回的 `reason` 字段，AI 在下一个工具调用前就能看到。
+
+### Hook 如何承载实时顾问
+
+Hook 进程本身是本地 Node.js，启动时加载个人/项目知识库（总共通常几百条，内存足够），直接在 PreToolUse 里做检索：
+
+```
+PreToolUse(tool_name, tool_input)
+  ├─ 1. matchRules(tool_input)  ← 反模式命中？是 → decision=block/warn
+  ├─ 2. checkSessionAlerts()     ← Session Monitor 有预警？有 → 注入
+  ├─ 3. retrieveRelevant(context) ← 相关的最佳实践/提示？有 → 注入（等同于 check_pitfall）
+  └─ return { decision, reason: 上述三者的合并文本 }
+```
+
+这样 AI 收到的反馈格式和显式调用 MCP `check_pitfall` 一致，AI 不需要记得要调用 MCP，系统自动把相关知识推到它面前。MCP Server（Phase 2 独立组件）的价值在于让 AI 在"思考过程中"主动查询——两个通道互补，不冲突。
 
 ---
 
