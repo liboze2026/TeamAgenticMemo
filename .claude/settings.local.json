@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p ~/.claude/skills/teamagent-pitfall ~/.claude/skills/teamagent-stats)",
+      "Bash(cp /c/bzli/teamagent/packages/skills/pitfall.md ~/.claude/skills/teamagent-pitfall/SKILL.md)",
+      "Bash(cp /c/bzli/teamagent/packages/skills/teamagent-stats.md ~/.claude/skills/teamagent-stats/SKILL.md)",
+      "Read(//c/Users/tianhaoxuan/.claude/skills/**)"
+    ]
+  }
+}

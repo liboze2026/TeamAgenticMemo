@@ -24,3 +24,9 @@ export {
   type AttributionEvent,
   type VisibilityMode,
 } from "./attribution.js";
+
+export type {
+  PreToolUseInput,
+  PostToolUseInput,
+  HookOutput,
+} from "./hook-protocol.js";
