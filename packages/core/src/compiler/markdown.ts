@@ -69,17 +69,26 @@ export function compileMarkdownBlock(
 /**
  * 把 block 注入到已有文档（CLAUDE.md）中。纯函数。
  *
- * - 文档已有 START/END 标记：替换其中内容
+ * - 文档已有 TEAMAGENT 标记（任何变体，只要含 "TEAMAGENT:START" / "TEAMAGENT:END"）：替换其中内容
  * - 文档没有标记：追加到末尾，前加空行分隔
  * - 空文档：只返回 block，末尾保证一个换行
  */
 export function injectBlockIntoDoc(existing: string, block: string): string {
-  const startIdx = existing.indexOf(BLOCK_START);
-  const endIdx = existing.indexOf(BLOCK_END);
+  const startTagRegex = /<!--\s*TEAMAGENT:START[^>]*-->/;
+  const endTagRegex = /<!--\s*TEAMAGENT:END[^>]*-->/;
 
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    const before = existing.slice(0, startIdx);
-    const after = existing.slice(endIdx + BLOCK_END.length);
+  const startMatch = existing.match(startTagRegex);
+  const endMatch = existing.match(endTagRegex);
+
+  if (
+    startMatch &&
+    endMatch &&
+    startMatch.index !== undefined &&
+    endMatch.index !== undefined &&
+    endMatch.index > startMatch.index
+  ) {
+    const before = existing.slice(0, startMatch.index);
+    const after = existing.slice(endMatch.index + endMatch[0].length);
     return before + block + after;
   }
 
