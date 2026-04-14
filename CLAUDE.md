@@ -41,7 +41,7 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（24条活跃知识）
+## TeamAgent 经验（28条活跃知识）
 - 使用 batch insert 一次性批量插入 而非 循环逐条插入|for.*insert|loop insert——逐条插入每次都有网络往返和事务开销，几百条就会明显变慢；batch insert 一次请求完成，性能通常高一到两个数量级 [0.95]
 - 使用 fetch 而非 axios——项目约定使用原生 fetch 以减少依赖；axios 不符合该约定 [0.95]
 - 使用 Zustand 而非 Redux Toolkit|@reduxjs/toolkit|redux——用户偏好轻量方案；Redux Toolkit 虽然功能完整但样板代码和学习成本高，Zustand API 极简、包体积小，更符合项目轻量化倾向 [0.80]
@@ -55,6 +55,9 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 使用 core 只能依赖 @teamagent/types 和 @teamagent/ports；纯函数逻辑必须放在 core，adapter 只做 IO 包装 而非 @teamagent/adapters——Hexagonal Architecture 依赖方向: core 依赖 ports 接口，adapters 实现 ports。core import adapters 会反转依赖方向，打破可测性和组合性 [0.70]
 - 使用 用相对路径 import { x } from "../packages/core/src/index.js"；或给 scripts/ 建 package.json 加入 pnpm-workspace.yaml 而非 在 scripts/*.ts 里 import { x } from "@teamagent/core"——pnpm workspace 只把 pnpm-workspace.yaml 中声明的目录视为可 resolve 的 @scope/name；顶层 scripts/ 不在其中，tsx/node 会 ERR_MODULE_NOT_FOUND [0.70]
 - 使用 让依赖方直接 import 源头 detector.detect() 拿结果作为输入；纯函数间互相调用是安全的 而非 在每个 detector 内各自复制 denial/praise 等关键词表，并各自判定一遍——重复的关键词表会在一处更新时漏改，导致两个 detector 语义分歧；依赖调用比复制逻辑更耦合但更正确——单一事实源 [0.70]
+- 先跑 cd packages/cli && pnpm build:hook 重编 dist/bin-pre-tool-use.cjs，再关窗重开 Claude Code 让新 bundle 生效——Claude Code Hook 跑的是 tsup 打包后的单文件 .cjs bundle，不是源码。core 改了但 bundle 没 rebuild，Hook 继续用旧代码且不会报任何错，症状会变得难以归因（本项目真实踩过：修完 scope 语义 bug 后没 rebuild，导致带 file_types 的规则对 Bash 全部失效） [0.70]
+- 若调用方 deps.scope 未设 paths 或 file_types，自动注入 DEFAULT_CODE_FILE_TYPES（ts/tsx/js/py/go/rs/... 不含 md/txt/rst）；显式设过 scope 范围则不覆盖——规则的 wrong_pattern 会在讨论该规则的 md 文档里被 matcher 命中，造成规则在自己的 docs 里反噬；DEFAULT_CODE_FILE_TYPES 作为安全网把文档排除在外。M4 dogfood 时真实出现：刚提取的 batch-insert 规则直接拦住本次评测文档的写入。更理想的方案是 prompt 让 LLM 推断 project-aware 的 scope.paths，但那是 M5/M6 功能；默认 file_types 是 M4 完成时的最小安全保障 [0.70]
+- 使用 ctx 无 file_path 时直接放行 scope 检查；只在有 file_path 时才校验 file_types/paths。语义是：scope 限制'哪些文件由规则覆盖'，不是'规则是否参与匹配' 而非 if (rule.scope.file_types && !filePath) return false  // 这让 Bash/WebFetch 等无 file_path 的操作被全部拦住——若反向实现，带 scope 的规则会对所有非文件操作（Bash 命令、网络请求）失效；一旦给规则统一加了默认 file_types 后，Bash 就全部静默——极难 debug（本项目真实踩过：修完后 git commit 含 axios 的消息竟不触发 hook，溯源才发现是旧 bundle + 新 scope 数据的组合效应） [0.70]
 - 使用 vitest.config.ts 设置 pool:'threads' + poolOptions.threads.singleThread:true + fileParallelism:false 强制顺序跑 而非 使用默认的 thread pool 并发执行多个 test file——Windows + pnpm workspace + esbuild 组合下 vitest 多 worker 并发会出现 'Worker exited unexpectedly' / 'Out of memory' / 'memory allocation failed' 错误；singleThread 顺序跑可避免 [0.70]
 - 使用 CLI E2E 测试脱离 vitest runner——用独立 shell 脚本跑，或等有长驻进程后在外层测；或改为函数级单元测试覆盖 bin 的分发逻辑 而非 vitest worker 内用 spawnSync('npx tsx', ...) 嵌套执行 CLI bin 文件做 E2E 测试——vitest worker 里再 fork tsx 加载 ESM loader 会放大内存占用，在 Windows 低内存环境下直接 OOM；vitest 不是做进程级 E2E 的合适场所 [0.70]
 - 使用 完全退出当前 Claude Code 会话（Ctrl+D / 关窗口），重新启动后进入项目目录才能加载新 settings；subagent 沿用主会话 settings 缓存也无法验证 而非 在当前 Claude Code 会话内尝试触发 hook，或派发 subagent 来试——Claude Code 在会话启动时一次性载入 .claude/settings*.json，运行中不热加载。装完 hook 在原会话内调 Bash/Write/Edit 仍走旧配置（无 hook），容易陷入"以为装好实际没生效"的循环。直接验证 hook 进程本身正确性的方法：echo JSON | npx tsx <hook-bin>，如返回符合协议的 JSON 即逻辑无误，剩下只能等新会话 [0.70]
@@ -66,4 +69,5 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 使用 直接 claude （默认会话）；Hook 会被正常调用；只有 --bare 或 --dangerously-skip-permissions 会跳过 Hook 机制 而非 使用 --dangerously-skip-permissions 启动——今天 0 号用户实证：--dangerously-skip-permissions 启动的会话里 PreToolUse Hook 不会被执行——events.jsonl 零新增、对话里无 additional context。证据：claude -p（默认模式）新进程立刻产生 session-级别 events；--dangerously-skip-permissions 模式下同样操作零 event [0.70]
 - 使用 用 process.cwd() —— vitest 从 repo 根启动，cwd 可靠。或直接用 packages-local 相对路径 而非 path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../../..")——多层 ".." 退路径容易少退一层或多退一层，且 url.pathname 在 Windows 上前缀 / 还需处理。process.cwd() 零歧义 [0.70]
 - 使用 中文场景去掉 \\b，用显式锚点或前后文字符类。\\b 只在 ASCII 单词字符边界工作 而非 正则用 \\b 包裹中文词，例如 /\\b(用|改用|上)\\s*X\\b/——\\b 定义为 \\w 与非 \\w 之间的边界；中文字符不属于 JavaScript 的 \\w（默认没开 /u 标志时），"用" 前后不产生 boundary，正则永远不会命中 [0.70]
+- 使用 经 stdin 传 prompt；args 只放 flags：['-p', '--output-format', 'json', '--no-session-persistence']，然后 child.stdin.write(prompt) + end() 而非 把 prompt 当 positional arg 传给 claude -p，例如 args=['-p', fullPrompt, '--output-format', 'json']——Windows 命令行长度有 ~8KB 限制，extraction/evaluation 等真实 prompt 一般 2-5KB，positional arg 不稳定；stdin 同时免去特殊字符转义。实证：echo '...' | claude -p --output-format json --no-session-persistence 正常返回 {type:'result', result:'...'} [0.70]
 <!-- TEAMAGENT:END -->
