@@ -56,43 +56,23 @@ npx teamagent init
 # 扫描项目 → 加载知识包 → 注册MCP/Hook/Skill → 完成
 ```
 
-### 用户旅程：一天的体验
+### 用户旅程：三个关键场景
 
-**早上9:00 — 开始工作**
+**场景1：安装即刻**
 
-打开Claude Code，照常写代码。CLAUDE.md中已包含TeamAgent编译的知识摘要——几条通用工作原则，加上从本项目CLAUDE.md/.cursorrules导入的团队约定，加上之前积累的个人经验。AI从第一句话开始就"知道"项目约定。
+`npx teamagent init` 完成后，CLAUDE.md 里多了一个 TeamAgent 区块，内容=几条元原则+从本项目 CLAUDE.md/.cursorrules 导入的团队约定。下一次对话时，AI 从第一句话起就在这些约定下工作。
 
-（首次安装时，这部分知识主要来自已有规则导入；使用几天后会明显增加积累的经验。）
+**场景2：AI差点犯错但被挡住**
 
-**9:15 — AI差点犯错但被挡住了（无感）**
+AI 准备执行 `npm install moment`。Hook 匹配到"用dayjs替代moment"规则，在工具调用之前拦截，AI 自动改用 dayjs。smart 模式下用户看到 `💡 TeamAgent: 已应用经验——优先使用dayjs而非moment（置信度0.88）`；silent 模式下完全无感。
 
-让AI写一个数据库查询。AI在思考过程中自动调用MCP `check_pitfall`，查到"Prisma日期过滤要用gte不是gt"，直接写出正确代码。用户什么都没感觉到，只是觉得AI很靠谱。
+**场景3：用户纠正AI，系统默默学习**
 
-**10:30 — AI执行命令时被纠正（几乎无感）**
+AI 建议用 REST API，用户说"我们这个场景用 GraphQL 更合适"。系统识别到纠正时刻，会话结束后在后台提取成一条知识条目。下次遇到同类触发时，AI 会直接用 GraphQL——**同一个人不需要纠正第二次**。
 
-AI准备执行 `npm install moment`，Hook检测到规则"用dayjs替代moment"，AI自动改用dayjs。用户看到AI直接装了dayjs，没有经历试错。
+---
 
-smart模式下用户看到：`💡 TeamAgent: 已应用经验——优先使用dayjs而非moment（置信度0.88）`
-
-**11:00 — 用户纠正了AI（系统默默学习）**
-
-AI建议用REST API，用户说"我们这个场景用GraphQL更合适"。系统识别到纠正时刻，后台提取知识。
-
-**14:00 — 智能体自主运行，系统全程守护**
-
-让AI自主重构一个模块（30+步）。Session Monitor全程旁观，在AI偏离技术路线时注入提醒，在连续失败时主动告警。用户没有介入，但AI像有经验的开发者一样自我修正。
-
-**16:00 — 顺手分享一条经验（30秒）**
-
-用户觉得今天纠正AI的那条经验挺有价值，执行 `/teamagent submit`，一键提交到团队知识库。
-
-**17:00 — 看一眼今天的成果（可选）**
-
-执行 `/teamagent portal`，看到：今天系统为自己拦截了8个已知坑，团队知识库新增了5条，首次正确率比上周提升了3%。
-
-**隔壁新同事的体验**
-
-新同事第一天安装TeamAgent，AI就已经知道了：团队用JWT不用Session、日期处理用dayjs、这个项目的API命名规范是什么... 就好像AI跟着团队干了一年一样。
+其他场景在相应章节中详述：智能体自主运行时的守护见"五、智能体模式支持"；提交到团队共享见"团队审核门"；查看统计和知识门户见"Knowledge Portal"。
 
 ---
 
@@ -108,12 +88,7 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 
 #### 固定层：4个大类
 
-| 大类 | 定义 | 初始子标签（预置，可自审调整） |
-|------|------|--------------------------|
-| **C 代码层** | 看得见的坑——代码本身的问题 | syntax-error, api-hallucination, hidden-logic, code-quality, security, performance, type-error |
-| **E 工程层** | 做法的坑——工程方式的问题 | tech-choice, architecture, workflow-order, config-blindspot, testing-strategy, dependency-mgmt, deployment |
-| **S 策略层** | 思路的坑——决策方向的问题 | wrong-direction, over-engineering, under-engineering, context-blindness |
-| **K 认知层** | 知识的坑——不知道有更好的做法 | version-lag, domain-gap, team-tacit, unknown-better-solution |
+四大类分别关注"错在哪个层面"：**C 代码层**（代码本身的问题）、**E 工程层**（工程方式的问题）、**S 策略层**（决策方向的问题）、**K 认知层**（知识缺口）。每个大类的子标签列表见下面"初始子标签"小节。
 
 #### 动态层：子标签自审调整
 
@@ -138,9 +113,9 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 - 调整CLAUDE.md编译器的优先级权重
 - 团队层以"分类更新建议"形式提交审核
 
-#### 初始分类参考（预置子标签的详细说明）
+#### 初始子标签
 
-**代码层 C:**
+**代码层 C — 代码本身的问题**
 
 | 子标签 | 定义 | 示例 |
 |--------|------|------|
@@ -152,7 +127,7 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 | performance | 引入性能问题 | N+1查询、不必要重渲染、内存泄漏、bundle过大 |
 | type-error | 类型系统相关错误 | 错误的类型断言、any滥用、泛型误用 |
 
-**工程层 E:**
+**工程层 E — 工程方式的问题**
 
 | 子标签 | 定义 | 示例 |
 |--------|------|------|
@@ -164,7 +139,7 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 | dependency-mgmt | 依赖管理问题 | 依赖冲突、peer dependency、引入已知漏洞的版本 |
 | deployment | 部署和DevOps问题 | Dockerfile配置错误、CI/CD管道问题、环境差异 |
 
-**策略层 S:**
+**策略层 S — 决策方向的问题**
 
 | 子标签 | 定义 | 示例 |
 |--------|------|------|
@@ -173,7 +148,7 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 | under-engineering | 该做的没做 | 缺少错误处理、安全验证、日志 |
 | context-blindness | 无视项目/业务约束 | 忽略性能预算、合规要求 |
 
-**认知层 K:**
+**认知层 K — 知识缺口**
 
 | 子标签 | 定义 | 示例 |
 |--------|------|------|
@@ -209,15 +184,6 @@ AI辅助开发过程中，任何导致结果偏离最佳实践的决策、行为
 **维度五：元认知** — "知道自己不知道什么"
 
 AI学会在关键决策点变得谨慎而非自信，会主动说"这个地方我不确定，让我先查一下"。
-
-### AI成长的时间线
-
-| 阶段 | 时间 | 主要成长维度 | AI表现 |
-|------|------|-------------|--------|
-| 事实积累期 | Week 1 | 事实记忆 | 不再在明显事实上犯错 |
-| 模式形成期 | Week 2-4 | 操作模式+决策偏好 | 做事步骤和选择越来越对 |
-| 经验深化期 | Month 2-3 | 避坑经验 | 能预判风险，主动规避 |
-| 智慧涌现期 | Month 3+ | 元认知 | 知道什么时候该确认而不是自信犯错 |
 
 ### 知识库演化的四种动力
 
@@ -454,152 +420,70 @@ Phase 4 会引入 **公共层**（source=internet 的条目池），作为所有
 
 ### 整体架构
 
+数据流：**用户使用 Claude Code → 采集 → 识别 → 分析 → 知识库 → 输出 → 同步**
+
 ```
-┌──────────────────────────────────────────────────────────┐
-│                  用户正常使用 Claude Code                   │
-└─────────────────────────┬────────────────────────────────┘
-                          │
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  Layer 1: 数据采集层 (Collection Layer)                    │
-│                                                           │
-│  三通道并行：                                              │
-│  ┌────────────┐  ┌──────────────┐  ┌────────────────┐   │
-│  │ 被动监听    │  │ 轻确认        │  │ 主动触发        │   │
-│  │ • 会话日志  │  │ • 纠正时刻    │  │ • /pitfall     │   │
-│  │ • hooks    │  │   确认弹窗    │  │ • /learn       │   │
-│  │ • git diff │  │              │  │ • 用户显式标记  │   │
-│  │ • 终端输出  │  │              │  │                │   │
-│  └────────────┘  └──────────────┘  └────────────────┘   │
-└─────────────────────────┬────────────────────────────────┘
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  Layer 2: 识别层 (Detection Layer)                        │
-│                                                           │
-│  纠正时刻识别器 — 多信号融合引擎（负面信号）                 │
-│  成功模式捕获器 — 成功/表扬/重复使用检测（正面信号）         │
-└─────────────────────────┬────────────────────────────────┘
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  Layer 3: 分析引擎 (Analysis Engine)                      │
-│                                                           │
-│  • 归因分类器 — 4大类+动态标签 + 根因三分法(规则/AI/环境)    │
-│  • 知识提取器 — 结构化提取(avoidance+practice两类)         │
-│  • 性质判定器 — objective vs subjective自动判定            │
-│  • 冲突检测器 — 语义冲突检测 + 新旧知识对比                │
-│  • 去重/合并器 — 闭环追踪(intervention_id关联干预与结果)   │
-└─────────────────────────┬────────────────────────────────┘
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  Layer 4: 知识库 (Knowledge Base)                         │
-│                                                           │
-│  存储: JSONL文件 (可git追踪)                               │
-│  检索: 分阶段检索（见知识检索策略）                          │
-│                                                           │
-│  子系统:                                                   │
-│  • 回放验证器 — A/B对比证明知识有效                         │
-│  • 衰减引擎 — 基于时间/覆盖/依赖变更的知识衰减             │
-│  • 冲突仲裁队列 — 矛盾知识供团队决定                       │
-│                                                           │
-│  三层: 个人层 / 团队层(审核门) / 互联网层(远期)             │
-└─────────────────────────┬────────────────────────────────┘
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  Layer 5: 输出层 (Delivery Layer)                         │
-│                                                           │
-│  五种帮助方式:                                             │
-│                                                           │
-│  ① 工作习惯基线 — "AI开箱即有工作习惯"                     │
-│    实现: CLAUDE.md编译（含元原则 + 导入的已有规则 +        │
-│          已积累的团队/个人知识）                            │
-│    时机: 每次会话开始                                      │
-│                                                           │
-│  ② 实时顾问 — "AI做事前会先想想有没有坑"（核心）           │
-│    实现: MCP Server                                       │
-│    工具: check_pitfall / get_best_practice /              │
-│          report_correction / get_stats                    │
-│    时机: AI思考过程中（主动调用 + Hook自动触发）            │
-│                                                           │
-│  ③ 安全护栏 — "AI不会执行已知的错误操作"                   │
-│    实现: Hook脚本 PreToolUse/PostToolUse                   │
-│    时机: 每次工具调用前                                    │
-│    用户可 /teamagent override 临时绕过                     │
-│                                                           │
-│  ④ 全局视野 — "AI会自己发现自己跑偏了"                     │
-│    实现: Session Monitor + Prompt动态注入                  │
-│    时机: 智能体自主运行时（每5次工具调用评估一次）          │
-│                                                           │
-│  ⑤ 持续学习 — "AI每天都比昨天聪明一点"                     │
-│    实现: PostSession分析                                   │
-│    时机: 每次会话结束后                                    │
-│                                                           │
-│  知识编译器: 知识库 → CLAUDE.md / skill / hook规则 /       │
-│             .cursorrules(远期) / AGENTS.md(远期)           │
-│                                                           │
-│  Knowledge Portal（活的团队Wiki）:                         │
-│  • /teamagent stats — 终端统计摘要（Phase 1即可用）        │
-│  • /teamagent portal — 静态HTML快照                       │
-│  • /teamagent portal --live — 实时HTTP服务+WebSocket      │
-└─────────────────────────┬────────────────────────────────┘
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  Layer 6: 同步层 (Sync Layer)                             │
-│                                                           │
-│  MVP: 本地文件 + git仓库同步                               │
-│  远期: 云端同步服务                                        │
-│                                                           │
-│  审核门（团队层）:                                         │
-│  • AI预审: 格式/质量/冲突检测                              │
-│  • objective知识: 快速确认即可                             │
-│  • subjective知识: 需≥2人支持，标注为"团队约定"            │
-│  • 冲突知识显式标记，供团队讨论                             │
-│  • 人工确认 → merge到团队知识库                            │
-└──────────────────────────────────────────────────────────┘
+用户 → Claude Code → [TeamAgent 六层]
+                       1. 采集
+                       2. 识别
+                       3. 分析
+                       4. 知识库
+                       5. 输出（回流到 Claude Code）
+                       6. 同步（跨用户）
 ```
+
+| 层 | 职责 | 关键组件 |
+|----|------|----------|
+| **1. 采集（Collection）** | 从Claude Code各处取原始数据 | 会话日志读取 / Hook (PreToolUse/PostToolUse) / git diff / 终端输出 / `/pitfall` 主动录入 |
+| **2. 识别（Detection）** | 从原始数据中识别有价值信号 | 纠正时刻识别器（负面，多信号融合）+ 成功模式捕获器（正面：一次成功/表扬/重复使用/多人采纳）|
+| **3. 分析（Analysis）** | 把信号结构化成知识 | 归因分类器（C/E/S/K+标签）/ 知识提取器（avoidance+practice）/ 性质判定器（objective vs subjective）/ 冲突检测器 / 去重合并器（intervention_id 关联） |
+| **4. 知识库（Knowledge Base）** | 存储、检索、生命周期管理 | JSONL存储（git可追踪）/ 分阶段检索 / 回放验证器 / 置信度校准 / 衰减 / 冲突仲裁队列。scope分三层：`personal` / `team` / `global` |
+| **5. 输出（Delivery）** | 把知识还给 Claude Code | 五种帮助方式（见下表）+ 知识编译器（多目标格式）+ Knowledge Portal |
+| **6. 同步（Sync）** | 跨用户共享 | MVP: git；远期: 云端。审核门把关 personal → team 的流转 |
+
+**五种帮助方式**：
+
+| # | 名称 | 含义 | 实现 | 时机 |
+|---|------|------|------|------|
+| ① | 工作习惯基线 | 会话开始时 AI 就带着经验 | CLAUDE.md 编译（元原则+导入规则+积累知识） | 每次会话开始 |
+| ② | 实时顾问 | AI 做事前主动查询有没有坑 **（核心）** | MCP Server（`check_pitfall` / `get_best_practice` / `report_correction` / `get_stats`） | AI 思考时（主动调用 + Hook 自动触发） |
+| ③ | 安全护栏 | AI 不会执行已知的错误操作 | Hook 脚本 PreToolUse / PostToolUse | 每次工具调用前。用户可 `/teamagent override` 临时绕过 |
+| ④ | 全局视野 | AI 自己发现跑偏了 | Session Monitor + Prompt 动态注入 | 智能体自主运行时，每 5 次工具调用评估一次 |
+| ⑤ | 持续学习 | AI 每天都比昨天聪明一点 | PostSession 分析 | 每次会话结束后 |
+
+**Knowledge Portal** 三种形态：`/teamagent stats`（终端摘要，Phase 1 即可用）/ `/teamagent portal`（静态 HTML 快照）/ `/teamagent portal --live`（实时 HTTP + WebSocket，Phase 3）
+
+**团队审核门**（Layer 6 的把关点）：AI 预审（格式/质量/冲突检测）→ objective 知识快速确认 / subjective 知识需 ≥2 人支持并标注"团队约定"→ 冲突知识显式标记供团队讨论 → 人工确认后 merge 到团队知识库。
 
 ### 五种帮助方式覆盖矩阵
 
-以初始子标签为例展示覆盖范围（实际子标签随分类自审动态扩展）：
+每个子标签都至少被两种帮助方式覆盖。① 列表示"如果知识库里有这类知识，会通过 CLAUDE.md 编译进来"，并不代表系统预装了这类知识——预装仅限元原则（见最后两行）。
 
-说明：
-- ① 工作习惯基线：通过 CLAUDE.md 编译分发。内容包括 **预置元原则**（仅K/S层的少数几条）+ **导入的已有规则** + **已积累的团队/个人知识**。除元原则外，其他条目都来自用户实际使用，不是随安装预置。
-- ② ③ ④ ⑤：不依赖预置，只要知识库有对应条目就能起作用。
+| 大类 | 子标签 | ① 工作习惯 | ② 实时顾问 | ③ 安全护栏 | ④ 全局视野 | ⑤ 持续学习 |
+|------|--------|:---------:|:---------:|:---------:|:---------:|:---------:|
+| C | syntax-error      |   | ✓ |   |   | ✓ |
+| C | api-hallucination | ✓ | ✓ |   |   | ✓ |
+| C | hidden-logic      | ✓ |   |   | ✓ | ✓ |
+| C | security          | ✓ | ✓ | ✓ |   | ✓ |
+| C | performance       | ✓ |   |   | ✓ | ✓ |
+| E | tech-choice       | ✓ |   |   | ✓ | ✓ |
+| E | architecture      | ✓ |   |   | ✓ | ✓ |
+| E | workflow-order    | ✓ | ✓ | ✓ |   | ✓ |
+| E | config-blindspot  | ✓ | ✓ |   |   | ✓ |
+| E | testing-strategy  | ✓ |   |   | ✓ | ✓ |
+| E | deployment        | ✓ | ✓ |   |   | ✓ |
+| S | wrong-direction   | ✓ |   |   | ✓ | ✓ |
+| S | over-engineering  | ✓ |   |   | ✓ | ✓ |
+| S | under-engineering | ✓ |   |   | ✓ | ✓ |
+| S | context-blindness | ✓ |   |   | ✓ | ✓ |
+| K | version-lag       | ✓ | ✓ |   |   | ✓ |
+| K | domain-gap        | ✓ |   |   |   | ✓ |
+| K | team-tacit        | ✓ |   |   |   | ✓ |
+| K | unknown-better    | ✓ |   |   |   | ✓ |
+| **K** | **metacognition**（元原则） | **✓** | ✓ |   |   | ✓ |
+| **S** | **workflow-principles**（元原则） | **✓** | ✓ |   |   | ✓ |
 
-```
-                         工作   实时  安全  全局  持续
-                         习惯   顾问  护栏  视野  学习
-                         ①     ②    ③    ④    ⑤
-────────────────────────────────────────────────────
-C syntax-error                      ✓              ✓
-C api-hallucination          ✓     ✓              ✓
-C hidden-logic               ✓           ✓        ✓
-C security                   ✓     ✓     ✓        ✓
-C performance                ✓           ✓        ✓
-────────────────────────────────────────────────────
-E tech-choice                ✓           ✓        ✓
-E architecture               ✓           ✓        ✓
-E workflow-order             ✓     ✓     ✓        ✓
-E config-blindspot           ✓     ✓              ✓
-E testing-strategy           ✓           ✓        ✓
-E deployment                 ✓     ✓              ✓
-────────────────────────────────────────────────────
-S wrong-direction            ✓           ✓        ✓
-S over-engineering           ✓           ✓        ✓
-S under-engineering          ✓           ✓        ✓
-S context-blindness          ✓           ✓        ✓
-────────────────────────────────────────────────────
-K version-lag                ✓     ✓              ✓
-K domain-gap                 ✓                    ✓
-K team-tacit                 ✓                    ✓
-K unknown-better             ✓                    ✓
-────────────────────────────────────────────────────
-K metacognition       ✓      ✓                    ✓   ← 唯一预置即生效
-S workflow-principles ✓      ✓                    ✓   ← 唯一预置即生效
-────────────────────────────────────────────────────
-① 列的 ✓ 表示"如果知识库中有这类知识，会通过CLAUDE.md编译进来"，
-  而非"系统预装了这类知识"。预装仅限最后两行（K metacognition /
-  S workflow-principles 的元原则）。
-```
+子标签会随分类自审动态扩展，新标签自动继承所属大类的覆盖模式。
 
 ### 规则的作用域(Scope)
 
@@ -955,31 +839,24 @@ npx teamagent uninstall
 
 ---
 
-## 十一、竞品分析
+## 十一、相关工作与差异
 
-| 产品/论文 | 与TeamAgent的差异 |
-|----------|------------------|
-| CLAUDE.md / .cursorrules | 人写人维护的静态规则，不自动进化 |
-| gstack /learn | 本地JSONL存储，不支持团队共享，无语义搜索 |
-| SkillClaw (2026.4) | 面向通用agent，非软件开发团队 |
-| SkillX (2026.4) | 离线批量构建，非实时进化 |
-| Trace2Skill (2026.3) | 单智能体优化，非跨用户 |
-| Hermes Agent | 单用户框架，无团队协作原语 |
-| Memento-Skills | 学术框架，非生产部署 |
+| 工作 | 类型 | 核心 | 与 TeamAgent 的差异 |
+|------|------|------|--------------------|
+| CLAUDE.md / .cursorrules | 产品 | 手写AI规则文件 | 人写人维护的静态规则，不自动积累不自动校准 |
+| gstack `/learn` | 产品 | 本地JSONL经验库 | 单用户本地，无团队共享、无语义搜索、无校准机制 |
+| [SkillClaw](https://arxiv.org/abs/2604.08377) (2026.4) | 论文 | 多用户集体技能进化 | 面向通用agent，非软件开发团队；无纠正时刻捕获 |
+| [SkillX](https://arxiv.org/abs/2604.04804) (2026.4) | 论文 | 自动构建三层技能知识库 | 离线批量构建，非实时；无 Hook/MCP 实时防护 |
+| [Trace2Skill](https://arxiv.org/abs/2603.25158) (2026.3) | 论文 | 轨迹蒸馏为可迁移技能 | 单智能体优化，非跨用户；证明了双信号（成功+失败）+21.50pp |
+| [SkillRL](https://arxiv.org/abs/2602.08234) (2026.2) | 论文 | 递归技能强化学习 | 强化学习框架，非产品级 |
+| [SWE-Bench-CL](https://arxiv.org/abs/2507.00014) (2025) | 基准 | 持续学习编码基准 | 用作评估参考，非产品 |
+| [Hermes Agent](https://yuv.ai/blog/hermes-agent) | 产品 | 四层记忆自改进AI | 单用户框架，无团队协作原语 |
+| Memento-Skills | 论文 | 技能记忆框架 | 学术框架，非生产部署 |
 
-TeamAgent的差异化: 面向软件开发团队 + 纠正时刻+成功模式双信号 + 五种帮助方式全覆盖 + 团队级集体进化 + 活的知识门户
+**TeamAgent 的差异化定位**：面向软件开发团队 + 纠正时刻 + 成功模式双信号 + 五种帮助方式全覆盖 + 团队级集体进化 + 活的知识门户。
 
----
-
-## 十二、相关论文和资料
-
-- [SkillClaw](https://arxiv.org/abs/2604.08377) — 多用户集体技能进化 (2026.4)
-- [SkillX](https://arxiv.org/abs/2604.04804) — 自动构建三层技能知识库 (2026.4)
-- [Trace2Skill](https://arxiv.org/abs/2603.25158) — 轨迹蒸馏为可迁移技能 (2026.3)
-- [SkillRL](https://arxiv.org/abs/2602.08234) — 递归技能强化学习 (2026.2)
-- [SWE-Bench-CL](https://arxiv.org/abs/2507.00014) — 持续学习编码基准 (2025)
-- [Encoding Team Standards](https://martinfowler.com/articles/reduce-friction-ai/encoding-team-standards.html) — 团队标准编码 (2026.3)
-- [Self-Improving Coding Agents](https://addyosmani.com/blog/self-improving-agents/) — 自改进编码智能体 (2026.1)
-- [Hermes Agent](https://yuv.ai/blog/hermes-agent) — 四层记忆自改进AI
-- [API Misuse in LLMs](https://arxiv.org/html/2503.22821) — LLM的API误用分类
+**其他参考资料**：
+- [Encoding Team Standards](https://martinfowler.com/articles/reduce-friction-ai/encoding-team-standards.html) (2026.3) — 团队标准编码
+- [Self-Improving Coding Agents](https://addyosmani.com/blog/self-improving-agents/) (2026.1) — 自改进编码智能体综述
+- [API Misuse in LLMs](https://arxiv.org/html/2503.22821) — LLM 的 API 误用分类（用于 C/api-hallucination 子标签设计）
 - [LLM Code Hallucinations](https://arxiv.org/html/2409.20550v1) — 代码幻觉研究
