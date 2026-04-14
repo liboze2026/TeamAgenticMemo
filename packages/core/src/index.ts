@@ -16,6 +16,12 @@ export { buildExtractionPrompt } from "./extractor/prompt.js";
 export { extractRuleBullets } from "./importer/claude-md-parser.js";
 export { extractCursorRules } from "./importer/cursor-rules-parser.js";
 export {
+  structureRuleText,
+  structureRuleTextsBatch,
+  DEFAULT_IMPORT_CONFIDENCE,
+  type RuleStructureResult,
+} from "./importer/rule-structurer.js";
+export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
 } from "./extractor/llm-based.js";
