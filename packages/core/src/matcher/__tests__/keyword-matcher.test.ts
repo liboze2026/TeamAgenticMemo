@@ -1,0 +1,272 @@
+import { describe, it, expect } from "vitest";
+import { matchRules } from "../keyword-matcher.js";
+import type { KnowledgeEntry } from "@teamagent/types";
+
+function makeRule(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
+  return {
+    id: "r",
+    scope: { level: "personal" },
+    category: "E",
+    tags: ["t"],
+    type: "avoidance",
+    nature: "objective",
+    trigger: "",
+    wrong_pattern: "",
+    correct_pattern: "",
+    reasoning: "",
+    confidence: 0.8,
+    enforcement: "warn",
+    status: "active",
+    hit_count: 0,
+    success_count: 0,
+    override_count: 0,
+    evidence: { success_sessions: 0, success_users: 0, correction_sessions: 0 },
+    created_at: "2026-04-14T00:00:00Z",
+    last_hit_at: "",
+    last_validated_at: "",
+    source: "accumulated",
+    conflict_with: [],
+    ...overrides,
+  };
+}
+
+describe("matchRules — basic matching", () => {
+  it("empty rules → no matches", () => {
+    expect(
+      matchRules({ toolName: "Bash", input: { command: "ls" } }, []),
+    ).toEqual([]);
+  });
+
+  it("matches Bash command containing wrong_pattern", () => {
+    const rule = makeRule({
+      id: "moment",
+      wrong_pattern: "moment",
+      correct_pattern: "dayjs",
+      reasoning: "deprecated",
+    });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "npm install moment" } },
+      [rule],
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.id).toBe("moment");
+  });
+
+  it("does not match when pattern absent", () => {
+    const rule = makeRule({ wrong_pattern: "moment" });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "npm install dayjs" } },
+      [rule],
+    );
+    expect(matches).toEqual([]);
+  });
+
+  it("matches only avoidance type rules (not practice)", () => {
+    const practice = makeRule({
+      id: "p",
+      type: "practice",
+      wrong_pattern: "",
+      correct_pattern: "好的实践",
+    });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "anything" } },
+      [practice],
+    );
+    expect(matches).toEqual([]);
+  });
+
+  it("ignores archived rules", () => {
+    const rule = makeRule({
+      id: "old",
+      wrong_pattern: "rm -rf",
+      status: "archived",
+    });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "rm -rf /" } },
+      [rule],
+    );
+    expect(matches).toEqual([]);
+  });
+
+  it("matches case-insensitively", () => {
+    const rule = makeRule({ wrong_pattern: "moment" });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "NPM INSTALL MOMENT" } },
+      [rule],
+    );
+    expect(matches).toHaveLength(1);
+  });
+});
+
+describe("matchRules — multi-field input scanning", () => {
+  it("matches Write tool against file_path", () => {
+    const rule = makeRule({
+      wrong_pattern: ".env.production",
+    });
+    const matches = matchRules(
+      {
+        toolName: "Write",
+        input: { file_path: "config/.env.production", content: "SECRET=x" },
+      },
+      [rule],
+    );
+    expect(matches).toHaveLength(1);
+  });
+
+  it("matches Write tool against content", () => {
+    const rule = makeRule({ wrong_pattern: "console.log" });
+    const matches = matchRules(
+      {
+        toolName: "Write",
+        input: { file_path: "src/index.ts", content: "console.log('debug')" },
+      },
+      [rule],
+    );
+    expect(matches).toHaveLength(1);
+  });
+
+  it("matches Edit tool against new_string", () => {
+    const rule = makeRule({ wrong_pattern: "TODO" });
+    const matches = matchRules(
+      {
+        toolName: "Edit",
+        input: { file_path: "x.ts", old_string: "ok", new_string: "TODO later" },
+      },
+      [rule],
+    );
+    expect(matches).toHaveLength(1);
+  });
+
+  it("matches WebFetch url", () => {
+    const rule = makeRule({ wrong_pattern: "internal.company.com" });
+    const matches = matchRules(
+      { toolName: "WebFetch", input: { url: "https://internal.company.com/x", prompt: "p" } },
+      [rule],
+    );
+    expect(matches).toHaveLength(1);
+  });
+});
+
+describe("matchRules — multi-pattern OR semantics", () => {
+  it("multiple patterns separated by | match any", () => {
+    const rule = makeRule({ wrong_pattern: "moment|lodash|jquery" });
+    expect(
+      matchRules({ toolName: "Bash", input: { command: "npm install lodash" } }, [rule]),
+    ).toHaveLength(1);
+    expect(
+      matchRules({ toolName: "Bash", input: { command: "npm install jquery" } }, [rule]),
+    ).toHaveLength(1);
+    expect(
+      matchRules({ toolName: "Bash", input: { command: "npm install dayjs" } }, [rule]),
+    ).toEqual([]);
+  });
+
+  it("multiple patterns separated by / also match any (legacy)", () => {
+    const rule = makeRule({ wrong_pattern: "moment/lodash" });
+    expect(
+      matchRules({ toolName: "Bash", input: { command: "use lodash" } }, [rule]),
+    ).toHaveLength(1);
+  });
+});
+
+describe("matchRules — scope filtering", () => {
+  it("scope.file_types filters by extension", () => {
+    const cssRule = makeRule({
+      wrong_pattern: ".module.css",
+      scope: { level: "team", file_types: ["*.css"] },
+    });
+
+    // matches .css file
+    expect(
+      matchRules(
+        {
+          toolName: "Write",
+          input: { file_path: "src/x.module.css", content: "" },
+        },
+        [cssRule],
+      ),
+    ).toHaveLength(1);
+
+    // does not match .ts even if pattern is in content
+    expect(
+      matchRules(
+        {
+          toolName: "Write",
+          input: { file_path: "src/x.ts", content: "import './x.module.css'" },
+        },
+        [cssRule],
+      ),
+    ).toEqual([]);
+  });
+
+  it("scope.paths filters by path glob (prefix match Phase 1 simple)", () => {
+    const rule = makeRule({
+      wrong_pattern: "import",
+      scope: { level: "team", paths: ["packages/core/**"] },
+    });
+    expect(
+      matchRules(
+        {
+          toolName: "Write",
+          input: { file_path: "packages/core/src/x.ts", content: "import x" },
+        },
+        [rule],
+      ),
+    ).toHaveLength(1);
+    expect(
+      matchRules(
+        {
+          toolName: "Write",
+          input: { file_path: "packages/cli/src/x.ts", content: "import x" },
+        },
+        [rule],
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("matchRules — multiple rules", () => {
+  it("returns all matching rules", () => {
+    const r1 = makeRule({ id: "a", wrong_pattern: "moment" });
+    const r2 = makeRule({ id: "b", wrong_pattern: "install" });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "npm install moment" } },
+      [r1, r2],
+    );
+    expect(matches.map((r) => r.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("matches sorted by enforcement strength (block > warn > suggest)", () => {
+    const block = makeRule({
+      id: "block",
+      wrong_pattern: "x",
+      enforcement: "block",
+    });
+    const warn = makeRule({ id: "warn", wrong_pattern: "x", enforcement: "warn" });
+    const suggest = makeRule({
+      id: "suggest",
+      wrong_pattern: "x",
+      enforcement: "suggest",
+    });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "x" } },
+      [warn, suggest, block],
+    );
+    expect(matches.map((r) => r.id)).toEqual(["block", "warn", "suggest"]);
+  });
+});
+
+describe("matchRules — performance", () => {
+  it("100 rules: matching takes < 5ms", () => {
+    const rules = Array.from({ length: 100 }, (_, i) =>
+      makeRule({ id: `r${i}`, wrong_pattern: `pattern${i}` }),
+    );
+    const ctx = { toolName: "Bash", input: { command: "pattern50 in command" } };
+
+    const start = performance.now();
+    matchRules(ctx, rules);
+    const duration = performance.now() - start;
+
+    expect(duration).toBeLessThan(5);
+  });
+});
