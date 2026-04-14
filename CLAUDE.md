@@ -41,7 +41,7 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（28条活跃知识）
+## TeamAgent 经验（32条活跃知识）
 - 使用 batch insert 一次性批量插入 而非 循环逐条插入|for.*insert|loop insert——逐条插入每次都有网络往返和事务开销，几百条就会明显变慢；batch insert 一次请求完成，性能通常高一到两个数量级 [0.95]
 - 使用 fetch 而非 axios——项目约定使用原生 fetch 以减少依赖；axios 不符合该约定 [0.95]
 - 使用 Zustand 而非 Redux Toolkit|@reduxjs/toolkit|redux——用户偏好轻量方案；Redux Toolkit 虽然功能完整但样板代码和学习成本高，Zustand API 极简、包体积小，更符合项目轻量化倾向 [0.80]
@@ -70,4 +70,8 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 使用 用 process.cwd() —— vitest 从 repo 根启动，cwd 可靠。或直接用 packages-local 相对路径 而非 path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../../..")——多层 ".." 退路径容易少退一层或多退一层，且 url.pathname 在 Windows 上前缀 / 还需处理。process.cwd() 零歧义 [0.70]
 - 使用 中文场景去掉 \\b，用显式锚点或前后文字符类。\\b 只在 ASCII 单词字符边界工作 而非 正则用 \\b 包裹中文词，例如 /\\b(用|改用|上)\\s*X\\b/——\\b 定义为 \\w 与非 \\w 之间的边界；中文字符不属于 JavaScript 的 \\w（默认没开 /u 标志时），"用" 前后不产生 boundary，正则永远不会命中 [0.70]
 - 使用 经 stdin 传 prompt；args 只放 flags：['-p', '--output-format', 'json', '--no-session-persistence']，然后 child.stdin.write(prompt) + end() 而非 把 prompt 当 positional arg 传给 claude -p，例如 args=['-p', fullPrompt, '--output-format', 'json']——Windows 命令行长度有 ~8KB 限制，extraction/evaluation 等真实 prompt 一般 2-5KB，positional arg 不稳定；stdin 同时免去特殊字符转义。实证：echo '...' | claude -p --output-format json --no-session-persistence 正常返回 {type:'result', result:'...'} [0.70]
+- 先写失败测试（红）→ 写最小实现（绿）→ 重构（如需）→ commit——TDD 让接口设计先行，测试与实现紧耦合；避免写完实现才发现接口难用 [0.60] [预置]
+- 一个 commit 只做一件概念上完整的事，tests 要过；commit message 说清'做了什么+为什么'——小 commit 让 review 容易、回滚粒度细、git bisect 有意义；批量提交会让 bug 定位变噩梦 [0.60] [预置]
+- 用 teamagent pitfall（交互）或 teamagent pitfall --non-interactive --trigger=... --correct=... 录入；不要手工编辑 .teamagent/knowledge.jsonl——pitfall 命令会补齐 id/时间戳/scope/enforcement 等字段并触发 CLAUDE.md 重编译；手工编辑容易写出不合 schema 的条目、忘记重新编译 [0.60] [预置]
+- 先确认项目里有没有已有文件能承载该改动；优先编辑现有文件，只在真的需要时才新建——不必要的新文件会让 reviewer 分心、让 import 关系复杂；大多数小改动应该在现有模块里完成 [0.60] [预置]
 <!-- TEAMAGENT:END -->
