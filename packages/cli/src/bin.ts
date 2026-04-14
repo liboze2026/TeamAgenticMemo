@@ -8,6 +8,7 @@ import {
 import { executeStats } from "./commands/stats.js";
 import { executeDemoHook, parseDemoHookArgs } from "./commands/demo-hook.js";
 import { installHook, uninstallHook } from "./commands/install-hook.js";
+import { executeAnalyze, parseAnalyzeArgs } from "./commands/analyze.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -71,6 +72,12 @@ async function main(): Promise<void> {
       }
       return;
     }
+    case "analyze": {
+      const opts = parseAnalyzeArgs(rest);
+      const output = await executeAnalyze(opts);
+      process.stdout.write(output);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -89,6 +96,8 @@ async function main(): Promise<void> {
           "                                   离线模拟 PreToolUse hook (例: teamagent demo hook Bash 'command=npm install moment')",
           "  teamagent install-hook           把 PreToolUse hook 注册到当前项目 .claude/settings.local.json",
           "  teamagent uninstall-hook         移除 PreToolUse hook 注册",
+          "  teamagent analyze [--session=<id|path>] [--verbose]",
+          "                                   分析 Claude Code 会话日志，识别纠正时刻+成功信号（dry-run，不写入）",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",
