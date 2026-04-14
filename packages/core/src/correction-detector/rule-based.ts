@@ -73,8 +73,8 @@ export const ruleBasedCorrectionDetector: CorrectionDetector = {
         }
       }
 
-      // Signal D: code_edit — 用户告诉 AI 自己改了代码 / 下一 turn AI 用 Edit 大改
-      const codeEdit = detectCodeEdit(turn, session.turns[i + 1]);
+      // Signal D: code_edit — 用户告诉 AI 自己改了代码 / 当前 turn AI 用 Edit 替换
+      const codeEdit = detectCodeEdit(turn);
       if (codeEdit && !out.find((m) => m.turnIndex === i)) {
         out.push(buildMoment(turn, prevTurn, "code_edit", 0.8));
       }
@@ -138,23 +138,17 @@ function detectOverride(assistantText: string, userText: string): boolean {
 }
 
 /**
- * 识别 code_edit：
- * 1. 用户 message 含"我改了" / "我重写了" / "你看我改的"
- * 2. 或：下一个 turn AI 用 Edit 工具，new_string 显著长于 old_string
+ * 识别 code_edit：user 在当前 turn 说"我改了" / 或当前 turn 的 AI Edit
+ * 是替换用户贴来的完整版本（new_string 远长于 old_string）。
+ * 判当前 turn 而非 next turn —— 语义是"user 在这 turn 改了"。
  */
-function detectCodeEdit(
-  turn: SessionTurn,
-  nextTurn: SessionTurn | undefined,
-): boolean {
+function detectCodeEdit(turn: SessionTurn): boolean {
   if (/我改了|我重写了|你看我改/i.test(turn.userMessage)) return true;
-  if (!nextTurn) return false;
-
-  for (const tc of nextTurn.toolCalls) {
+  for (const tc of turn.toolCalls) {
     if (tc.name !== "Edit") continue;
     const inp = tc.input as { old_string?: unknown; new_string?: unknown };
     const oldStr = typeof inp.old_string === "string" ? inp.old_string : "";
     const newStr = typeof inp.new_string === "string" ? inp.new_string : "";
-    // 用户显著重写：new 比 old 长 2 倍以上 且 new > 200 字符
     if (newStr.length > oldStr.length * 2 && newStr.length > 200) return true;
   }
   return false;

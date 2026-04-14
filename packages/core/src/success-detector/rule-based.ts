@@ -1,9 +1,9 @@
 import type {
   SuccessDetector,
   SuccessSignal,
-  SuccessSignalType,
 } from "@teamagent/ports";
-import type { ParsedSession, SessionTurn, ToolCall } from "@teamagent/types";
+import type { ParsedSession, ToolCall } from "@teamagent/types";
+import { ruleBasedCorrectionDetector } from "../correction-detector/rule-based.js";
 
 /**
  * 显式表扬关键词。
@@ -14,13 +14,20 @@ const PRAISE_PATTERNS: RegExp[] = [
   /\b(perfect|great|nice|excellent|exactly|works?|lgtm|awesome)\b/i,
 ];
 
-/**
- * 纠正关键词（success detector 需要识别是否被纠正，以决定是否算 one_shot）
- */
+/** 纠正关键词——用于快速判定一条 user message 是否为 denial。 */
 const DENIAL_PATTERNS: RegExp[] = [
   /不对|错了|不要|别这样|别那样|别用|思路不对|方向不对|换[一个种]|改用|重来|重新|不该|不应该/,
   /\b(no|wrong|don't|not|never|instead|that'?s wrong)\b/i,
 ];
+
+/** 只有这些工具代表 AI 实际"生成/修改/执行"，Read/Glob 等只读不算一次"成就" */
+const PRODUCTIVE_TOOLS = new Set([
+  "Write",
+  "Edit",
+  "NotebookEdit",
+  "Bash",
+  "WebFetch",
+]);
 
 function isDenial(text: string): boolean {
   return DENIAL_PATTERNS.some((p) => p.test(text));
@@ -41,6 +48,18 @@ function categorizeToolCall(tc: ToolCall): string {
   return `${tc.name}:${ext}`;
 }
 
+/** 判断一个 turn 内是否有"生产性"工具调用 */
+function hasProductiveToolCall(turn: { toolCalls: ToolCall[] }): boolean {
+  return turn.toolCalls.some((tc) => PRODUCTIVE_TOOLS.has(tc.name));
+}
+
+/** 该 turn 的所有生产性工具是否全部成功（undefined 视为成功—— parser 没抓到 tool_result 的情况）*/
+function allToolsSucceeded(turn: { toolCalls: ToolCall[] }): boolean {
+  return turn.toolCalls.every(
+    (tc) => !PRODUCTIVE_TOOLS.has(tc.name) || tc.succeeded !== false,
+  );
+}
+
 /**
  * 规则版成功信号识别器（纯函数）。
  */
@@ -48,8 +67,14 @@ export const ruleBasedSuccessDetector: SuccessDetector = {
   detect(session: ParsedSession): SuccessSignal[] {
     const out: SuccessSignal[] = [];
 
-    // 标记哪些 turn 是被纠正的（后续 user message 含否定词 → 前一 turn 有问题）
+    // 复用 correction detector 的结果标记被纠正的 AI turn
+    const corrections = ruleBasedCorrectionDetector.detect(session);
     const correctedTurns = new Set<number>();
+    for (const c of corrections) {
+      // user 在 turn c.turnIndex 纠正，被纠正的 AI 行为在 turn c.turnIndex - 1
+      if (c.turnIndex > 0) correctedTurns.add(c.turnIndex - 1);
+    }
+    // 再加一层：任何 denial user message 都认为前面那 turn 有问题
     for (let i = 1; i < session.turns.length; i++) {
       if (isDenial(session.turns[i]!.userMessage)) {
         correctedTurns.add(i - 1);
@@ -57,33 +82,62 @@ export const ruleBasedSuccessDetector: SuccessDetector = {
     }
 
     // Signal A: explicit_praise — user 后续 message 里有表扬词
+    // turnIndex 指向 user 说表扬的那个 turn（方便 manifest 对照）
     for (let i = 1; i < session.turns.length; i++) {
       const turn = session.turns[i]!;
       if (isPraise(turn.userMessage) && !isDenial(turn.userMessage)) {
-        // 表扬一般指向前一 turn（AI 做的事）
         const prev = session.turns[i - 1];
         out.push({
           signal: "explicit_praise",
           weight: 0.8,
-          turnIndex: i - 1,
+          turnIndex: i,
           assistantText: prev?.assistantText ?? "",
           toolCalls: (prev?.toolCalls ?? []).map(summarizeToolCall),
-          timestamp: prev?.timestamp ?? turn.timestamp,
+          timestamp: turn.timestamp,
         });
       }
     }
 
-    // Signal B: one_shot_success — AI 做了事 + 用户没纠正（进入下一个任务）
-    // 判定：turn i 的 AI 有 tool_use；turn i+1 存在；turn i+1 不是 denial
-    // 且 turn i 本身没被 correctedTurns 标记
+    // Signal C: repeated_pattern —— 先跑以便 Signal B 跳过已覆盖的 turn
+    const patternCount = new Map<string, number[]>();
+    for (const turn of session.turns) {
+      if (correctedTurns.has(turn.turnIndex)) continue;
+      if (!allToolsSucceeded(turn)) continue;
+      const seenInTurn = new Set<string>();
+      for (const tc of turn.toolCalls) {
+        if (!PRODUCTIVE_TOOLS.has(tc.name)) continue;
+        const cat = categorizeToolCall(tc);
+        if (seenInTurn.has(cat)) continue;
+        seenInTurn.add(cat);
+        if (!patternCount.has(cat)) patternCount.set(cat, []);
+        patternCount.get(cat)!.push(turn.turnIndex);
+      }
+    }
+    const repeatedTurns = new Set<number>();
+    for (const [cat, turnIndices] of patternCount.entries()) {
+      if (turnIndices.length < 3) continue;
+      for (const ti of turnIndices) repeatedTurns.add(ti);
+      out.push({
+        signal: "repeated_pattern",
+        weight: 0.6,
+        turnIndex: turnIndices[0]!,
+        assistantText: session.turns[turnIndices[0]!]?.assistantText ?? "",
+        toolCalls: [cat + ` × ${turnIndices.length}`],
+        timestamp: session.turns[turnIndices[0]!]?.timestamp ?? "",
+      });
+    }
+
+    // Signal B: one_shot_success — AI 用"生产性"工具且成功 + 下 turn 无纠正无表扬
+    // 被 repeated_pattern 覆盖的 turn 不再单独报（避免重复归因）
     for (let i = 0; i < session.turns.length; i++) {
       const turn = session.turns[i]!;
       const next = session.turns[i + 1];
       if (!next) continue;
-      if (turn.toolCalls.length === 0) continue;
+      if (!hasProductiveToolCall(turn)) continue;
+      if (!allToolsSucceeded(turn)) continue;
       if (correctedTurns.has(i)) continue;
+      if (repeatedTurns.has(i)) continue;
       if (isDenial(next.userMessage)) continue;
-      // 避免和 explicit_praise 重复上报
       if (isPraise(next.userMessage)) continue;
       out.push({
         signal: "one_shot_success",
@@ -92,29 +146,6 @@ export const ruleBasedSuccessDetector: SuccessDetector = {
         assistantText: turn.assistantText,
         toolCalls: turn.toolCalls.map(summarizeToolCall),
         timestamp: turn.timestamp,
-      });
-    }
-
-    // Signal C: repeated_pattern — 同一工具 + 文件类型 重复 ≥3 次且无纠正
-    const patternCount = new Map<string, number[]>();
-    for (const turn of session.turns) {
-      if (correctedTurns.has(turn.turnIndex)) continue;
-      for (const tc of turn.toolCalls) {
-        const cat = categorizeToolCall(tc);
-        if (!patternCount.has(cat)) patternCount.set(cat, []);
-        patternCount.get(cat)!.push(turn.turnIndex);
-      }
-    }
-    for (const [cat, turnIndices] of patternCount.entries()) {
-      if (turnIndices.length < 3) continue;
-      // 对最早那次报一条 repeated_pattern signal（代表整个模式被重复采用）
-      out.push({
-        signal: "repeated_pattern",
-        weight: 0.6,
-        turnIndex: turnIndices[0]!,
-        assistantText: session.turns[turnIndices[0]!]?.assistantText ?? "",
-        toolCalls: [cat + ` × ${turnIndices.length}`],
-        timestamp: session.turns[turnIndices[0]!]?.timestamp ?? "",
       });
     }
 
