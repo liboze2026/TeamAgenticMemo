@@ -6,3 +6,8 @@ export {
   MarkdownCompiler,
   type CompileWriteInfo,
 } from "./compiler/markdown-compiler.js";
+export { JsonlEventLog } from "./events/jsonl-event-log.js";
+export {
+  handlePreToolUse,
+  type PreToolUseOptions,
+} from "./hook/pre-tool-use.js";

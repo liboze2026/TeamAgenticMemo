@@ -30,3 +30,5 @@ export type {
   PostToolUseInput,
   HookOutput,
 } from "./hook-protocol.js";
+
+export type { PersistedEvent } from "./persisted-event.js";
