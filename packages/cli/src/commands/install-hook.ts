@@ -86,6 +86,14 @@ export function installHook(opts: InstallHookOptions = {}): {
   const settingsPath = path.join(cwd, ".claude", "settings.local.json");
   const hookEntry = opts.hookEntry ?? defaultHookEntry();
 
+  // 确认 bundled .cjs 存在（install-hook 依赖它）
+  if (!fs.existsSync(hookEntry)) {
+    throw new Error(
+      `Hook bundle not found: ${hookEntry}\n` +
+        `请先运行: pnpm --filter @teamagent/cli build:hook`,
+    );
+  }
+
   const settings = readSettings(settingsPath);
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];

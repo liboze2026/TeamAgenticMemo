@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { installHook, uninstallHook } from "../commands/install-hook.js";
 
 function mkTmp(): { cwd: string; cleanup: () => void } {
@@ -12,7 +13,8 @@ function mkTmp(): { cwd: string; cleanup: () => void } {
   };
 }
 
-const FAKE_HOOK_ENTRY = "/fake/hook-entry.ts";
+// 用真实存在的文件作 fake hook entry，绕过"bundle 必须存在"的检查
+const FAKE_HOOK_ENTRY = fileURLToPath(import.meta.url);
 
 describe("installHook", () => {
   let tmp: ReturnType<typeof mkTmp>;
@@ -34,7 +36,9 @@ describe("installHook", () => {
     expect(content.hooks.PreToolUse[0]._teamagentTag).toBe("teamagent-pre-tool-use");
     expect(content.hooks.PreToolUse[0].matcher).toContain("Bash");
     expect(content.hooks.PreToolUse[0].hooks[0].command).toContain("node");
-    expect(content.hooks.PreToolUse[0].hooks[0].command).toContain(FAKE_HOOK_ENTRY);
+    // command 会把反斜杠转为正斜杠
+    const forwardEntry = FAKE_HOOK_ENTRY.replace(/\\/g, "/");
+    expect(content.hooks.PreToolUse[0].hooks[0].command).toContain(forwardEntry);
   });
 
   it("preserves existing user settings", () => {
