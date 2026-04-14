@@ -5,6 +5,7 @@ import {
   runPitfallInteractive,
   parsePitfallArgs,
 } from "./commands/pitfall.js";
+import { executeStats } from "./commands/stats.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -24,6 +25,10 @@ async function main(): Promise<void> {
       if (output) process.stdout.write(output + "\n");
       return;
     }
+    case "stats": {
+      process.stdout.write(executeStats());
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -37,6 +42,7 @@ async function main(): Promise<void> {
           "  teamagent pitfall          手动记录一条踩坑经验 (交互)",
           "  teamagent pitfall --non-interactive --trigger=... --wrong=... --correct=... --reason=...",
           "                             非交互模式 (可选: --category=C|E|S|K --tags=a,b --level=personal|team|global --nature=objective|subjective)",
+          "  teamagent stats            展示知识库统计（按 scope/category，Top 5 命中，最近 5 条）",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",
