@@ -32,6 +32,10 @@ import {
   parseVerifyArgs,
   renderVerifyTerminal,
 } from "./commands/verify.js";
+import {
+  executeDogfoodReport,
+  parseDogfoodReportArgs,
+} from "./commands/dogfood-report.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -153,6 +157,14 @@ async function main(): Promise<void> {
       if (result.passed !== result.total) process.exit(1);
       return;
     }
+    case "dogfood-report": {
+      const opts = parseDogfoodReportArgs(rest);
+      const r = await executeDogfoodReport(opts);
+      process.stdout.write(
+        `📊 自举报告生成: ${r.outputPath}\n  ${r.totalEntries} 条知识 / ${r.totalEvents} 个事件 / ${r.archivedCount} 自动归档\n`,
+      );
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -186,6 +198,8 @@ async function main(): Promise<void> {
           "                                   根据 events.jsonl 重算 confidence + 自动归档低分条目",
           "  teamagent verify [--report=path]",
           "                                   跑 5 个验证场景（踩坑→学习→避坑），输出 PRR/KP 指标",
+          "  teamagent dogfood-report [--output=path]",
+          "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",
