@@ -27,6 +27,11 @@ import {
   parseCalibrateArgs,
   renderCalibrateResult,
 } from "./commands/calibrate.js";
+import {
+  executeVerify,
+  parseVerifyArgs,
+  renderVerifyTerminal,
+} from "./commands/verify.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -138,6 +143,16 @@ async function main(): Promise<void> {
       process.stdout.write(renderCalibrateResult(r));
       return;
     }
+    case "verify": {
+      const opts = parseVerifyArgs(rest);
+      const { result, reportPath } = await executeVerify(opts);
+      process.stdout.write(renderVerifyTerminal(result));
+      if (reportPath) {
+        process.stdout.write(`\n📄 详细报告: ${reportPath}\n`);
+      }
+      if (result.passed !== result.total) process.exit(1);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -169,6 +184,8 @@ async function main(): Promise<void> {
           "                                   完全卸载：移除 Hook 注册 + 清掉 CLAUDE.md 区块；加 --delete-data 同时清数据",
           "  teamagent calibrate [--days=7] [--dry-run]",
           "                                   根据 events.jsonl 重算 confidence + 自动归档低分条目",
+          "  teamagent verify [--report=path]",
+          "                                   跑 5 个验证场景（踩坑→学习→避坑），输出 PRR/KP 指标",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",
