@@ -1,15 +1,27 @@
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { JsonlKnowledgeStore } from "@teamagent/adapters";
-import type { KnowledgeEntry } from "@teamagent/types";
+import { JsonlEventLog, JsonlKnowledgeStore } from "@teamagent/adapters";
+import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
 export interface StatsOptions {
   personalPath?: string;
   teamPath?: string;
   globalPath?: string;
+  eventsPath?: string;
   cwd?: string;
   homeDir?: string;
+  /** 校准变化窗口（天），默认 7 */
+  windowDays?: number;
+  now?: () => Date;
+}
+
+/** 校准变化聚合：按 knowledge_id 累计该窗口内的总 delta */
+export interface ConfidenceMovement {
+  knowledge_id: string;
+  totalDelta: number;
+  trigger?: string;
+  archivedThisWindow: boolean;
 }
 
 function resolvePaths(opts: StatsOptions) {
@@ -21,7 +33,52 @@ function resolvePaths(opts: StatsOptions) {
     teamPath: opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl"),
     globalPath:
       opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl"),
+    eventsPath: opts.eventsPath ?? path.join(home, ".teamagent", "events.jsonl"),
   };
+}
+
+/**
+ * 纯函数：从 calibrator.adjusted 事件聚合每条规则的 confidence 变化。
+ * 仅看 windowDays 内的事件，按 |totalDelta| 倒序。
+ */
+export function aggregateConfidenceMovements(
+  events: PersistedEvent[],
+  windowDays: number,
+  now: Date,
+): ConfidenceMovement[] {
+  const cutoff = now.getTime() - windowDays * 24 * 3600 * 1000;
+  const recent = events.filter((e) => {
+    if (e.kind !== "calibrator.adjusted") return false;
+    if (!e.knowledge_id) return false;
+    if (typeof e.confidence_before !== "number") return false;
+    if (typeof e.confidence_after !== "number") return false;
+    try {
+      return new Date(e.timestamp).getTime() >= cutoff;
+    } catch {
+      return false;
+    }
+  });
+
+  const byId = new Map<string, ConfidenceMovement>();
+  for (const e of recent) {
+    const id = e.knowledge_id!;
+    const delta = (e.confidence_after as number) - (e.confidence_before as number);
+    const existing = byId.get(id);
+    if (existing) {
+      existing.totalDelta += delta;
+      if (e.status_after === "archived") existing.archivedThisWindow = true;
+    } else {
+      byId.set(id, {
+        knowledge_id: id,
+        totalDelta: delta,
+        archivedThisWindow: e.status_after === "archived",
+      });
+    }
+  }
+
+  return [...byId.values()].sort(
+    (a, b) => Math.abs(b.totalDelta) - Math.abs(a.totalDelta),
+  );
 }
 
 function loadIfExists(p: string): KnowledgeEntry[] {
@@ -33,9 +90,11 @@ function loadIfExists(p: string): KnowledgeEntry[] {
   }
 }
 
-/** 纯函数：给定条目列表，生成 stats 报告文本。 */
+/** 纯函数：给定条目列表 + 校准变化，生成 stats 报告文本。 */
 export function renderStats(
   byScope: { personal: KnowledgeEntry[]; team: KnowledgeEntry[]; global: KnowledgeEntry[] },
+  movements: ConfidenceMovement[] = [],
+  windowDays = 7,
 ): string {
   const all = [...byScope.personal, ...byScope.team, ...byScope.global];
   const active = all.filter((e) => e.status === "active");
@@ -110,15 +169,49 @@ export function renderStats(
     lines.push(`  [${date}] ${e.category}/${e.tags[0] ?? "-"}  ${e.trigger}`);
   }
 
+  // M6: 本窗口 confidence 变化 top 5
+  if (movements.length > 0) {
+    lines.push("");
+    lines.push(`本周（${windowDays} 天）confidence 变化 top ${Math.min(5, movements.length)}:`);
+    const triggerById = new Map<string, string>();
+    for (const e of all) triggerById.set(e.id, e.trigger);
+    for (const m of movements.slice(0, 5)) {
+      const sign = m.totalDelta > 0 ? "+" : "";
+      const tag = m.archivedThisWindow ? " [自动归档]" : "";
+      const trig = triggerById.get(m.knowledge_id) ?? "(已删)";
+      lines.push(
+        `  ${sign}${m.totalDelta.toFixed(2)}  ${m.knowledge_id}${tag}`,
+      );
+      lines.push(`         ${trig.slice(0, 80)}`);
+    }
+  }
+
   return lines.join("\n") + "\n";
 }
 
-/** IO 入口：读三个 scope 的知识库并渲染统计。 */
+/** IO 入口：读三个 scope 的知识库 + events.jsonl 并渲染统计。 */
 export function executeStats(opts: StatsOptions = {}): string {
   const paths = resolvePaths(opts);
-  return renderStats({
-    personal: loadIfExists(paths.personalPath),
-    team: loadIfExists(paths.teamPath),
-    global: loadIfExists(paths.globalPath),
-  });
+  const windowDays = opts.windowDays ?? 7;
+  const now = (opts.now ?? (() => new Date()))();
+
+  let events: PersistedEvent[] = [];
+  try {
+    if (fs.existsSync(paths.eventsPath)) {
+      events = new JsonlEventLog(paths.eventsPath).readAll();
+    }
+  } catch {
+    // 损坏 → 视为空
+  }
+  const movements = aggregateConfidenceMovements(events, windowDays, now);
+
+  return renderStats(
+    {
+      personal: loadIfExists(paths.personalPath),
+      team: loadIfExists(paths.teamPath),
+      global: loadIfExists(paths.globalPath),
+    },
+    movements,
+    windowDays,
+  );
 }

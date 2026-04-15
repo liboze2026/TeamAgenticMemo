@@ -22,6 +22,11 @@ import {
   parseUninstallArgs,
   renderUninstallResult,
 } from "./commands/uninstall.js";
+import {
+  executeCalibrate,
+  parseCalibrateArgs,
+  renderCalibrateResult,
+} from "./commands/calibrate.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -127,6 +132,12 @@ async function main(): Promise<void> {
       process.stdout.write(renderUninstallResult(r));
       return;
     }
+    case "calibrate": {
+      const opts = parseCalibrateArgs(rest);
+      const r = await executeCalibrate(opts);
+      process.stdout.write(renderCalibrateResult(r));
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -156,6 +167,8 @@ async function main(): Promise<void> {
           "  teamagent enable                 重新启用 Hook",
           "  teamagent uninstall [--delete-data] [--dry-run]",
           "                                   完全卸载：移除 Hook 注册 + 清掉 CLAUDE.md 区块；加 --delete-data 同时清数据",
+          "  teamagent calibrate [--days=7] [--dry-run]",
+          "                                   根据 events.jsonl 重算 confidence + 自动归档低分条目",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",

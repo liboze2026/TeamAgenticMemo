@@ -174,6 +174,25 @@ async function runCommit(
           events,
           now,
         });
+        // 写 calibrator.adjusted 事件供 stats / Portal 后续读取
+        for (const adj of calResult.adjusted) {
+          try {
+            const ts = now().toISOString();
+            const rand = Math.random().toString(36).slice(2, 8);
+            eventLog.append({
+              id: `cal-${ts.replace(/[-:T.Z]/g, "").slice(0, 14)}-${rand}`,
+              kind: "calibrator.adjusted",
+              knowledge_id: adj.knowledge_id,
+              confidence_before: adj.before,
+              confidence_after: adj.after,
+              status_after: adj.status_after,
+              timestamp: ts,
+              schema_version: 1,
+            });
+          } catch {
+            // 写失败不影响主流程
+          }
+        }
         if (calResult.adjusted.length > 0) {
           calibrationSummary +=
             `  ${storePath}: 调整 ${calResult.adjusted.length} 条` +

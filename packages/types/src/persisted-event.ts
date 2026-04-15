@@ -45,6 +45,12 @@ export interface PersistedEvent {
   };
   /** 当前工作目录 */
   cwd?: string;
+  /** Calibrator 调整前的 confidence（仅 calibrator.adjusted 用） */
+  confidence_before?: number;
+  /** Calibrator 调整后的 confidence（仅 calibrator.adjusted 用） */
+  confidence_after?: number;
+  /** Calibrator 调整后的 status（仅 calibrator.adjusted；可能 active→archived） */
+  status_after?: "active" | "conflict" | "stale" | "archived";
   /** ISO 8601 */
   timestamp: string;
   /** schema 版本，写死 1。新字段必须保持向后兼容（增 optional） */

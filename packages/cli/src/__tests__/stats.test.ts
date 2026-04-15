@@ -2,10 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { executeStats, renderStats } from "../commands/stats.js";
-import { JsonlKnowledgeStore } from "@teamagent/adapters";
+import {
+  executeStats,
+  renderStats,
+  aggregateConfidenceMovements,
+} from "../commands/stats.js";
+import { JsonlEventLog, JsonlKnowledgeStore } from "@teamagent/adapters";
 import { executePitfall } from "../commands/pitfall.js";
-import type { KnowledgeEntry } from "@teamagent/types";
+import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
 function mkTmp() {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "stats-cwd-"));
@@ -178,5 +182,164 @@ describe("executeStats (IO)", () => {
     const out = executeStats({ cwd: tmp.cwd, homeDir: tmp.home });
     // Corrupt lines skipped by JsonlStore; remaining count is 0
     expect(out).toContain("尚无知识条目");
+  });
+
+  describe("M6 confidence movements", () => {
+    it("aggregateConfidenceMovements sums per-rule deltas in window", () => {
+      const events: PersistedEvent[] = [
+        {
+          id: "1",
+          kind: "calibrator.adjusted",
+          knowledge_id: "rule-a",
+          confidence_before: 0.7,
+          confidence_after: 0.75,
+          timestamp: "2026-04-15T01:00:00Z",
+          schema_version: 1,
+        },
+        {
+          id: "2",
+          kind: "calibrator.adjusted",
+          knowledge_id: "rule-a",
+          confidence_before: 0.75,
+          confidence_after: 0.8,
+          timestamp: "2026-04-15T02:00:00Z",
+          schema_version: 1,
+        },
+        {
+          id: "3",
+          kind: "calibrator.adjusted",
+          knowledge_id: "rule-b",
+          confidence_before: 0.5,
+          confidence_after: 0.4,
+          timestamp: "2026-04-15T03:00:00Z",
+          schema_version: 1,
+        },
+      ];
+      const movements = aggregateConfidenceMovements(
+        events,
+        7,
+        new Date("2026-04-15T04:00:00Z"),
+      );
+      // sorted by |delta| desc; rule-a +0.10, rule-b -0.10 (tie → either order ok)
+      const a = movements.find((m) => m.knowledge_id === "rule-a")!;
+      const b = movements.find((m) => m.knowledge_id === "rule-b")!;
+      expect(a.totalDelta).toBeCloseTo(0.1, 5);
+      expect(b.totalDelta).toBeCloseTo(-0.1, 5);
+    });
+
+    it("aggregateConfidenceMovements ignores events outside window", () => {
+      const events: PersistedEvent[] = [
+        {
+          id: "old",
+          kind: "calibrator.adjusted",
+          knowledge_id: "rule-old",
+          confidence_before: 0.7,
+          confidence_after: 0.9,
+          timestamp: "2026-04-01T00:00:00Z",
+          schema_version: 1,
+        },
+      ];
+      const movements = aggregateConfidenceMovements(
+        events,
+        7,
+        new Date("2026-04-15T00:00:00Z"),
+      );
+      expect(movements).toHaveLength(0);
+    });
+
+    it("aggregateConfidenceMovements skips non-calibrator events", () => {
+      const events: PersistedEvent[] = [
+        {
+          id: "p",
+          kind: "hook-pre.matched",
+          knowledge_id: "rule-x",
+          timestamp: "2026-04-15T01:00:00Z",
+          schema_version: 1,
+        },
+      ];
+      expect(
+        aggregateConfidenceMovements(events, 7, new Date("2026-04-15T02:00:00Z")),
+      ).toHaveLength(0);
+    });
+
+    it("flags archivedThisWindow when status_after=archived", () => {
+      const events: PersistedEvent[] = [
+        {
+          id: "1",
+          kind: "calibrator.adjusted",
+          knowledge_id: "rule-x",
+          confidence_before: 0.4,
+          confidence_after: 0.25,
+          status_after: "archived",
+          timestamp: "2026-04-15T01:00:00Z",
+          schema_version: 1,
+        },
+      ];
+      const movements = aggregateConfidenceMovements(
+        events,
+        7,
+        new Date("2026-04-15T02:00:00Z"),
+      );
+      expect(movements[0]!.archivedThisWindow).toBe(true);
+    });
+
+    it("renderStats includes top 5 confidence changes section when movements present", () => {
+      const entry: KnowledgeEntry = makeEntry({
+        id: "rule-a",
+        trigger: "use HTTP client",
+      });
+      const movements = [
+        {
+          knowledge_id: "rule-a",
+          totalDelta: 0.15,
+          archivedThisWindow: false,
+        },
+      ];
+      const out = renderStats(
+        { personal: [entry], team: [], global: [] },
+        movements,
+        7,
+      );
+      expect(out).toContain("本周（7 天）confidence 变化");
+      expect(out).toContain("+0.15");
+      expect(out).toContain("rule-a");
+      expect(out).toContain("use HTTP client");
+    });
+
+    it("renderStats omits movements section when empty", () => {
+      const entry = makeEntry({ id: "rule-a" });
+      const out = renderStats({ personal: [entry], team: [], global: [] }, []);
+      expect(out).not.toContain("confidence 变化");
+    });
+
+    it("executeStats reads events.jsonl and shows movement section", () => {
+      const eventsDir = path.join(tmp.home, ".teamagent");
+      fs.mkdirSync(eventsDir, { recursive: true });
+      const eventsPath = path.join(eventsDir, "events.jsonl");
+      new JsonlEventLog(eventsPath).append({
+        id: "c1",
+        kind: "calibrator.adjusted",
+        knowledge_id: "rule-x",
+        confidence_before: 0.7,
+        confidence_after: 0.75,
+        timestamp: "2026-04-15T01:00:00Z",
+        schema_version: 1,
+      });
+      // Need a knowledge entry too so stats has at least 1 entry
+      const teamDir = path.join(tmp.cwd, ".teamagent");
+      fs.mkdirSync(teamDir, { recursive: true });
+      new JsonlKnowledgeStore(path.join(teamDir, "knowledge.jsonl")).add(
+        makeEntry({ id: "rule-x", scope: { level: "team" } }),
+      );
+
+      const out = executeStats({
+        cwd: tmp.cwd,
+        homeDir: tmp.home,
+        windowDays: 7,
+        now: () => new Date("2026-04-15T02:00:00Z"),
+      });
+      expect(out).toContain("confidence 变化");
+      expect(out).toContain("rule-x");
+    });
   });
 });
