@@ -16,8 +16,16 @@ import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
  *   post.fail after pre.blocked -0.10  规则拦住后用户走的另一条路也失败 → 规则可能错了
  *   5+ 连续成功无失败 bonus     +0.05  proven track record
  *
+ * 重要：每类信号的"次数"会被 log2 归一化（见 normalize() 函数）。
+ * 这样 100 次 fire 不会给 +5.00 的离谱涨幅，而是 ~+0.33。
+ * 防止噪声规则靠刷数堆 confidence。
+ *
+ * 自反检测：当 fire 发生在文档/测试/fixture 上下文（file_path 是
+ * .md/.txt/.rst 或路径含 docs/__tests__/fixtures）时，**反转权重**——
+ * 这种 fire 大概率是文本提及 ≠ 真用法，应当扣分而非加分。
+ *
  * 不实现：
- *   - "用户 override" 信号（要求 protocol 升级，M6 minimum 不做）
+ *   - "用户 override" 信号（要求 protocol 升级，Phase 2）
  *   - 时间衰减（Phase 2 知识衰减引擎再做）
  *
  * 自动归档：confidence 跌破 0.3 时 status: active → archived。
@@ -32,6 +40,34 @@ const W_STREAK_BONUS = 0.05;
 const STREAK_THRESHOLD = 5;
 const ARCHIVE_THRESHOLD = 0.3;
 
+/** 把次数 log2(1+n) 归一化。1 次 → 1.0；5 次 → 2.58；100 次 → 6.66 */
+function normalize(n: number): number {
+  if (n <= 0) return 0;
+  return Math.log2(1 + n);
+}
+
+/**
+ * 自反检测：判断这个事件是否发生在"文本提及"上下文里
+ * （文档 / 测试 fixture / system 自身数据），而不是真正的代码用法。
+ */
+function isDocOrTestContext(event: PersistedEvent): boolean {
+  const fp = event.tool?.input?.file_path;
+  if (typeof fp !== "string" || fp.length === 0) return false;
+  // 文档类后缀
+  if (/\.(md|mdx|txt|rst|adoc)$/i.test(fp)) return true;
+  // 路径段命中文档/测试目录
+  if (
+    /(?:^|[/\\])(docs?|__tests__|tests?|spec|specs|fixtures?|examples?)(?:[/\\]|$)/i.test(
+      fp,
+    )
+  ) {
+    return true;
+  }
+  // teamagent 自身数据 / 配置文件
+  if (fp.includes("/.teamagent/") || fp.includes("\\.teamagent\\")) return true;
+  return false;
+}
+
 export const defaultCalibrator: Calibrator = {
   calibrate(
     entry: KnowledgeEntry,
@@ -42,27 +78,45 @@ export const defaultCalibrator: Calibrator = {
 
     const signals: AppliedSignal[] = [];
 
-    // 1. hook-pre.blocked 加分
-    const blockedEvents = ourEvents.filter(
-      (e) => e.kind === "hook-pre.blocked",
-    );
-    if (blockedEvents.length > 0) {
+    // 把所有 pre 事件分桶：真实代码 vs 文档/测试上下文
+    const blockedAll = ourEvents.filter((e) => e.kind === "hook-pre.blocked");
+    const warnedAll = ourEvents.filter((e) => e.kind === "hook-pre.warned");
+    const blockedReal = blockedAll.filter((e) => !isDocOrTestContext(e));
+    const blockedDoc = blockedAll.filter((e) => isDocOrTestContext(e));
+    const warnedReal = warnedAll.filter((e) => !isDocOrTestContext(e));
+    const warnedDoc = warnedAll.filter((e) => isDocOrTestContext(e));
+
+    // 1a. hook-pre.blocked 真实命中：log 归一化加分
+    if (blockedReal.length > 0) {
       signals.push({
         kind: "hook-pre.blocked",
-        weight: blockedEvents.length * W_PRE_BLOCKED,
-        event_ids: blockedEvents.map((e) => e.id),
+        weight: W_PRE_BLOCKED * normalize(blockedReal.length),
+        event_ids: blockedReal.map((e) => e.id),
+      });
+    }
+    // 1b. hook-pre.blocked 文档/测试上下文：反转，作为 false-positive 信号扣分
+    if (blockedDoc.length > 0) {
+      signals.push({
+        kind: "hook-pre.blocked.doc_context",
+        weight: -W_PRE_BLOCKED * normalize(blockedDoc.length),
+        event_ids: blockedDoc.map((e) => e.id),
       });
     }
 
-    // 2. hook-pre.warned 加分
-    const warnedEvents = ourEvents.filter(
-      (e) => e.kind === "hook-pre.warned",
-    );
-    if (warnedEvents.length > 0) {
+    // 2a. hook-pre.warned 真实命中
+    if (warnedReal.length > 0) {
       signals.push({
         kind: "hook-pre.warned",
-        weight: warnedEvents.length * W_PRE_WARNED,
-        event_ids: warnedEvents.map((e) => e.id),
+        weight: W_PRE_WARNED * normalize(warnedReal.length),
+        event_ids: warnedReal.map((e) => e.id),
+      });
+    }
+    // 2b. hook-pre.warned 文档/测试上下文
+    if (warnedDoc.length > 0) {
+      signals.push({
+        kind: "hook-pre.warned.doc_context",
+        weight: -W_PRE_WARNED * normalize(warnedDoc.length),
+        event_ids: warnedDoc.map((e) => e.id),
       });
     }
 
@@ -97,14 +151,15 @@ export const defaultCalibrator: Calibrator = {
     if (successAfterFire.length > 0) {
       signals.push({
         kind: "post.success_after_fire",
-        weight: successAfterFire.length * W_POST_SUCCESS_AFTER_FIRE,
+        weight: W_POST_SUCCESS_AFTER_FIRE * normalize(successAfterFire.length),
         event_ids: successAfterFire.map((e) => e.id),
       });
     }
     if (failAfterBlock.length > 0) {
+      // failure 是更强的反对信号，直接 log 归一化但保留 -0.10 系数
       signals.push({
         kind: "post.fail_after_block",
-        weight: failAfterBlock.length * W_POST_FAIL_AFTER_BLOCK,
+        weight: W_POST_FAIL_AFTER_BLOCK * normalize(failAfterBlock.length),
         event_ids: failAfterBlock.map((e) => e.id),
       });
     }
