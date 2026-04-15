@@ -6,3 +6,4 @@ export { runKnowledgeStoreContract } from "./__tests__/knowledge-store-contract.
 export { runAttributionBusContract } from "./__tests__/attribution-bus-contract.js";
 export { runLLMClientContract } from "./__tests__/llm-client-contract.js";
 export type { LLMBehavior } from "./__tests__/llm-client-contract.js";
+export { runCalibratorContract } from "./__tests__/calibrator-contract.js";

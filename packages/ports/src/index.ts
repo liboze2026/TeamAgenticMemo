@@ -22,3 +22,8 @@ export {
 export type { AttributionBus, Unsubscribe } from "./attribution-bus.js";
 export type { Renderer } from "./renderer.js";
 export type { RuleImporter } from "./rule-importer.js";
+export type {
+  Calibrator,
+  CalibrationResult,
+  AppliedSignal,
+} from "./calibrator.js";

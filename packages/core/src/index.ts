@@ -28,6 +28,7 @@ export {
   type StackFingerprint,
 } from "./detect-stack/index.js";
 export { getMetaPrinciples } from "./init/meta-principles.js";
+export { defaultCalibrator } from "./calibrator/default.js";
 export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
