@@ -12,6 +12,11 @@ export {
   type PreToolUseOptions,
 } from "./hook/pre-tool-use.js";
 export {
+  handlePostToolUse,
+  inferToolSuccess,
+  type PostToolUseOptions,
+} from "./hook/post-tool-use.js";
+export {
   ClaudeSessionSource,
   parseSessionFile,
 } from "./session-source/claude-session-source.js";

@@ -30,6 +30,8 @@ export interface PersistedEvent {
   session_id?: string;
   /** 涉及的知识条目 id（如 hook 命中某条规则） */
   knowledge_id?: string;
+  /** Claude Code 内部 tool 调用 id；PreToolUse 和 PostToolUse 配对用 */
+  tool_use_id?: string;
   /** 工具调用快照（PreToolUse / PostToolUse 用） */
   tool?: {
     name: string;

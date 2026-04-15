@@ -9,7 +9,7 @@ import { defineConfig } from "tsup";
  * - 必须是自包含 .cjs，用 `node <absolute-path>` 直接跑，毫秒级启动
  */
 export default defineConfig({
-  entry: ["src/bin-pre-tool-use.ts"],
+  entry: ["src/bin-pre-tool-use.ts", "src/bin-post-tool-use.ts"],
   format: ["cjs"],
   platform: "node",
   target: "node20",

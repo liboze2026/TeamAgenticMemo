@@ -3,11 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HOOK_TAG = "teamagent-pre-tool-use";
+const POST_HOOK_TAG = "teamagent-post-tool-use";
 
 export interface InstallHookOptions {
   cwd?: string;
-  /** 显式指定 hook 入口绝对路径 */
+  /** 显式指定 PreToolUse hook 入口绝对路径 */
   hookEntry?: string;
+  /** 显式指定 PostToolUse hook 入口绝对路径 */
+  postHookEntry?: string;
 }
 
 interface ClaudeSettings {
@@ -32,19 +35,19 @@ interface HookCommand {
   timeout?: number;
 }
 
-function defaultHookEntry(): string {
+function cliRoot(): string {
   // 通过 import.meta.url 找到 install-hook.ts 自身位置
-  // → 退到 packages/cli/，再指向 dist/bin-pre-tool-use.cjs（预编译的单文件 bundle）
-  // 用 .cjs 而非 .ts 的原因：
-  // - Hook 被 Claude Code 在 %TEMP% 目录里 spawn，npx tsx 找不到 workspace
-  // - 启动速度（毫秒 vs tsx 1-2 秒）
-  // 使用者必须先 `pnpm --filter @teamagent/cli build:hook`
+  // → 退到 packages/cli/
   const here = fileURLToPath(import.meta.url);
-  // here = .../packages/cli/src/commands/install-hook.ts
-  // or    .../packages/cli/dist/commands/install-hook.cjs
-  // 统一退到 packages/cli/ 根
-  const cliRoot = path.dirname(path.dirname(path.dirname(here)));
-  return path.join(cliRoot, "dist", "bin-pre-tool-use.cjs");
+  return path.dirname(path.dirname(path.dirname(here)));
+}
+
+function defaultHookEntry(): string {
+  return path.join(cliRoot(), "dist", "bin-pre-tool-use.cjs");
+}
+
+function defaultPostHookEntry(): string {
+  return path.join(cliRoot(), "dist", "bin-post-tool-use.cjs");
 }
 
 /**
@@ -80,46 +83,83 @@ function writeSettings(file: string, settings: ClaudeSettings): void {
 export function installHook(opts: InstallHookOptions = {}): {
   settingsPath: string;
   hookEntry: string;
+  postHookEntry: string;
   alreadyInstalled: boolean;
+  postAlreadyInstalled: boolean;
 } {
   const cwd = opts.cwd ?? process.cwd();
   const settingsPath = path.join(cwd, ".claude", "settings.local.json");
   const hookEntry = opts.hookEntry ?? defaultHookEntry();
+  const postHookEntry = opts.postHookEntry ?? defaultPostHookEntry();
 
-  // 确认 bundled .cjs 存在（install-hook 依赖它）
+  // 确认 PreToolUse bundled .cjs 存在
   if (!fs.existsSync(hookEntry)) {
     throw new Error(
       `Hook bundle not found: ${hookEntry}\n` +
         `请先运行: pnpm --filter @teamagent/cli build:hook`,
     );
   }
+  // PostToolUse bundle 是软依赖——不存在时给警告但不阻断（兼容老安装）
+  const hasPostBundle = fs.existsSync(postHookEntry);
 
   const settings = readSettings(settingsPath);
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+  if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
 
-  const existing = settings.hooks.PreToolUse.find(
+  // PreToolUse 注册
+  const preExisting = settings.hooks.PreToolUse.find(
     (h) => h._teamagentTag === HOOK_TAG,
   );
-  if (existing) {
-    return { settingsPath, hookEntry, alreadyInstalled: true };
+  let alreadyInstalled = false;
+  if (preExisting) {
+    alreadyInstalled = true;
+  } else {
+    const forwardPath = toForwardSlash(hookEntry);
+    settings.hooks.PreToolUse.push({
+      matcher: "Bash|Write|Edit|WebFetch",
+      _teamagentTag: HOOK_TAG,
+      hooks: [
+        { type: "command", command: `node ${shellQuote(forwardPath)}`, timeout: 30 },
+      ],
+    });
   }
 
-  // 必须用正斜杠路径 + .cjs 单文件：Git Bash 吞反斜杠，%TEMP% cwd 里 npx tsx 找不到 workspace
-  const forwardPath = toForwardSlash(hookEntry);
-  const command = `node ${shellQuote(forwardPath)}`;
+  // PostToolUse 注册（仅 bundle 存在时）
+  let postAlreadyInstalled = false;
+  if (hasPostBundle) {
+    const postExisting = settings.hooks.PostToolUse.find(
+      (h) => h._teamagentTag === POST_HOOK_TAG,
+    );
+    if (postExisting) {
+      postAlreadyInstalled = true;
+    } else {
+      const forwardPath = toForwardSlash(postHookEntry);
+      settings.hooks.PostToolUse.push({
+        matcher: "Bash|Write|Edit|WebFetch",
+        _teamagentTag: POST_HOOK_TAG,
+        hooks: [
+          { type: "command", command: `node ${shellQuote(forwardPath)}`, timeout: 30 },
+        ],
+      });
+    }
+  }
 
-  settings.hooks.PreToolUse.push({
-    matcher: "Bash|Write|Edit|WebFetch",
-    _teamagentTag: HOOK_TAG,
-    hooks: [{ type: "command", command, timeout: 30 }],
-  });
+  // 清理空数组
+  if (settings.hooks.PostToolUse?.length === 0) delete settings.hooks.PostToolUse;
+  if (settings.hooks.PreToolUse?.length === 0) delete settings.hooks.PreToolUse;
 
   writeSettings(settingsPath, settings);
-  return { settingsPath, hookEntry, alreadyInstalled: false };
+  return {
+    settingsPath,
+    hookEntry,
+    postHookEntry,
+    alreadyInstalled,
+    postAlreadyInstalled,
+  };
 }
 
-/** 移除 TeamAgent hook 注册。返回是否实际移除了。 */
+/** 移除 TeamAgent hook 注册（PreToolUse + PostToolUse 一并）。 */
 export function uninstallHook(opts: { cwd?: string } = {}): {
   settingsPath: string;
   removed: boolean;
@@ -132,25 +172,36 @@ export function uninstallHook(opts: { cwd?: string } = {}): {
   }
 
   const settings = readSettings(settingsPath);
-  if (!settings.hooks?.PreToolUse) {
+  if (!settings.hooks) {
     return { settingsPath, removed: false };
   }
 
-  const before = settings.hooks.PreToolUse.length;
-  settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(
-    (h) => h._teamagentTag !== HOOK_TAG,
-  );
-  const after = settings.hooks.PreToolUse.length;
+  let removedAny = false;
 
-  if (settings.hooks.PreToolUse.length === 0) {
-    delete settings.hooks.PreToolUse;
+  if (settings.hooks.PreToolUse) {
+    const before = settings.hooks.PreToolUse.length;
+    settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(
+      (h) => h._teamagentTag !== HOOK_TAG,
+    );
+    if (settings.hooks.PreToolUse.length !== before) removedAny = true;
+    if (settings.hooks.PreToolUse.length === 0) delete settings.hooks.PreToolUse;
   }
+
+  if (settings.hooks.PostToolUse) {
+    const before = settings.hooks.PostToolUse.length;
+    settings.hooks.PostToolUse = settings.hooks.PostToolUse.filter(
+      (h) => h._teamagentTag !== POST_HOOK_TAG,
+    );
+    if (settings.hooks.PostToolUse.length !== before) removedAny = true;
+    if (settings.hooks.PostToolUse.length === 0) delete settings.hooks.PostToolUse;
+  }
+
   if (settings.hooks && Object.keys(settings.hooks).length === 0) {
     delete settings.hooks;
   }
 
   writeSettings(settingsPath, settings);
-  return { settingsPath, removed: before !== after };
+  return { settingsPath, removed: removedAny };
 }
 
 function shellQuote(p: string): string {
