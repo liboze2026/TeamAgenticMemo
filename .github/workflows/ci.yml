@@ -25,3 +25,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      # M7: 5 个验证场景跑通才算 release-ready（mock LLM，CI 友好）
+      - run: pnpm verify

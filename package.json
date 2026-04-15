@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.base.json",
     "teamagent": "tsx packages/cli/src/bin.ts",
     "smoke:llm": "tsx scripts/smoke-llm.ts",
-    "smoke:hook": "tsx scripts/hook-smoke-test.ts"
+    "smoke:hook": "tsx scripts/hook-smoke-test.ts",
+    "verify": "tsx packages/cli/src/bin.ts verify",
+    "dogfood-report": "tsx packages/cli/src/bin.ts dogfood-report"
   },
   "engines": {
     "node": ">=20.0.0"
