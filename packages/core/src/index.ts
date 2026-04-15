@@ -30,6 +30,12 @@ export {
 export { getMetaPrinciples } from "./init/meta-principles.js";
 export { defaultCalibrator } from "./calibrator/default.js";
 export {
+  runCalibrationPipeline,
+  type CalibrationPipelineDeps,
+  type CalibrationPipelineResult,
+  type AdjustmentRecord,
+} from "./pipeline/calibration-pipeline.js";
+export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
 } from "./extractor/llm-based.js";

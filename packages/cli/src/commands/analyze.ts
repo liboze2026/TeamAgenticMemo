@@ -5,6 +5,7 @@ import {
   ClaudeSessionSource,
   ClaudeCodeLLMClient,
   JsonlKnowledgeStore,
+  JsonlEventLog,
   MarkdownCompiler,
 } from "@teamagent/adapters";
 import {
@@ -13,6 +14,8 @@ import {
   parseSessionFile,
   llmBasedKnowledgeExtractor,
   runExtractPipeline,
+  defaultCalibrator,
+  runCalibrationPipeline,
 } from "@teamagent/core";
 import type { LLMClient } from "@teamagent/ports";
 import type { KnowledgeEntry, ParsedSession } from "@teamagent/types";
@@ -34,11 +37,15 @@ export interface AnalyzeOptions {
   globalPath?: string;
   /** 注入 CLAUDE.md 路径（测试用） */
   claudeMdPath?: string;
+  /** events.jsonl 路径（测试用；--commit 校准阶段会读它） */
+  eventsPath?: string;
   cwd?: string;
   /** id 生成器（测试用） */
   idGen?: () => string;
   /** now (测试用) */
   now?: () => Date;
+  /** 校准前是否运行 calibrator（默认 true）；测试时可关掉 */
+  skipCalibrate?: boolean;
 }
 
 export async function executeAnalyze(opts: AnalyzeOptions = {}): Promise<string> {
@@ -145,6 +152,46 @@ async function runCommit(
   });
 
   const after = store.count();
+
+  // --- 校准阶段：抽取后自动跑 calibrator（M6 集成） ---
+  let calibrationSummary = "";
+  if (!opts.skipCalibrate) {
+    const eventsPath = opts.eventsPath ?? path.join(home, ".teamagent", "events.jsonl");
+    try {
+      const eventLog = new JsonlEventLog(eventsPath);
+      const events = eventLog.readAll();
+      // calibration 跑遍所有 store（personal/team/global），不只 team
+      for (const storePath of [personalPath, teamPath, globalPath]) {
+        let calStore: JsonlKnowledgeStore;
+        try {
+          calStore = new JsonlKnowledgeStore(storePath);
+        } catch {
+          continue;
+        }
+        const calResult = await runCalibrationPipeline({
+          calibrator: defaultCalibrator,
+          store: calStore,
+          events,
+          now,
+        });
+        if (calResult.adjusted.length > 0) {
+          calibrationSummary +=
+            `  ${storePath}: 调整 ${calResult.adjusted.length} 条` +
+            (calResult.archivedNew.length > 0
+              ? `，归档 ${calResult.archivedNew.length} 条`
+              : "") +
+            "\n";
+        }
+      }
+      // 若有调整，重编译
+      if (calibrationSummary) {
+        recompile(store.getActive());
+      }
+    } catch (err) {
+      calibrationSummary = `  ⚠ 校准阶段失败: ${String(err).slice(0, 120)}\n`;
+    }
+  }
+
   const lines: string[] = [];
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   lines.push(`  --commit 完成`);
@@ -160,6 +207,11 @@ async function runCommit(
         `    - [${e.category}/${e.tags[0] ?? "untagged"}] ${e.trigger} → ${e.correct_pattern}`,
       );
     }
+  }
+  if (calibrationSummary) {
+    lines.push("");
+    lines.push("  校准:");
+    lines.push(calibrationSummary.trimEnd());
   }
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   return lines.join("\n") + "\n";
