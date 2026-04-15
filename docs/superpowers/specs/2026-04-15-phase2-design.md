@@ -1,9 +1,17 @@
-# TeamAgent Phase 2 设计文档
+# TeamAgent Phase 2 设计文档（已被取代）
+
+> ⚠️ **STATUS: SUPERSEDED (2026-04-15)**
+>
+> 本文档基于已 supersede 的 `product-roadmap.md` 撰写，其 7 个 sub-project 中大多数（记忆存储、语义检索、多工具支持、团队同步等）已被 mxLore / OpenMemory MCP / Claude Auto-Memory 等 2025-2026 出现的竞品直接实现。
+>
+> **取代它的文档**：`2026-04-15-phase2-design-v2.md`（专注 Hook-based Governance + 底层记忆整合策略）。
+>
+> 本文档作为决策历史保留，不再是真相源。
 
 > 创建日期：2026-04-15
-> 状态：Draft（待审）
-> 父文档：`docs/superpowers/specs/2026-04-15-product-roadmap.md`
-> 前置背景：`docs/specs/2026-04-15-phase2-backlog.md`（Phase 1 遗留漏洞清单）
+> 状态：~~Draft（待审）~~ → Superseded
+> 父文档：~~`docs/superpowers/specs/2026-04-15-product-roadmap.md`~~（已 superseded）
+> 前置背景：`docs/specs/2026-04-15-phase2-backlog.md`（Phase 1 遗留漏洞清单，仍有效）
 
 ---
 
