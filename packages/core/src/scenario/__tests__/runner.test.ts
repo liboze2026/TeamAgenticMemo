@@ -5,6 +5,7 @@ import { llmBasedKnowledgeExtractor } from "../../extractor/llm-based.js";
 import type { KnowledgeStore } from "@teamagent/ports";
 import type { KnowledgeEntry } from "@teamagent/types";
 import { pythonVersionScenario } from "../../../../../fixtures/scenarios/python-version.js";
+import { allScenarios } from "../../../../../fixtures/scenarios/index.js";
 
 class InMemoryStore implements KnowledgeStore {
   entries: KnowledgeEntry[] = [];
@@ -149,6 +150,26 @@ describe("runVerify — multi-scenario aggregation", () => {
       scenarios: [],
       averagePRR: 0,
       averageKP: 0,
+    });
+  });
+
+  describe("all 5 fixture scenarios", () => {
+    it("all pass with mock LLM", async () => {
+      const r = await runVerify(allScenarios, {
+        detector: ruleBasedCorrectionDetector,
+        extractor: llmBasedKnowledgeExtractor,
+        makeStore: () => new InMemoryStore(),
+        now: () => new Date("2026-04-15T01:00:00Z"),
+      });
+      // Expectation: ALL 5 scenarios pass
+      const failed = r.scenarios.filter((s) => !s.passed);
+      const failureSummary = failed
+        .map((s) => `${s.scenarioId}: A=${s.phaseA.passed} B=${s.phaseB.passed} C=${s.phaseC.passed}`)
+        .join("\n");
+      expect(r.passed, `Failed scenarios:\n${failureSummary}`).toBe(5);
+      expect(r.total).toBe(5);
+      expect(r.averagePRR).toBe(100);
+      expect(r.averageKP).toBe(5);
     });
   });
 });
