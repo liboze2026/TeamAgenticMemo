@@ -71,6 +71,79 @@ describe("compileMarkdownBlock", () => {
     expect(lines.length).toBeLessThanOrEqual(50);
   });
 
+  it("custom limit option caps the entry count", () => {
+    const entries = Array.from({ length: 100 }, (_, i) =>
+      makeEntry({ id: `e${i}`, correct_pattern: `CORRECT-${i}` }),
+    );
+    const out = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      limit: 5,
+    });
+    const bulletCount = out.split("\n").filter((l) => l.startsWith("- ")).length;
+    expect(bulletCount).toBe(5);
+    expect(out).toContain("Top 5");
+  });
+
+  it("at over-cap, keeps highest-scoring entries (block > warn > suggest)", () => {
+    const entries = [
+      // 2 block-confident entries (should be kept)
+      makeEntry({
+        id: "block-a",
+        enforcement: "block",
+        confidence: 0.95,
+        correct_pattern: "KEEP-BLOCK-A",
+      }),
+      makeEntry({
+        id: "block-b",
+        enforcement: "block",
+        confidence: 0.95,
+        correct_pattern: "KEEP-BLOCK-B",
+      }),
+      // 2 suggest entries (should be dropped by cap=2)
+      makeEntry({
+        id: "suggest-a",
+        enforcement: "suggest",
+        confidence: 0.55,
+        correct_pattern: "DROP-SUGGEST-A",
+      }),
+      makeEntry({
+        id: "suggest-b",
+        enforcement: "suggest",
+        confidence: 0.55,
+        correct_pattern: "DROP-SUGGEST-B",
+      }),
+    ];
+    const out = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      limit: 2,
+    });
+    expect(out).toContain("KEEP-BLOCK-A");
+    expect(out).toContain("KEEP-BLOCK-B");
+    expect(out).not.toContain("DROP-SUGGEST-A");
+    expect(out).not.toContain("DROP-SUGGEST-B");
+  });
+
+  it("limit=0 or negative falls back to minimum 1", () => {
+    const entries = Array.from({ length: 3 }, (_, i) =>
+      makeEntry({ id: `e${i}`, correct_pattern: `e${i}` }),
+    );
+    const out = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      limit: 0,
+    });
+    const bulletCount = out.split("\n").filter((l) => l.startsWith("- ")).length;
+    expect(bulletCount).toBe(1);
+  });
+
+  it("limit larger than entry count: no 'Top N' suffix in header", () => {
+    const entries = [
+      makeEntry({ id: "a", correct_pattern: "A" }),
+      makeEntry({ id: "b", correct_pattern: "B" }),
+    ];
+    const out = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      limit: 100,
+    });
+    expect(out).toContain("2条活跃知识）");
+    expect(out).not.toContain("Top ");
+  });
+
   it("skips archived entries", () => {
     const out = compileMarkdownBlock(
       [

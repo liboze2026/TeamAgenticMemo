@@ -4,6 +4,7 @@ import {
   compileMarkdownBlock,
   injectBlockIntoDoc,
   BLOCK_START,
+  type CompileMarkdownOptions,
 } from "@teamagent/core";
 import type { Compiler } from "@teamagent/ports";
 import type { KnowledgeEntry } from "@teamagent/types";
@@ -19,6 +20,14 @@ export interface CompileWriteInfo {
   blockStartLine: number;
 }
 
+/** MarkdownCompiler 构造参数。 */
+export interface MarkdownCompilerOptions {
+  /** 当前时间 getter（默认 new Date().toISOString()） */
+  now?: () => string;
+  /** 编译选项，目前只含 `limit`（最大条目数） */
+  compileOptions?: CompileMarkdownOptions;
+}
+
 /**
  * CLAUDE.md 的 Markdown Compiler adapter。
  *
@@ -27,16 +36,33 @@ export interface CompileWriteInfo {
  *
  * 实现原则（Ports & Adapters）：
  * 编译逻辑在 core（纯函数），adapter 只做 IO 包装。
+ *
+ * 支持从环境变量 `TEAMAGENT_CLAUDE_MD_LIMIT` 读取条目数上限。显式传入
+ * `compileOptions.limit` 优先于环境变量。
  */
 export class MarkdownCompiler implements Compiler<string> {
+  private readonly now: () => string;
+  private readonly compileOptions: CompileMarkdownOptions;
+
   constructor(
     private readonly mdPath: string,
-    private readonly now: () => string = () => new Date().toISOString(),
-  ) {}
+    nowOrOptions?: (() => string) | MarkdownCompilerOptions,
+    legacyCompileOptions?: CompileMarkdownOptions,
+  ) {
+    // 兼容旧 API: new MarkdownCompiler(path, now)
+    if (typeof nowOrOptions === "function" || nowOrOptions === undefined) {
+      this.now = nowOrOptions ?? (() => new Date().toISOString());
+      this.compileOptions = legacyCompileOptions ?? resolveOptionsFromEnv();
+    } else {
+      this.now = nowOrOptions.now ?? (() => new Date().toISOString());
+      this.compileOptions =
+        nowOrOptions.compileOptions ?? resolveOptionsFromEnv();
+    }
+  }
 
   /** 纯函数：编译为区块字符串，不触碰文件系统。 */
   compile(entries: KnowledgeEntry[]): string {
-    return compileMarkdownBlock(entries, this.now());
+    return compileMarkdownBlock(entries, this.now(), this.compileOptions);
   }
 
   /**
@@ -68,4 +94,13 @@ export class MarkdownCompiler implements Compiler<string> {
       blockStartLine: startLine === -1 ? 0 : startLine,
     };
   }
+}
+
+/** 从环境变量解析 compile options。非法值回退到默认。 */
+function resolveOptionsFromEnv(): CompileMarkdownOptions {
+  const raw = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+  if (!raw) return {};
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return {};
+  return { limit: n };
 }

@@ -125,4 +125,97 @@ describe("MarkdownCompiler adapter", () => {
     const content = fs.readFileSync(mdPath, "utf-8");
     expect(content).toContain("暂无经验");
   });
+
+  describe("configurable limit", () => {
+    it("MarkdownCompilerOptions.compileOptions.limit is honored", () => {
+      const compiler = new MarkdownCompiler(mdPath, {
+        now: () => "2026-04-14T00:00:00Z",
+        compileOptions: { limit: 3 },
+      });
+      const entries = Array.from({ length: 20 }, (_, i) =>
+        makeEntry({ id: `e${i}`, correct_pattern: `CORRECT-${i}` }),
+      );
+      compiler.writeToFile(entries);
+      const content = fs.readFileSync(mdPath, "utf-8");
+      const bulletCount = content
+        .split("\n")
+        .filter((l) => l.startsWith("- "))
+        .length;
+      expect(bulletCount).toBe(3);
+      expect(content).toContain("Top 3");
+    });
+
+    it("TEAMAGENT_CLAUDE_MD_LIMIT env var controls the cap", () => {
+      const prev = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+      process.env.TEAMAGENT_CLAUDE_MD_LIMIT = "4";
+      try {
+        const compiler = new MarkdownCompiler(
+          mdPath,
+          () => "2026-04-14T00:00:00Z",
+        );
+        const entries = Array.from({ length: 20 }, (_, i) =>
+          makeEntry({ id: `e${i}`, correct_pattern: `CORRECT-${i}` }),
+        );
+        compiler.writeToFile(entries);
+        const content = fs.readFileSync(mdPath, "utf-8");
+        const bulletCount = content
+          .split("\n")
+          .filter((l) => l.startsWith("- "))
+          .length;
+        expect(bulletCount).toBe(4);
+      } finally {
+        if (prev === undefined) delete process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+        else process.env.TEAMAGENT_CLAUDE_MD_LIMIT = prev;
+      }
+    });
+
+    it("explicit compileOptions.limit wins over env var", () => {
+      const prev = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+      process.env.TEAMAGENT_CLAUDE_MD_LIMIT = "4";
+      try {
+        const compiler = new MarkdownCompiler(mdPath, {
+          now: () => "2026-04-14T00:00:00Z",
+          compileOptions: { limit: 2 },
+        });
+        const entries = Array.from({ length: 20 }, (_, i) =>
+          makeEntry({ id: `e${i}`, correct_pattern: `CORRECT-${i}` }),
+        );
+        compiler.writeToFile(entries);
+        const content = fs.readFileSync(mdPath, "utf-8");
+        const bulletCount = content
+          .split("\n")
+          .filter((l) => l.startsWith("- "))
+          .length;
+        expect(bulletCount).toBe(2);
+      } finally {
+        if (prev === undefined) delete process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+        else process.env.TEAMAGENT_CLAUDE_MD_LIMIT = prev;
+      }
+    });
+
+    it("ignores invalid env var values (non-numeric / ≤0)", () => {
+      const prev = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+      process.env.TEAMAGENT_CLAUDE_MD_LIMIT = "not-a-number";
+      try {
+        const compiler = new MarkdownCompiler(
+          mdPath,
+          () => "2026-04-14T00:00:00Z",
+        );
+        // Should fall back to default (45), so 10 entries all included
+        const entries = Array.from({ length: 10 }, (_, i) =>
+          makeEntry({ id: `e${i}`, correct_pattern: `CORRECT-${i}` }),
+        );
+        compiler.writeToFile(entries);
+        const content = fs.readFileSync(mdPath, "utf-8");
+        const bulletCount = content
+          .split("\n")
+          .filter((l) => l.startsWith("- "))
+          .length;
+        expect(bulletCount).toBe(10);
+      } finally {
+        if (prev === undefined) delete process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+        else process.env.TEAMAGENT_CLAUDE_MD_LIMIT = prev;
+      }
+    });
+  });
 });

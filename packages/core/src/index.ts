@@ -4,6 +4,7 @@ export {
   injectBlockIntoDoc,
   BLOCK_START,
   BLOCK_END,
+  type CompileMarkdownOptions,
 } from "./compiler/markdown.js";
 export {
   matchRules,

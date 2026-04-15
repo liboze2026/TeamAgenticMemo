@@ -8,10 +8,23 @@ import { scoreEntry } from "../scorer.js";
 export const BLOCK_START = "<!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->";
 export const BLOCK_END = "<!-- TEAMAGENT:END -->";
 
-/** 总行数上限（含 START + header + END 标记行）。对齐 spec v5.2。 */
-const MAX_LINES = 50;
+/** 默认总行数上限（含 START + header + END 标记行）。对齐 spec v5.2。 */
+const DEFAULT_MAX_LINES = 50;
 /** 扣除 header / footer / 空行留的 content 预算。 */
-const CONTENT_BUDGET = MAX_LINES - 5;
+const DEFAULT_CONTENT_BUDGET = DEFAULT_MAX_LINES - 5;
+
+/** 配置 compileMarkdownBlock 的选项。 */
+export interface CompileMarkdownOptions {
+  /**
+   * 最大条目数。默认 45（= 50 行总预算 - 头尾空行）。
+   * 超出时按 `scoreEntry` 降序取 top N；header 会显示 "Top N"。
+   *
+   * 用例：
+   * - 更严格的 context 预算：传 20
+   * - 大仓库多经验场景：传 100（需要 Claude 能 handle 更大上下文）
+   */
+  limit?: number;
+}
 
 /**
  * 把一条 KnowledgeEntry 渲染为一行 markdown bullet。纯函数。
@@ -37,7 +50,9 @@ function formatEntry(entry: KnowledgeEntry): string {
 export function compileMarkdownBlock(
   entries: KnowledgeEntry[],
   now: string,
+  options: CompileMarkdownOptions = {},
 ): string {
+  const limit = Math.max(1, options.limit ?? DEFAULT_CONTENT_BUDGET);
   const active = entries.filter((e) => e.status === "active");
 
   if (active.length === 0) {
@@ -52,7 +67,7 @@ export function compileMarkdownBlock(
 
   const lines: string[] = [];
   for (const { entry } of sorted) {
-    if (lines.length >= CONTENT_BUDGET) break;
+    if (lines.length >= limit) break;
     lines.push(formatEntry(entry));
   }
 
