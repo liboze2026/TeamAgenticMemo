@@ -4,7 +4,9 @@
 
 **参考文档**：
 - 设计文档：`docs/specs/2026-04-13-teamagent-design.md` (v5.2)
-- 实现计划：`docs/specs/2026-04-14-teamagent-phase1-plan.md` (v1.2)
+- Phase 2+ 产品 roadmap：`docs/superpowers/specs/2026-04-15-product-roadmap.md`
+- Phase 2 设计：`docs/superpowers/specs/2026-04-15-phase2-design.md`
+- Phase 1 实现计划（已归档）：`docs/backup/phase1/specs/2026-04-14-teamagent-phase1-plan.md`
 
 ---
 
