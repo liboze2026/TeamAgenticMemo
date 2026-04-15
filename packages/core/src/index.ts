@@ -36,6 +36,19 @@ export {
   type AdjustmentRecord,
 } from "./pipeline/calibration-pipeline.js";
 export {
+  type Scenario,
+  type ScenarioResult,
+  type VerifyResult,
+  type PhaseASpec,
+  type PhaseBSpec,
+  type PhaseCSpec,
+} from "./scenario/dsl.js";
+export {
+  runScenario,
+  runVerify,
+  entryFromPartial,
+} from "./scenario/runner.js";
+export {
   llmBasedKnowledgeExtractor,
   parseExtractionResponse,
 } from "./extractor/llm-based.js";
