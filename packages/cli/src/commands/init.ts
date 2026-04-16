@@ -2,9 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
-  JsonlKnowledgeStore,
+  DualLayerStore,
+  SqliteKnowledgeStore,
   MarkdownCompiler,
   ClaudeCodeLLMClient,
+  openDb,
 } from "@teamagent/adapters";
 import {
   detectStack,
@@ -31,9 +33,8 @@ export interface InitOptions {
   skipImport?: boolean;
   /** 跳过 hook 安装（测试环境下 dist bundle 可能不存在）。 */
   skipHook?: boolean;
-  personalPath?: string;
-  globalPath?: string;
-  teamPath?: string;
+  projectDbPath?: string;
+  userGlobalDbPath?: string;
   claudeMdPath?: string;
   hookEntry?: string;
   now?: () => Date;
@@ -58,24 +59,21 @@ export interface InitResult {
   };
 }
 
-/** 统一返回路径集合，测试可全覆盖。 */
 function resolvePaths(opts: InitOptions) {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
   return {
     home,
     cwd,
-    personalPath:
-      opts.personalPath ?? path.join(home, ".teamagent", "personal", "knowledge.jsonl"),
-    teamPath: opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl"),
-    globalPath:
-      opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl"),
+    projectDbPath:
+      opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db"),
+    userGlobalDbPath:
+      opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
     installLogPath: path.join(home, ".teamagent", ".install-log"),
   };
 }
 
-/** 只读 FilePresence（detect-stack 用）。cwd 下的相对路径。 */
 function cwdFilePresence(cwd: string): FilePresence {
   return {
     exists: (rel) => fs.existsSync(path.join(cwd, rel)),
@@ -92,7 +90,6 @@ function cwdFilePresence(cwd: string): FilePresence {
   };
 }
 
-/** init 主入口。Phase A 预检 → Phase B 执行 → 每步结果记录。 */
 export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
   const paths = resolvePaths(opts);
   const dryRun = opts.dryRun ?? false;
@@ -108,34 +105,27 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
 
   // ---------- Phase B: Execute ----------
 
-  // Step 1: detect-stack
   const stackStep = doDetectStack(paths.cwd);
   steps.push(stackStep);
   const stackSummary = stackStep.detail;
 
-  // Step 2: create directories
   steps.push(doCreateDirs(paths, dryRun));
 
-  // Step 3: load meta-principles into global store
-  const presetStep = doLoadPresets(paths.globalPath, dryRun, now);
+  const presetStep = doLoadPresets(paths.userGlobalDbPath, dryRun, now);
   steps.push(presetStep.step);
 
-  // Step 4 + 5: scan existing rules + structure via LLM into personal store
   const importStep = await doImportRules(paths, opts, dryRun, now);
   steps.push(...importStep.steps);
 
-  // Step 6: install hook
   if (!opts.skipHook) {
     steps.push(doInstallHook(paths.cwd, opts.hookEntry, dryRun));
   } else {
     steps.push({ step: "install-hook", status: "skipped", detail: "skipHook=true" });
   }
 
-  // Step 7: compile CLAUDE.md
   const compileStep = doCompileClaudeMd(paths, dryRun, now);
   steps.push(compileStep);
 
-  // Step 8: install-log 追加（不算核心步骤，失败只 warn）
   if (!dryRun) {
     try {
       appendInstallLog(paths.installLogPath, steps, now);
@@ -144,9 +134,24 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
     }
   }
 
-  const totalActive = dryRun
-    ? presetStep.wouldAddCount + importStep.wouldImport
-    : countActive([paths.personalPath, paths.teamPath, paths.globalPath]);
+  let totalActive = 0;
+  if (dryRun) {
+    totalActive = presetStep.wouldAddCount + importStep.wouldImport;
+  } else {
+    try {
+      fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+      fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+      const store = new DualLayerStore({
+        projectDbPath: paths.projectDbPath,
+        userGlobalDbPath: paths.userGlobalDbPath,
+      });
+      totalActive = store.findActive().length;
+      store.close();
+    } catch {
+      // ignore
+    }
+  }
+
   const summary = {
     stack: stackSummary,
     presetAdded: presetStep.addedCount,
@@ -160,22 +165,18 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
 // ======================== Step implementations ========================
 
 function runPreChecks(paths: ReturnType<typeof resolvePaths>): InitStepResult {
-  // 1. cwd 存在
   if (!fs.existsSync(paths.cwd)) {
     return failStep("pre-check", `cwd 不存在: ${paths.cwd}`);
   }
-  // 2. home 可写（尝试创建 ~/.teamagent）
   try {
     const tDir = path.join(paths.home, ".teamagent");
     fs.mkdirSync(tDir, { recursive: true });
-    // 写一个 probe 文件再删，验证权限
     const probe = path.join(tDir, `.probe-${process.pid}`);
     fs.writeFileSync(probe, "");
     fs.unlinkSync(probe);
   } catch (err) {
     return failStep("pre-check", `~/.teamagent 不可写: ${String(err).slice(0, 200)}`);
   }
-  // 3. 若 CLAUDE.md 存在，必须可读可写
   if (fs.existsSync(paths.claudeMdPath)) {
     try {
       fs.accessSync(paths.claudeMdPath, fs.constants.R_OK | fs.constants.W_OK);
@@ -204,9 +205,8 @@ function doCreateDirs(
   dryRun: boolean,
 ): InitStepResult {
   const toCreate = [
-    path.dirname(paths.personalPath),
-    path.dirname(paths.globalPath),
-    path.dirname(paths.teamPath),
+    path.dirname(paths.projectDbPath),
+    path.dirname(paths.userGlobalDbPath),
   ];
   if (dryRun) {
     return okStep("create-dirs", `(dry-run) 会创建: ${toCreate.join(", ")}`);
@@ -220,7 +220,7 @@ function doCreateDirs(
 }
 
 function doLoadPresets(
-  globalPath: string,
+  userGlobalDbPath: string,
   dryRun: boolean,
   now: () => Date,
 ): { step: InitStepResult; addedCount: number; wouldAddCount: number } {
@@ -233,13 +233,15 @@ function doLoadPresets(
     };
   }
   try {
-    const store = new JsonlKnowledgeStore(globalPath);
+    fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
+    const store = new SqliteKnowledgeStore(openDb(userGlobalDbPath));
     let added = 0;
     for (const p of presets) {
-      if (store.getById(p.id)) continue; // 幂等：已有同 id 跳过
+      if (store.getById(p.id)) continue;
       store.add(p);
       added++;
     }
+    store.close();
     return {
       step: okStep("load-preset", `注入元原则 ${added} 条（总 ${presets.length} 条，${presets.length - added} 条已存在）`),
       addedCount: added,
@@ -265,7 +267,6 @@ async function doImportRules(
   const cursorRulesPath = path.join(paths.cwd, ".cursorrules");
   const cursorExists = fs.existsSync(cursorRulesPath);
 
-  // Step 4: 扫描
   const rawTexts: string[] = [];
   const scanDetails: string[] = [];
   if (claudeMdExists) {
@@ -289,7 +290,6 @@ async function doImportRules(
     ),
   );
 
-  // Step 5: structure via LLM
   if (rawTexts.length === 0) {
     return {
       steps: [...steps, okStep("structure-rules", "无规则可导入")],
@@ -326,7 +326,9 @@ async function doImportRules(
       (prompt) => llm.complete(prompt),
       { now },
     );
-    const store = new JsonlKnowledgeStore(paths.personalPath);
+    // Import into personal scope (project DB)
+    fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+    const store = new SqliteKnowledgeStore(openDb(paths.projectDbPath));
     let imported = 0;
     for (const { partial } of result.structured) {
       const entry = assembleImported(partial, idGen(), now);
@@ -337,6 +339,7 @@ async function doImportRules(
         // 重复 id 或 schema 异常，跳过
       }
     }
+    store.close();
     steps.push(
       okStep(
         "structure-rules",
@@ -368,7 +371,6 @@ function doInstallHook(
       r.alreadyInstalled ? `已安装 (无变化): ${r.settingsPath}` : `已注册: ${r.settingsPath}`,
     );
   } catch (err) {
-    // 常见失败：bundle 未构建
     return failStep("install-hook", String(err).slice(0, 200));
   }
 }
@@ -381,19 +383,18 @@ function doCompileClaudeMd(
   if (dryRun) {
     return okStep(
       "compile-claude-md",
-      `(dry-run) 会把三个 scope 的 active 条目合并编译到 ${paths.claudeMdPath}`,
+      `(dry-run) 会把活跃条目合并编译到 ${paths.claudeMdPath}`,
     );
   }
   try {
-    const all: KnowledgeEntry[] = [];
-    for (const p of [paths.personalPath, paths.teamPath, paths.globalPath]) {
-      try {
-        const s = new JsonlKnowledgeStore(p);
-        all.push(...s.getActive());
-      } catch {
-        // skip
-      }
-    }
+    fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+    const store = new DualLayerStore({
+      projectDbPath: paths.projectDbPath,
+      userGlobalDbPath: paths.userGlobalDbPath,
+    });
+    const all = store.findActive();
+    store.close();
     const compiler = new MarkdownCompiler(paths.claudeMdPath, () => now().toISOString());
     const info = compiler.writeToFile(all);
     return okStep(
@@ -414,18 +415,6 @@ function appendInstallLog(
   fs.mkdirSync(dir, { recursive: true });
   const payload = { ts: now().toISOString(), steps };
   fs.appendFileSync(logPath, JSON.stringify(payload) + "\n", "utf-8");
-}
-
-function countActive(paths: string[]): number {
-  let n = 0;
-  for (const p of paths) {
-    try {
-      n += new JsonlKnowledgeStore(p).getActive().length;
-    } catch {
-      // skip
-    }
-  }
-  return n;
 }
 
 function assembleImported(
@@ -498,7 +487,6 @@ export function parseInitArgs(argv: string[]): InitOptions {
   return opts;
 }
 
-/** 把 InitResult 渲染成用户友好的文本。 */
 export function renderInitResult(r: InitResult): string {
   const lines: string[] = [];
   lines.push(r.dryRun ? "🔍 TeamAgent Init (dry-run)" : "✨ TeamAgent Init");

@@ -3,6 +3,7 @@ import nodeFs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { executeAnalyze, parseAnalyzeArgs } from "../commands/analyze.js";
+import { DualLayerStore, openDb } from "@teamagent/adapters";
 import type { LLMClient } from "@teamagent/ports";
 
 function mkTmp() {
@@ -87,7 +88,8 @@ describe("executeAnalyze", () => {
     });
 
     it("extracts corrections via LLM and writes to store + CLAUDE.md", async () => {
-      const teamPath = path.join(tmp.dir, "team.jsonl");
+      const projectDbPath = path.join(tmp.dir, "knowledge.db");
+      const userGlobalDbPath = path.join(tmp.dir, "global.db");
       const claudeMdPath = path.join(tmp.dir, "CLAUDE.md");
 
       const llm = stubLLM(
@@ -111,10 +113,12 @@ describe("executeAnalyze", () => {
         cwd: tmp.dir,
         commit: true,
         llmClient: llm,
-        teamPath,
+        projectDbPath,
+        userGlobalDbPath,
         claudeMdPath,
-        idGen: () => "team-test-0001",
+        idGen: () => "pers-test-0001",
         now: () => new Date("2026-04-14T12:00:00Z"),
+        skipCalibrate: true,
       });
 
       expect(out).toContain("--commit 模式");
@@ -123,9 +127,12 @@ describe("executeAnalyze", () => {
       expect(out).toContain("需要发 HTTP 请求");
 
       // store 落盘
-      const storeContent = nodeFs.readFileSync(teamPath, "utf-8");
-      expect(storeContent).toContain("team-test-0001");
-      expect(storeContent).toContain("axios");
+      const store = new DualLayerStore({ projectDbPath, userGlobalDbPath });
+      const all = store.getAll();
+      store.close();
+      expect(all).toHaveLength(1);
+      expect(all[0]!.id).toBe("pers-test-0001");
+      expect(all[0]!.wrong_pattern).toBe("axios");
 
       // CLAUDE.md 写入
       const md = nodeFs.readFileSync(claudeMdPath, "utf-8");
@@ -134,7 +141,8 @@ describe("executeAnalyze", () => {
     });
 
     it("LLM returning null → skipped, nothing written", async () => {
-      const teamPath = path.join(tmp.dir, "team.jsonl");
+      const projectDbPath = path.join(tmp.dir, "knowledge.db");
+      const userGlobalDbPath = path.join(tmp.dir, "global.db");
       const claudeMdPath = path.join(tmp.dir, "CLAUDE.md");
 
       const out = await executeAnalyze({
@@ -143,23 +151,28 @@ describe("executeAnalyze", () => {
         cwd: tmp.dir,
         commit: true,
         llmClient: stubLLM("null"),
-        teamPath,
+        projectDbPath,
+        userGlobalDbPath,
         claudeMdPath,
         idGen: () => "never-used",
         now: () => new Date("2026-04-14T12:00:00Z"),
+        skipCalibrate: true,
       });
 
       expect(out).toContain("成功提取: 0");
       expect(out).toContain("跳过 1");
-      // Store may exist (constructor touches it) but must be empty
-      const storeContent = nodeFs.existsSync(teamPath)
-        ? nodeFs.readFileSync(teamPath, "utf-8").trim()
-        : "";
-      expect(storeContent).toBe("");
+      // store must be empty (DB may or may not exist)
+      if (nodeFs.existsSync(projectDbPath)) {
+        const store = new DualLayerStore({ projectDbPath, userGlobalDbPath });
+        const all = store.getAll();
+        store.close();
+        expect(all).toHaveLength(0);
+      }
     });
 
     it("per-correction LLM error does not abort run", async () => {
-      const teamPath = path.join(tmp.dir, "team.jsonl");
+      const projectDbPath = path.join(tmp.dir, "knowledge.db");
+      const userGlobalDbPath = path.join(tmp.dir, "global.db");
       const claudeMdPath = path.join(tmp.dir, "CLAUDE.md");
 
       let call = 0;
@@ -176,10 +189,12 @@ describe("executeAnalyze", () => {
         cwd: tmp.dir,
         commit: true,
         llmClient: llm,
-        teamPath,
+        projectDbPath,
+        userGlobalDbPath,
         claudeMdPath,
         idGen: () => "never",
         now: () => new Date("2026-04-14T12:00:00Z"),
+        skipCalibrate: true,
       });
 
       expect(out).toContain("失败 1");

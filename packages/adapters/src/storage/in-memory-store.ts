@@ -2,8 +2,7 @@ import type { KnowledgeEntry } from "@teamagent/types";
 import type { KnowledgeStore, QueryOptions } from "@teamagent/ports";
 
 /**
- * 内存知识库实现。M0 的 Fake——用于 skeleton-demo 和测试。
- * M1 会用 JsonlKnowledgeStore 替代。
+ * 内存知识库实现。用于 skeleton-demo 和测试。
  */
 export class InMemoryKnowledgeStore implements KnowledgeStore {
   private entries = new Map<string, KnowledgeEntry>();

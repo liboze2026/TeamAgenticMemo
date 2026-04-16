@@ -2,16 +2,15 @@ import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
 import { execSync } from "node:child_process";
-import { JsonlEventLog, JsonlKnowledgeStore } from "@teamagent/adapters";
+import { DualLayerStore, SqliteEventLog, openDb } from "@teamagent/adapters";
 import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
 export interface DogfoodReportOptions {
   cwd?: string;
   homeDir?: string;
-  personalPath?: string;
-  teamPath?: string;
-  globalPath?: string;
-  eventsPath?: string;
+  projectDbPath?: string;
+  userGlobalDbPath?: string;
+  eventsDbPath?: string;
   /** 输出 Markdown 路径；默认 docs/dogfood/自举报告.md */
   outputPath?: string;
   now?: () => Date;
@@ -33,12 +32,12 @@ function resolvePaths(opts: DogfoodReportOptions) {
   return {
     home,
     cwd,
-    personalPath:
-      opts.personalPath ?? path.join(home, ".teamagent", "personal", "knowledge.jsonl"),
-    teamPath: opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl"),
-    globalPath:
-      opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl"),
-    eventsPath: opts.eventsPath ?? path.join(home, ".teamagent", "events.jsonl"),
+    projectDbPath:
+      opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db"),
+    userGlobalDbPath:
+      opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
+    eventsDbPath:
+      opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db"),
     outputPath: opts.outputPath ?? path.join(cwd, "docs", "dogfood", "自举报告.md"),
   };
 }
@@ -62,48 +61,48 @@ function readGitTimeline(cwd: string): Array<{ hash: string; date: string; messa
   }
 }
 
-function loadStore(p: string): KnowledgeEntry[] {
-  if (!fs.existsSync(p)) return [];
-  try {
-    return new JsonlKnowledgeStore(p).getAll();
-  } catch {
-    return [];
-  }
-}
-
-function loadEvents(p: string): PersistedEvent[] {
-  if (!fs.existsSync(p)) return [];
-  try {
-    return new JsonlEventLog(p).readAll();
-  } catch {
-    return [];
-  }
-}
-
-/**
- * 生成 dogfood 报告。读 events + knowledge + git log，输出 Markdown。
- * 数据**完全**从系统状态计算——本报告本身就是 Phase 1 的"第三方独立证据"
- * （由系统自动生成，不经人工修饰）。
- */
 export async function executeDogfoodReport(
   opts: DogfoodReportOptions = {},
 ): Promise<DogfoodReportResult> {
   const paths = resolvePaths(opts);
   const now = (opts.now ?? (() => new Date()))();
 
-  const personal = loadStore(paths.personalPath);
-  const team = loadStore(paths.teamPath);
-  const global = loadStore(paths.globalPath);
-  const allEntries = [...personal, ...team, ...global];
+  let allEntries: KnowledgeEntry[] = [];
+  try {
+    fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+    if (fs.existsSync(paths.projectDbPath) || fs.existsSync(paths.userGlobalDbPath)) {
+      const store = new DualLayerStore({
+        projectDbPath: paths.projectDbPath,
+        userGlobalDbPath: paths.userGlobalDbPath,
+      });
+      allEntries = store.getAll();
+      store.close();
+    }
+  } catch {
+    // DB 不可用 → 空
+  }
 
-  const events = loadEvents(paths.eventsPath);
+  const personal = allEntries.filter((e) => e.scope.level === "personal");
+  const global = allEntries.filter((e) => e.scope.level === "global");
+
+  let events: PersistedEvent[] = [];
+  try {
+    if (fs.existsSync(paths.eventsDbPath)) {
+      const eventLog = new SqliteEventLog(openDb(paths.eventsDbPath));
+      events = eventLog.readAll();
+      eventLog.close();
+    }
+  } catch {
+    // events DB 不可用 → 空
+  }
+
   const timeline = readGitTimeline(paths.cwd);
 
   // ---- 聚合 ----
   const triggerById = new Map<string, string>();
   for (const e of allEntries) triggerById.set(e.id, e.trigger);
 
-  // 命中频次 top
   const fireCount = new Map<string, number>();
   for (const e of events) {
     if (e.knowledge_id && /^hook-pre/.test(e.kind)) {
@@ -119,7 +118,6 @@ export async function executeDogfoodReport(
     .sort((a, b) => b.fires - a.fires)
     .slice(0, 5);
 
-  // confidence 变化 top
   const deltaById = new Map<string, number>();
   for (const e of events) {
     if (
@@ -141,14 +139,12 @@ export async function executeDogfoodReport(
     .sort((a, b) => Math.abs(b.totalDelta) - Math.abs(a.totalDelta))
     .slice(0, 5);
 
-  // archived 计数
   const archivedCount = allEntries.filter((e) => e.status === "archived").length;
 
-  // ---- 渲染 ----
   const md = renderDogfoodReport({
     now,
     personal,
-    team,
+    team: [],
     global,
     events,
     timeline,
@@ -164,7 +160,7 @@ export async function executeDogfoodReport(
     outputPath: paths.outputPath,
     totalEntries: allEntries.length,
     totalEvents: events.length,
-    scopes: { personal: personal.length, team: team.length, global: global.length },
+    scopes: { personal: personal.length, team: 0, global: global.length },
     topFired,
     topConfidenceGain,
     archivedCount,
@@ -203,17 +199,17 @@ export function renderDogfoodReport(input: RenderInput): string {
   const calibrations = events.filter((e) => e.kind === "calibrator.adjusted").length;
 
   const lines: string[] = [];
-  lines.push("# TeamAgent 自举报告（Phase 1）");
+  lines.push("# TeamAgent 自举报告（Phase 2）");
   lines.push("");
   lines.push(`> 生成时间: ${now.toISOString()}`);
-  lines.push("> 数据完全来自系统自身：events.jsonl + 三个 scope 的 knowledge.jsonl + git log");
+  lines.push("> 数据完全来自系统自身：events.db + knowledge.db + git log");
   lines.push("> 由 `teamagent dogfood-report` 自动生成，未经人工修饰");
   lines.push("");
 
   lines.push("## 一句话结论");
   lines.push("");
   lines.push(
-    `Phase 1 期间累计积累 **${all.length} 条知识**（${active.length} 条活跃${archivedCount > 0 ? `、${archivedCount} 条自动归档` : ""}），` +
+    `Phase 2 期间累计积累 **${all.length} 条知识**（${active.length} 条活跃${archivedCount > 0 ? `、${archivedCount} 条自动归档` : ""}），` +
       `Hook 拦截 **${corrections} 次**，Calibrator 调整 **${calibrations} 次**。`,
   );
   lines.push("");
@@ -226,7 +222,6 @@ export function renderDogfoodReport(input: RenderInput): string {
   lines.push(`| 活跃 | ${active.length} |`);
   lines.push(`| 自动归档 | ${archivedCount} |`);
   lines.push(`| personal | ${personal.length} |`);
-  lines.push(`| team | ${team.length} |`);
   lines.push(`| global | ${global.length} |`);
   lines.push(`| C 代码层 | ${byCategory.C} |`);
   lines.push(`| E 工程层 | ${byCategory.E} |`);
@@ -274,12 +269,11 @@ export function renderDogfoodReport(input: RenderInput): string {
   }
   lines.push("");
 
-  lines.push("## Phase 1 git 时间线");
+  lines.push("## Phase 2 git 时间线");
   lines.push("");
   if (timeline.length === 0) {
     lines.push("(无 git 历史)");
   } else {
-    // 取 M0-M7 + Stage 0/A 标志性 commit
     const milestones = timeline.filter((c) =>
       /^(feat|fix|chore|test|docs|ci)\((m[0-9]+|stage0|compiler|hotfix)\)/.test(
         c.message,
@@ -296,11 +290,7 @@ export function renderDogfoodReport(input: RenderInput): string {
   lines.push("## 关于这份报告");
   lines.push("");
   lines.push(
-    "Plan v1.2 设计意图：Phase 1 收尾时由系统**自动生成**一份报告，作为对 'TeamAgent 是否真有用' 这个问题的**第三方独立证据**——所有数字来自磁盘上的 jsonl 文件，没人手动改。",
-  );
-  lines.push("");
-  lines.push(
-    `局限性：本报告**只能说明** "系统积累了什么、命中了什么、调整了什么"，**不能说明** "AI 因为这些规则真的少踩坑了多少"。后者需要 A/B benchmark（已规划进 Phase 2）。`,
+    "Phase 2 设计意图：系统**自动生成**一份报告，作为对 'TeamAgent 是否真有用' 这个问题的**第三方独立证据**——所有数字来自磁盘上的 SQLite DB，没人手动改。",
   );
 
   return lines.join("\n") + "\n";

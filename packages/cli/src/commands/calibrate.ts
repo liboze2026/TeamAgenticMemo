@@ -1,9 +1,12 @@
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
 import {
-  JsonlEventLog,
-  JsonlKnowledgeStore,
+  SqliteEventLog,
+  SqliteKnowledgeStore,
+  DualLayerStore,
   MarkdownCompiler,
+  openDb,
 } from "@teamagent/adapters";
 import {
   defaultCalibrator,
@@ -15,10 +18,9 @@ import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 export interface CalibrateOptions {
   cwd?: string;
   homeDir?: string;
-  personalPath?: string;
-  teamPath?: string;
-  globalPath?: string;
-  eventsPath?: string;
+  projectDbPath?: string;
+  userGlobalDbPath?: string;
+  eventsDbPath?: string;
   claudeMdPath?: string;
   /** 只看会做什么，不写盘 */
   dryRun?: boolean;
@@ -45,12 +47,12 @@ function resolvePaths(opts: CalibrateOptions) {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
   return {
-    personalPath:
-      opts.personalPath ?? path.join(home, ".teamagent", "personal", "knowledge.jsonl"),
-    teamPath: opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl"),
-    globalPath:
-      opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl"),
-    eventsPath: opts.eventsPath ?? path.join(home, ".teamagent", "events.jsonl"),
+    projectDbPath:
+      opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db"),
+    userGlobalDbPath:
+      opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
+    eventsDbPath:
+      opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
   };
 }
@@ -66,7 +68,7 @@ function filterEventsByDays(
     try {
       return new Date(e.timestamp).getTime() >= cutoff;
     } catch {
-      return true; // 时间戳坏的留下，由下游决定
+      return true;
     }
   });
 }
@@ -77,13 +79,8 @@ function makeEventId(now: Date): string {
   return `cal-${ts}-${rand}`;
 }
 
-/**
- * 把 AdjustmentRecord 转成 calibrator.adjusted PersistedEvent 写盘。
- * 这是 stats / Portal 后续读取的数据来源。
- */
 function recordAdjustment(
-  log: JsonlEventLog,
-  _scope: string,
+  log: SqliteEventLog,
   adj: AdjustmentRecord,
   now: Date,
 ): void {
@@ -99,6 +96,13 @@ function recordAdjustment(
   });
 }
 
+/** 包一层只读 store 用于 dry-run（calibrator-pipeline 仍调 update，但 noop） */
+function makeReadOnlyStore(real: SqliteKnowledgeStore): SqliteKnowledgeStore {
+  const proxy = Object.create(real) as SqliteKnowledgeStore;
+  (proxy as any).update = () => {};
+  return proxy;
+}
+
 export async function executeCalibrate(
   opts: CalibrateOptions = {},
 ): Promise<CalibrateResult> {
@@ -107,34 +111,45 @@ export async function executeCalibrate(
   const now = opts.now ?? (() => new Date());
   const nowDate = now();
 
+  fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(paths.eventsDbPath), { recursive: true });
+
   let events: PersistedEvent[] = [];
+  let eventLog: SqliteEventLog | null = null;
   try {
-    events = new JsonlEventLog(paths.eventsPath).readAll();
+    if (fs.existsSync(paths.eventsDbPath)) {
+      eventLog = new SqliteEventLog(openDb(paths.eventsDbPath));
+      events = eventLog.readAll();
+    }
   } catch {
-    // events.jsonl 不存在或损坏 → 视为空（calibrator 将无信号 = 不动）
+    // events DB 不存在或损坏 → 视为空
   }
   events = filterEventsByDays(events, opts.days, nowDate);
 
+  const dualStore = new DualLayerStore({
+    projectDbPath: paths.projectDbPath,
+    userGlobalDbPath: paths.userGlobalDbPath,
+  });
+
   const scopes: Array<{
-    scope: "personal" | "team" | "global";
+    scope: "personal" | "global";
+    label: "personal" | "team" | "global";
+    store: SqliteKnowledgeStore;
     storePath: string;
   }> = [
-    { scope: "personal", storePath: paths.personalPath },
-    { scope: "team", storePath: paths.teamPath },
-    { scope: "global", storePath: paths.globalPath },
+    { scope: "personal", label: "personal", store: dualStore.getProjectStore(), storePath: paths.projectDbPath },
+    { scope: "global", label: "global", store: dualStore.getGlobalStore(), storePath: paths.userGlobalDbPath },
   ];
 
   const byScope: CalibrateResult["byScope"] = [];
   let totalAdjusted = 0;
   let totalArchived = 0;
 
-  for (const { scope, storePath } of scopes) {
-    let store: JsonlKnowledgeStore;
-    try {
-      store = new JsonlKnowledgeStore(storePath);
-    } catch {
+  for (const { label, store, storePath } of scopes) {
+    if (store.count() === 0 && !fs.existsSync(storePath)) {
       byScope.push({
-        scope,
+        scope: label,
         storePath,
         scanned: 0,
         adjustedCount: 0,
@@ -145,16 +160,15 @@ export async function executeCalibrate(
     }
 
     if (dryRun) {
-      // 不修改 store；用一个 view 跑 calibrator 得到预测
       const fakeStore = makeReadOnlyStore(store);
       const pred = await runCalibrationPipeline({
         calibrator: defaultCalibrator,
-        store: fakeStore,
+        store: fakeStore as any,
         events,
         now,
       });
       byScope.push({
-        scope,
+        scope: label,
         storePath,
         scanned: pred.scanned,
         adjustedCount: pred.adjusted.length,
@@ -168,17 +182,19 @@ export async function executeCalibrate(
 
     const result = await runCalibrationPipeline({
       calibrator: defaultCalibrator,
-      store,
+      store: store as any,
       events,
       now,
     });
 
-    // 把 adjustments 写成 calibrator.adjusted 事件（stats 读它做 top 5）
+    // 写 calibrator.adjusted 事件
     if (result.adjusted.length > 0) {
-      const eventLog = new JsonlEventLog(paths.eventsPath);
+      if (!eventLog) {
+        eventLog = new SqliteEventLog(openDb(paths.eventsDbPath));
+      }
       for (const adj of result.adjusted) {
         try {
-          recordAdjustment(eventLog, scope, adj, nowDate);
+          recordAdjustment(eventLog, adj, nowDate);
         } catch {
           // 单条写失败不影响后续
         }
@@ -186,7 +202,7 @@ export async function executeCalibrate(
     }
 
     byScope.push({
-      scope,
+      scope: label,
       storePath,
       scanned: result.scanned,
       adjustedCount: result.adjusted.length,
@@ -199,32 +215,18 @@ export async function executeCalibrate(
 
   // 若有调整且非 dry-run，重编译 CLAUDE.md
   if (!dryRun && totalAdjusted > 0) {
-    const all: KnowledgeEntry[] = [];
-    for (const p of [paths.personalPath, paths.teamPath, paths.globalPath]) {
-      try {
-        all.push(...new JsonlKnowledgeStore(p).getActive());
-      } catch {
-        // skip
-      }
-    }
+    const allActive: KnowledgeEntry[] = dualStore.findActive();
     try {
-      new MarkdownCompiler(paths.claudeMdPath, () => nowDate.toISOString()).writeToFile(
-        all,
-      );
+      new MarkdownCompiler(paths.claudeMdPath, () => nowDate.toISOString()).writeToFile(allActive);
     } catch {
       // 重编译失败不算 fatal
     }
   }
 
-  return { dryRun, byScope, totalAdjusted, totalArchived };
-}
+  dualStore.close();
+  eventLog?.close();
 
-/** 包一层只读 store 用于 dry-run（calibrator-pipeline 仍调 update，但 noop） */
-function makeReadOnlyStore(real: JsonlKnowledgeStore): JsonlKnowledgeStore {
-  // Pipeline only calls getAll/update; intercept update to noop
-  const proxy = Object.create(real) as JsonlKnowledgeStore;
-  (proxy as unknown as { update: () => void }).update = () => {};
-  return proxy;
+  return { dryRun, byScope, totalAdjusted, totalArchived };
 }
 
 export function parseCalibrateArgs(argv: string[]): CalibrateOptions {

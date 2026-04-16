@@ -7,8 +7,8 @@ import {
   renderDogfoodReport,
   parseDogfoodReportArgs,
 } from "../commands/dogfood-report.js";
-import { JsonlEventLog, JsonlKnowledgeStore } from "@teamagent/adapters";
-import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
+import { DualLayerStore, SqliteEventLog, openDb } from "@teamagent/adapters";
+import type { KnowledgeEntry } from "@teamagent/types";
 
 function mkTmp() {
   const root = nodeFs.mkdtempSync(path.join(os.tmpdir(), "dogfood-"));
@@ -16,9 +16,15 @@ function mkTmp() {
   const cwd = path.join(root, "cwd");
   nodeFs.mkdirSync(home, { recursive: true });
   nodeFs.mkdirSync(cwd, { recursive: true });
+  const projectDbPath = path.join(cwd, ".teamagent", "knowledge.db");
+  const userGlobalDbPath = path.join(home, ".teamagent", "global.db");
+  const eventsDbPath = path.join(home, ".teamagent", "events.db");
   return {
     home,
     cwd,
+    projectDbPath,
+    userGlobalDbPath,
+    eventsDbPath,
     cleanup: () => nodeFs.rmSync(root, { recursive: true, force: true }),
   };
 }
@@ -26,7 +32,7 @@ function mkTmp() {
 function entry(over: Partial<KnowledgeEntry>): KnowledgeEntry {
   return {
     id: "e",
-    scope: { level: "team" },
+    scope: { level: "personal" },
     category: "E",
     tags: [],
     type: "avoidance",
@@ -72,36 +78,19 @@ describe("executeDogfoodReport", () => {
   });
 
   it("seeds entries + events → report counts them correctly", async () => {
-    const teamPath = path.join(tmp.cwd, ".teamagent", "knowledge.jsonl");
-    nodeFs.mkdirSync(path.dirname(teamPath), { recursive: true });
-    const store = new JsonlKnowledgeStore(teamPath);
+    nodeFs.mkdirSync(path.dirname(tmp.projectDbPath), { recursive: true });
+    nodeFs.mkdirSync(path.dirname(tmp.userGlobalDbPath), { recursive: true });
+    const store = new DualLayerStore({ projectDbPath: tmp.projectDbPath, userGlobalDbPath: tmp.userGlobalDbPath });
     store.add(entry({ id: "rule-a", trigger: "use HTTP" }));
     store.add(entry({ id: "rule-b", trigger: "use DB" }));
+    store.close();
 
-    const eventsPath = path.join(tmp.home, ".teamagent", "events.jsonl");
-    nodeFs.mkdirSync(path.dirname(eventsPath), { recursive: true });
-    const log = new JsonlEventLog(eventsPath);
-    log.append({
-      id: "e1",
-      kind: "hook-pre.matched",
-      knowledge_id: "rule-a",
-      timestamp: "2026-04-15T00:01:00Z",
-      schema_version: 1,
-    });
-    log.append({
-      id: "e2",
-      kind: "hook-pre.matched",
-      knowledge_id: "rule-a",
-      timestamp: "2026-04-15T00:02:00Z",
-      schema_version: 1,
-    });
-    log.append({
-      id: "e3",
-      kind: "hook-pre.matched",
-      knowledge_id: "rule-b",
-      timestamp: "2026-04-15T00:03:00Z",
-      schema_version: 1,
-    });
+    nodeFs.mkdirSync(path.dirname(tmp.eventsDbPath), { recursive: true });
+    const log = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    log.append({ id: "e1", kind: "hook-pre.matched", knowledge_id: "rule-a", timestamp: "2026-04-15T00:01:00Z", schema_version: 1 });
+    log.append({ id: "e2", kind: "hook-pre.matched", knowledge_id: "rule-a", timestamp: "2026-04-15T00:02:00Z", schema_version: 1 });
+    log.append({ id: "e3", kind: "hook-pre.matched", knowledge_id: "rule-b", timestamp: "2026-04-15T00:03:00Z", schema_version: 1 });
+    log.close();
 
     const r = await executeDogfoodReport({
       cwd: tmp.cwd,
@@ -111,7 +100,7 @@ describe("executeDogfoodReport", () => {
 
     expect(r.totalEntries).toBe(2);
     expect(r.totalEvents).toBe(3);
-    expect(r.scopes.team).toBe(2);
+    expect(r.scopes.personal).toBe(2);
     expect(r.topFired[0]!.knowledge_id).toBe("rule-a");
     expect(r.topFired[0]!.fires).toBe(2);
     expect(r.topFired[1]!.knowledge_id).toBe("rule-b");
@@ -119,11 +108,12 @@ describe("executeDogfoodReport", () => {
   });
 
   it("counts archived entries", async () => {
-    const teamPath = path.join(tmp.cwd, ".teamagent", "knowledge.jsonl");
-    nodeFs.mkdirSync(path.dirname(teamPath), { recursive: true });
-    const store = new JsonlKnowledgeStore(teamPath);
+    nodeFs.mkdirSync(path.dirname(tmp.projectDbPath), { recursive: true });
+    nodeFs.mkdirSync(path.dirname(tmp.userGlobalDbPath), { recursive: true });
+    const store = new DualLayerStore({ projectDbPath: tmp.projectDbPath, userGlobalDbPath: tmp.userGlobalDbPath });
     store.add(entry({ id: "active", status: "active" }));
     store.add(entry({ id: "old", status: "archived" }));
+    store.close();
     const r = await executeDogfoodReport({
       cwd: tmp.cwd,
       homeDir: tmp.home,
@@ -133,32 +123,17 @@ describe("executeDogfoodReport", () => {
   });
 
   it("aggregates calibrator confidence deltas top-N", async () => {
-    const teamPath = path.join(tmp.cwd, ".teamagent", "knowledge.jsonl");
-    nodeFs.mkdirSync(path.dirname(teamPath), { recursive: true });
-    const store = new JsonlKnowledgeStore(teamPath);
+    nodeFs.mkdirSync(path.dirname(tmp.projectDbPath), { recursive: true });
+    nodeFs.mkdirSync(path.dirname(tmp.userGlobalDbPath), { recursive: true });
+    const store = new DualLayerStore({ projectDbPath: tmp.projectDbPath, userGlobalDbPath: tmp.userGlobalDbPath });
     store.add(entry({ id: "rule-up", trigger: "rising rule" }));
+    store.close();
 
-    const eventsPath = path.join(tmp.home, ".teamagent", "events.jsonl");
-    nodeFs.mkdirSync(path.dirname(eventsPath), { recursive: true });
-    const log = new JsonlEventLog(eventsPath);
-    log.append({
-      id: "c1",
-      kind: "calibrator.adjusted",
-      knowledge_id: "rule-up",
-      confidence_before: 0.7,
-      confidence_after: 0.85,
-      timestamp: "2026-04-15T00:01:00Z",
-      schema_version: 1,
-    });
-    log.append({
-      id: "c2",
-      kind: "calibrator.adjusted",
-      knowledge_id: "rule-up",
-      confidence_before: 0.85,
-      confidence_after: 0.9,
-      timestamp: "2026-04-15T00:02:00Z",
-      schema_version: 1,
-    });
+    nodeFs.mkdirSync(path.dirname(tmp.eventsDbPath), { recursive: true });
+    const log = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    log.append({ id: "c1", kind: "calibrator.adjusted", knowledge_id: "rule-up", confidence_before: 0.7, confidence_after: 0.85, timestamp: "2026-04-15T00:01:00Z", schema_version: 1 });
+    log.append({ id: "c2", kind: "calibrator.adjusted", knowledge_id: "rule-up", confidence_before: 0.85, confidence_after: 0.9, timestamp: "2026-04-15T00:02:00Z", schema_version: 1 });
+    log.close();
 
     const r = await executeDogfoodReport({
       cwd: tmp.cwd,
@@ -184,10 +159,11 @@ describe("executeDogfoodReport", () => {
 
 describe("renderDogfoodReport", () => {
   it("includes all key sections", () => {
+    const e = entry({ id: "t1" });
     const md = renderDogfoodReport({
       now: new Date("2026-04-15T01:00:00Z"),
-      personal: [],
-      team: [entry({ id: "t1" })],
+      personal: [e],
+      team: [],
       global: [],
       events: [],
       timeline: [{ hash: "abc", date: "2026-04-15", message: "feat(m7): test" }],

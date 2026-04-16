@@ -3,6 +3,7 @@ import nodeFs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { executeInit, parseInitArgs, renderInitResult } from "../commands/init.js";
+import { DualLayerStore, SqliteKnowledgeStore, openDb } from "@teamagent/adapters";
 import type { LLMClient } from "@teamagent/ports";
 
 function mkTmp() {
@@ -15,6 +16,8 @@ function mkTmp() {
     root,
     cwd,
     home,
+    projectDbPath: path.join(cwd, ".teamagent", "knowledge.db"),
+    userGlobalDbPath: path.join(home, ".teamagent", "global.db"),
     cleanup: () => nodeFs.rmSync(root, { recursive: true, force: true }),
   };
 }
@@ -50,7 +53,6 @@ describe("executeInit", () => {
   });
 
   it("dry-run: no files written, plans are reported", async () => {
-    // Seed a CLAUDE.md so scan has something to report
     nodeFs.writeFileSync(
       path.join(tmp.cwd, "CLAUDE.md"),
       "# Rules\n- existing rule one\n- existing rule two\n",
@@ -64,13 +66,9 @@ describe("executeInit", () => {
 
     expect(r.ok).toBe(true);
     expect(r.dryRun).toBe(true);
-    // No knowledge files created
-    expect(
-      nodeFs.existsSync(path.join(tmp.home, ".teamagent", "global", "knowledge.jsonl")),
-    ).toBe(false);
-    expect(
-      nodeFs.existsSync(path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl")),
-    ).toBe(false);
+    // No knowledge DB files created
+    expect(nodeFs.existsSync(tmp.userGlobalDbPath)).toBe(false);
+    expect(nodeFs.existsSync(tmp.projectDbPath)).toBe(false);
     // CLAUDE.md untouched (no TEAMAGENT block added)
     const md = nodeFs.readFileSync(path.join(tmp.cwd, "CLAUDE.md"), "utf-8");
     expect(md).not.toContain("TEAMAGENT:START");
@@ -88,27 +86,19 @@ describe("executeInit", () => {
     });
 
     expect(r.ok).toBe(true);
-    // 4 presets written to global
-    const globalLines = nodeFs
-      .readFileSync(
-        path.join(tmp.home, ".teamagent", "global", "knowledge.jsonl"),
-        "utf-8",
-      )
-      .trim()
-      .split("\n");
-    expect(globalLines).toHaveLength(4);
+    // 4 presets written to global DB
+    const globalStore = new SqliteKnowledgeStore(openDb(tmp.userGlobalDbPath));
+    const globalCount = globalStore.count();
+    globalStore.close();
+    expect(globalCount).toBe(4);
 
-    // 2 imported rules in personal (both CLAUDE.md bullets)
-    const personalLines = nodeFs
-      .readFileSync(
-        path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl"),
-        "utf-8",
-      )
-      .trim()
-      .split("\n");
-    expect(personalLines).toHaveLength(2);
+    // 2 imported rules in project DB (both CLAUDE.md bullets)
+    const projectStore = new SqliteKnowledgeStore(openDb(tmp.projectDbPath));
+    const personalCount = projectStore.count();
+    projectStore.close();
+    expect(personalCount).toBe(2);
 
-    // CLAUDE.md has TEAMAGENT block (6 = 4 preset + 2 imported)
+    // CLAUDE.md has TEAMAGENT block
     const md = nodeFs.readFileSync(path.join(tmp.cwd, "CLAUDE.md"), "utf-8");
     expect(md).toContain("TEAMAGENT:START");
     expect(md).toContain("TEAMAGENT:END");
@@ -130,14 +120,10 @@ describe("executeInit", () => {
     expect(r2.ok).toBe(true);
     // Second run should add 0 new presets (all 4 already present)
     expect(r2.summary.presetAdded).toBe(0);
-    const globalLines = nodeFs
-      .readFileSync(
-        path.join(tmp.home, ".teamagent", "global", "knowledge.jsonl"),
-        "utf-8",
-      )
-      .trim()
-      .split("\n");
-    expect(globalLines).toHaveLength(4); // still 4
+    const globalStore = new SqliteKnowledgeStore(openDb(tmp.userGlobalDbPath));
+    const globalCount = globalStore.count();
+    globalStore.close();
+    expect(globalCount).toBe(4); // still 4
   });
 
   it("no CLAUDE.md + no .cursorrules → import step reports '无规则可导入'", async () => {

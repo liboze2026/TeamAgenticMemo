@@ -1,12 +1,13 @@
 import os from "node:os";
 import path from "node:path";
-import fsSync from "node:fs";
+import fs from "node:fs";
 import {
   ClaudeSessionSource,
   ClaudeCodeLLMClient,
-  JsonlKnowledgeStore,
-  JsonlEventLog,
+  DualLayerStore,
+  SqliteEventLog,
   MarkdownCompiler,
+  openDb,
 } from "@teamagent/adapters";
 import {
   ruleBasedCorrectionDetector,
@@ -32,13 +33,12 @@ export interface AnalyzeOptions {
   /** 注入 LLM client（测试用）；缺省用 ClaudeCodeLLMClient */
   llmClient?: LLMClient;
   /** 注入 store 路径（测试用） */
-  teamPath?: string;
-  personalPath?: string;
-  globalPath?: string;
+  projectDbPath?: string;
+  userGlobalDbPath?: string;
   /** 注入 CLAUDE.md 路径（测试用） */
   claudeMdPath?: string;
-  /** events.jsonl 路径（测试用；--commit 校准阶段会读它） */
-  eventsPath?: string;
+  /** events DB 路径（测试用；--commit 校准阶段会读它） */
+  eventsDbPath?: string;
   cwd?: string;
   /** id 生成器（测试用） */
   idGen?: () => string;
@@ -56,9 +56,8 @@ export async function executeAnalyze(opts: AnalyzeOptions = {}): Promise<string>
   let sourceDesc: string;
 
   if (opts.session) {
-    // 绝对路径优先
-    if (fsSync.existsSync(opts.session)) {
-      const raw = fsSync.readFileSync(opts.session, "utf-8");
+    if (fs.existsSync(opts.session)) {
+      const raw = fs.readFileSync(opts.session, "utf-8");
       session = parseSessionFile(raw);
       sourceDesc = opts.session;
     } else {
@@ -93,7 +92,6 @@ export async function executeAnalyze(opts: AnalyzeOptions = {}): Promise<string>
 
   if (!opts.commit) return dryRun;
 
-  // --commit: 跑 extractor pipeline
   const commitOutput = await runCommit(session, opts);
   return dryRun + "\n" + commitOutput;
 }
@@ -104,15 +102,22 @@ async function runCommit(
 ): Promise<string> {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
-  const teamPath = opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl");
-  const personalPath =
-    opts.personalPath ?? path.join(home, ".teamagent", "personal", "knowledge.jsonl");
-  const globalPath =
-    opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl");
+  const projectDbPath =
+    opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db");
+  const userGlobalDbPath =
+    opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db");
+  const eventsDbPath =
+    opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db");
   const claudeMdPath = opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md");
 
+  fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(eventsDbPath), { recursive: true });
+
   const llm = opts.llmClient ?? new ClaudeCodeLLMClient();
-  const store = new JsonlKnowledgeStore(teamPath);
+  const dualStore = new DualLayerStore({ projectDbPath, userGlobalDbPath });
+  // Extract pipeline writes to personal (project) scope
+  const projectStore = dualStore.getProjectStore();
 
   const now = opts.now ?? (() => new Date());
   const idGen =
@@ -120,61 +125,47 @@ async function runCommit(
     (() => {
       const ts = now().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
       const rand = Math.random().toString(36).slice(2, 8);
-      return `team-${ts}-${rand}`;
+      return `pers-${ts}-${rand}`;
     });
 
-  // recompile 合并三个 scope 的 active entries
-  const recompile = (_activeFromTeam: KnowledgeEntry[]): void => {
-    const all: KnowledgeEntry[] = [];
-    for (const p of [personalPath, teamPath, globalPath]) {
-      try {
-        const s = new JsonlKnowledgeStore(p);
-        all.push(...s.getActive());
-      } catch {
-        // 文件不存在 / 损坏，跳过
-      }
-    }
+  const recompile = (_activeFromProject: KnowledgeEntry[]): void => {
+    const all = dualStore.findActive();
     const compiler = new MarkdownCompiler(claudeMdPath, () => now().toISOString());
     compiler.writeToFile(all);
   };
 
-  const before = store.count();
+  const before = projectStore.count();
   const result = await runExtractPipeline(session, {
     detector: ruleBasedCorrectionDetector,
     extractor: llmBasedKnowledgeExtractor,
     callLLM: (prompt) => llm.complete(prompt),
-    store,
+    store: projectStore as any,
     recompile,
-    scope: { level: "team" },
+    scope: { level: "personal" },
     source: "accumulated",
     now,
     idGen,
   });
 
-  const after = store.count();
+  const after = projectStore.count();
 
-  // --- 校准阶段：抽取后自动跑 calibrator（M6 集成） ---
+  // --- 校准阶段 ---
   let calibrationSummary = "";
   if (!opts.skipCalibrate) {
-    const eventsPath = opts.eventsPath ?? path.join(home, ".teamagent", "events.jsonl");
     try {
-      const eventLog = new JsonlEventLog(eventsPath);
+      const eventLog = new SqliteEventLog(openDb(eventsDbPath));
       const events = eventLog.readAll();
-      // calibration 跑遍所有 store（personal/team/global），不只 team
-      for (const storePath of [personalPath, teamPath, globalPath]) {
-        let calStore: JsonlKnowledgeStore;
-        try {
-          calStore = new JsonlKnowledgeStore(storePath);
-        } catch {
-          continue;
-        }
+
+      for (const [label, store] of [
+        ["personal", dualStore.getProjectStore()],
+        ["global", dualStore.getGlobalStore()],
+      ] as const) {
         const calResult = await runCalibrationPipeline({
           calibrator: defaultCalibrator,
-          store: calStore,
+          store: store as any,
           events,
           now,
         });
-        // 写 calibrator.adjusted 事件供 stats / Portal 后续读取
         for (const adj of calResult.adjusted) {
           try {
             const ts = now().toISOString();
@@ -195,21 +186,23 @@ async function runCommit(
         }
         if (calResult.adjusted.length > 0) {
           calibrationSummary +=
-            `  ${storePath}: 调整 ${calResult.adjusted.length} 条` +
+            `  ${label}: 调整 ${calResult.adjusted.length} 条` +
             (calResult.archivedNew.length > 0
               ? `，归档 ${calResult.archivedNew.length} 条`
               : "") +
             "\n";
         }
       }
-      // 若有调整，重编译
+      eventLog.close();
       if (calibrationSummary) {
-        recompile(store.getActive());
+        recompile([]);
       }
     } catch (err) {
       calibrationSummary = `  ⚠ 校准阶段失败: ${String(err).slice(0, 120)}\n`;
     }
   }
+
+  dualStore.close();
 
   const lines: string[] = [];
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -312,7 +305,6 @@ function truncate(s: string, max: number): string {
   return clean.slice(0, max - 1) + "…";
 }
 
-/** 解析 analyze CLI 参数 */
 export function parseAnalyzeArgs(argv: string[]): AnalyzeOptions {
   const opts: AnalyzeOptions = {};
   for (let i = 0; i < argv.length; i++) {

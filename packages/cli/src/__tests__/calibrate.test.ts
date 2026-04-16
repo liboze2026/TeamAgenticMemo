@@ -7,7 +7,7 @@ import {
   parseCalibrateArgs,
   renderCalibrateResult,
 } from "../commands/calibrate.js";
-import { JsonlEventLog, JsonlKnowledgeStore } from "@teamagent/adapters";
+import { DualLayerStore, SqliteKnowledgeStore, SqliteEventLog, openDb } from "@teamagent/adapters";
 import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
 function mkTmp() {
@@ -16,26 +16,32 @@ function mkTmp() {
   const cwd = path.join(root, "cwd");
   nodeFs.mkdirSync(home, { recursive: true });
   nodeFs.mkdirSync(cwd, { recursive: true });
+  const projectDbPath = path.join(cwd, ".teamagent", "knowledge.db");
+  const userGlobalDbPath = path.join(home, ".teamagent", "global.db");
+  const eventsDbPath = path.join(home, ".teamagent", "events.db");
+  const claudeMdPath = path.join(cwd, "CLAUDE.md");
   return {
     home,
     cwd,
-    teamPath: path.join(cwd, ".teamagent", "knowledge.jsonl"),
-    personalPath: path.join(home, ".teamagent", "personal", "knowledge.jsonl"),
-    globalPath: path.join(home, ".teamagent", "global", "knowledge.jsonl"),
-    eventsPath: path.join(home, ".teamagent", "events.jsonl"),
-    claudeMdPath: path.join(cwd, "CLAUDE.md"),
+    projectDbPath,
+    userGlobalDbPath,
+    eventsDbPath,
+    claudeMdPath,
     cleanup: () => nodeFs.rmSync(root, { recursive: true, force: true }),
   };
 }
 
-function seedEntry(storePath: string, e: KnowledgeEntry): void {
-  new JsonlKnowledgeStore(storePath).add(e);
+function seedEntry(dbPath: string, e: KnowledgeEntry): void {
+  nodeFs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const store = new SqliteKnowledgeStore(openDb(dbPath));
+  store.add(e);
+  store.close();
 }
 
 function entry(over: Partial<KnowledgeEntry>): KnowledgeEntry {
   return {
     id: "e",
-    scope: { level: "team" },
+    scope: { level: "personal" },
     category: "E",
     tags: [],
     type: "avoidance",
@@ -77,8 +83,8 @@ describe("executeCalibrate", () => {
   });
   afterEach(() => tmp.cleanup());
 
-  it("no events → 0/0/0 across scopes", async () => {
-    seedEntry(tmp.teamPath, entry({ id: "rule-a" }));
+  it("no events → 0/0/0", async () => {
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-a" }));
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
@@ -89,10 +95,11 @@ describe("executeCalibrate", () => {
   });
 
   it("positive events → confidence raised + calibrator.adjusted event written", async () => {
-    seedEntry(tmp.teamPath, entry({ id: "rule-a", confidence: 0.7 }));
-    new JsonlEventLog(tmp.eventsPath).append(
-      evt({ id: "p1", kind: "hook-pre.blocked", knowledge_id: "rule-a" }),
-    );
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-a", confidence: 0.7 }));
+    nodeFs.mkdirSync(path.dirname(tmp.eventsDbPath), { recursive: true });
+    const log = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    log.append(evt({ id: "p1", kind: "hook-pre.blocked", knowledge_id: "rule-a" }));
+    log.close();
 
     const r = await executeCalibrate({
       cwd: tmp.cwd,
@@ -102,10 +109,14 @@ describe("executeCalibrate", () => {
 
     expect(r.totalAdjusted).toBe(1);
     // Store updated
-    const updated = new JsonlKnowledgeStore(tmp.teamPath).getById("rule-a")!;
+    const store = new DualLayerStore({ projectDbPath: tmp.projectDbPath, userGlobalDbPath: tmp.userGlobalDbPath });
+    const updated = store.getById("rule-a")!;
+    store.close();
     expect(updated.confidence).toBeCloseTo(0.75, 5);
     // calibrator.adjusted event written
-    const events = new JsonlEventLog(tmp.eventsPath).readAll();
+    const log2 = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    const events = log2.readAll();
+    log2.close();
     const cal = events.find((e) => e.kind === "calibrator.adjusted")!;
     expect(cal).toBeDefined();
     expect(cal.knowledge_id).toBe("rule-a");
@@ -114,10 +125,11 @@ describe("executeCalibrate", () => {
   });
 
   it("dry-run does not modify store or write events", async () => {
-    seedEntry(tmp.teamPath, entry({ id: "rule-a", confidence: 0.7 }));
-    new JsonlEventLog(tmp.eventsPath).append(
-      evt({ id: "p1", kind: "hook-pre.blocked", knowledge_id: "rule-a" }),
-    );
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-a", confidence: 0.7 }));
+    nodeFs.mkdirSync(path.dirname(tmp.eventsDbPath), { recursive: true });
+    const log = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    log.append(evt({ id: "p1", kind: "hook-pre.blocked", knowledge_id: "rule-a" }));
+    log.close();
 
     const r = await executeCalibrate({
       cwd: tmp.cwd,
@@ -126,77 +138,71 @@ describe("executeCalibrate", () => {
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     expect(r.dryRun).toBe(true);
-    expect(r.totalAdjusted).toBe(1); // 报告会调整 1 条
-    // 但实际 store 未变
-    const stillOriginal = new JsonlKnowledgeStore(tmp.teamPath).getById("rule-a")!;
-    expect(stillOriginal.confidence).toBe(0.7);
-    // events.jsonl 没新增 calibrator.adjusted
-    const events = new JsonlEventLog(tmp.eventsPath).readAll();
+    expect(r.totalAdjusted).toBe(1);
+    // store unchanged
+    const store = new DualLayerStore({ projectDbPath: tmp.projectDbPath, userGlobalDbPath: tmp.userGlobalDbPath });
+    const still = store.getById("rule-a")!;
+    store.close();
+    expect(still.confidence).toBe(0.7);
+    // no new calibrator.adjusted event
+    const log2 = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    const events = log2.readAll();
+    log2.close();
     expect(events.some((e) => e.kind === "calibrator.adjusted")).toBe(false);
   });
 
   it("days filter excludes old events", async () => {
-    seedEntry(tmp.teamPath, entry({ id: "rule-a", confidence: 0.7 }));
-    // 8 天前的事件
-    new JsonlEventLog(tmp.eventsPath).append(
-      evt({
-        id: "p-old",
-        kind: "hook-pre.blocked",
-        knowledge_id: "rule-a",
-        timestamp: "2026-04-07T00:00:00Z",
-      }),
-    );
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-a", confidence: 0.7 }));
+    nodeFs.mkdirSync(path.dirname(tmp.eventsDbPath), { recursive: true });
+    const log = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    log.append(evt({
+      id: "p-old",
+      kind: "hook-pre.blocked",
+      knowledge_id: "rule-a",
+      timestamp: "2026-04-07T00:00:00Z",
+    }));
+    log.close();
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
       days: 7,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
-    expect(r.totalAdjusted).toBe(0); // 8 天前的事件被过滤
+    expect(r.totalAdjusted).toBe(0);
   });
 
   it("auto-archive happens and is reflected in result", async () => {
-    seedEntry(tmp.teamPath, entry({ id: "rule-a", confidence: 0.32 }));
-    const log = new JsonlEventLog(tmp.eventsPath);
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-a", confidence: 0.32 }));
+    nodeFs.mkdirSync(path.dirname(tmp.eventsDbPath), { recursive: true });
+    const log = new SqliteEventLog(openDb(tmp.eventsDbPath));
     for (let i = 0; i < 3; i++) {
-      log.append(
-        evt({
-          id: `b${i}`,
-          kind: "hook-pre.blocked",
-          knowledge_id: "rule-a",
-          tool_use_id: `t${i}`,
-        }),
-      );
-      log.append(
-        evt({
-          id: `pf${i}`,
-          kind: "hook-post.result",
-          knowledge_id: "rule-a",
-          tool_use_id: `t${i}`,
-          result: { succeeded: false },
-        }),
-      );
+      log.append(evt({ id: `b${i}`, kind: "hook-pre.blocked", knowledge_id: "rule-a", tool_use_id: `t${i}` }));
+      log.append(evt({ id: `pf${i}`, kind: "hook-post.result", knowledge_id: "rule-a", tool_use_id: `t${i}`, result: { succeeded: false } }));
     }
+    log.close();
+
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     expect(r.totalArchived).toBe(1);
-    const updated = new JsonlKnowledgeStore(tmp.teamPath).getById("rule-a")!;
+    const store = new DualLayerStore({ projectDbPath: tmp.projectDbPath, userGlobalDbPath: tmp.userGlobalDbPath });
+    const updated = store.getById("rule-a")!;
+    store.close();
     expect(updated.status).toBe("archived");
-    // calibrator.adjusted event records the archive transition
-    const cal = new JsonlEventLog(tmp.eventsPath)
-      .readAll()
-      .find((e) => e.kind === "calibrator.adjusted")!;
+    const log2 = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    const cal = log2.readAll().find((e) => e.kind === "calibrator.adjusted")!;
+    log2.close();
     expect(cal.status_after).toBe("archived");
   });
 
   it("recompiles CLAUDE.md when adjustments occur", async () => {
-    seedEntry(tmp.teamPath, entry({ id: "rule-a", confidence: 0.7 }));
-    new JsonlEventLog(tmp.eventsPath).append(
-      evt({ id: "p1", kind: "hook-pre.blocked", knowledge_id: "rule-a" }),
-    );
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-a", confidence: 0.7 }));
+    nodeFs.mkdirSync(path.dirname(tmp.eventsDbPath), { recursive: true });
+    const log = new SqliteEventLog(openDb(tmp.eventsDbPath));
+    log.append(evt({ id: "p1", kind: "hook-pre.blocked", knowledge_id: "rule-a" }));
+    log.close();
     await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
@@ -206,8 +212,8 @@ describe("executeCalibrate", () => {
     expect(md).toContain("TEAMAGENT:START");
   });
 
-  it("missing events file → no error, no adjustments", async () => {
-    seedEntry(tmp.teamPath, entry({ id: "rule-a" }));
+  it("missing events DB → no error, no adjustments", async () => {
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-a" }));
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
@@ -263,14 +269,6 @@ describe("renderCalibrateResult", () => {
               signals: [],
             },
           ],
-        },
-        {
-          scope: "team",
-          storePath: "/t",
-          scanned: 10,
-          adjustedCount: 0,
-          archivedCount: 0,
-          adjustments: [],
         },
         {
           scope: "global",

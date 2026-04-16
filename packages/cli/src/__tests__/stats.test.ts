@@ -7,7 +7,7 @@ import {
   renderStats,
   aggregateConfidenceMovements,
 } from "../commands/stats.js";
-import { JsonlEventLog, JsonlKnowledgeStore } from "@teamagent/adapters";
+import { DualLayerStore, SqliteEventLog, openDb } from "@teamagent/adapters";
 import { executePitfall } from "../commands/pitfall.js";
 import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
@@ -155,8 +155,8 @@ describe("executeStats (IO)", () => {
     expect(out).toContain("尚无知识条目");
   });
 
-  it("reads from real JSONL and aggregates", () => {
-    // Seed via pitfall
+  it("reads from SQLite and aggregates", () => {
+    // Seed via pitfall (writes to SQLite)
     executePitfall(
       { trigger: "t1", wrong: "w1", correct: "c1", reason: "r1", category: "C" },
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => "2026-04-14T00:00:00Z", env: {} },
@@ -171,17 +171,6 @@ describe("executeStats (IO)", () => {
     expect(out).toContain("C 代码层  1");
     expect(out).toContain("E 工程层  1");
     expect(out).toContain("t2"); // recent first
-  });
-
-  it("ignores corrupt JSONL file gracefully", () => {
-    const corruptDir = path.join(tmp.home, ".teamagent", "personal");
-    fs.mkdirSync(corruptDir, { recursive: true });
-    const corruptFile = path.join(corruptDir, "knowledge.jsonl");
-    fs.writeFileSync(corruptFile, "garbage\nnot json\n");
-
-    const out = executeStats({ cwd: tmp.cwd, homeDir: tmp.home });
-    // Corrupt lines skipped by JsonlStore; remaining count is 0
-    expect(out).toContain("尚无知识条目");
   });
 
   describe("M6 confidence movements", () => {
@@ -220,7 +209,6 @@ describe("executeStats (IO)", () => {
         7,
         new Date("2026-04-15T04:00:00Z"),
       );
-      // sorted by |delta| desc; rule-a +0.10, rule-b -0.10 (tie → either order ok)
       const a = movements.find((m) => m.knowledge_id === "rule-a")!;
       const b = movements.find((m) => m.knowledge_id === "rule-b")!;
       expect(a.totalDelta).toBeCloseTo(0.1, 5);
@@ -312,11 +300,12 @@ describe("executeStats (IO)", () => {
       expect(out).not.toContain("confidence 变化");
     });
 
-    it("executeStats reads events.jsonl and shows movement section", () => {
+    it("executeStats reads events.db and shows movement section", () => {
       const eventsDir = path.join(tmp.home, ".teamagent");
       fs.mkdirSync(eventsDir, { recursive: true });
-      const eventsPath = path.join(eventsDir, "events.jsonl");
-      new JsonlEventLog(eventsPath).append({
+      const eventsDbPath = path.join(eventsDir, "events.db");
+      const eventLog = new SqliteEventLog(openDb(eventsDbPath));
+      eventLog.append({
         id: "c1",
         kind: "calibrator.adjusted",
         knowledge_id: "rule-x",
@@ -325,12 +314,15 @@ describe("executeStats (IO)", () => {
         timestamp: "2026-04-15T01:00:00Z",
         schema_version: 1,
       });
-      // Need a knowledge entry too so stats has at least 1 entry
-      const teamDir = path.join(tmp.cwd, ".teamagent");
-      fs.mkdirSync(teamDir, { recursive: true });
-      new JsonlKnowledgeStore(path.join(teamDir, "knowledge.jsonl")).add(
-        makeEntry({ id: "rule-x", scope: { level: "team" } }),
-      );
+      eventLog.close();
+
+      // Seed a knowledge entry so stats has at least 1 entry
+      const projectDbPath = path.join(tmp.cwd, ".teamagent", "knowledge.db");
+      fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+      const userGlobalDbPath = path.join(tmp.home, ".teamagent", "global.db");
+      const store = new DualLayerStore({ projectDbPath, userGlobalDbPath });
+      store.add(makeEntry({ id: "rule-x" }));
+      store.close();
 
       const out = executeStats({
         cwd: tmp.cwd,

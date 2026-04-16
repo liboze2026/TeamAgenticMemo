@@ -1,16 +1,16 @@
 import os from "node:os";
 import path from "node:path";
-import { JsonlKnowledgeStore } from "@teamagent/adapters";
+import fs from "node:fs";
+import { DualLayerStore, openDb } from "@teamagent/adapters";
 import type { KnowledgeEntry } from "@teamagent/types";
 
 export interface ReviewOptions {
   /** 列出最近 N 条。默认 10。 */
   limit?: number;
-  /** 只看指定 scope 的条目 */
+  /** 只看指定 scope 的条目（v2: team 等于 personal） */
   scope?: "personal" | "team" | "global";
-  personalPath?: string;
-  teamPath?: string;
-  globalPath?: string;
+  projectDbPath?: string;
+  userGlobalDbPath?: string;
   homeDir?: string;
   cwd?: string;
 }
@@ -23,26 +23,32 @@ interface ReviewRow {
 export function executeReview(opts: ReviewOptions = {}): string {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
-  const paths = {
-    personal:
-      opts.personalPath ?? path.join(home, ".teamagent", "personal", "knowledge.jsonl"),
-    team: opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl"),
-    global:
-      opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl"),
-  };
+  const projectDbPath =
+    opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db");
+  const userGlobalDbPath =
+    opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db");
 
   const rows: ReviewRow[] = [];
-  const levels: Array<"personal" | "team" | "global"> =
-    opts.scope ? [opts.scope] : ["personal", "team", "global"];
-  for (const level of levels) {
-    try {
-      const store = new JsonlKnowledgeStore(paths[level]);
-      for (const entry of store.getAll()) {
-        rows.push({ entry, scope: level });
+
+  try {
+    fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
+    const store = new DualLayerStore({ projectDbPath, userGlobalDbPath });
+    const all = store.getAll();
+    store.close();
+
+    for (const entry of all) {
+      const level = entry.scope.level as "personal" | "team" | "global";
+      // v2: filter by scope if requested
+      if (opts.scope) {
+        // team maps to personal in v2
+        const effectiveScope = opts.scope === "team" ? "personal" : opts.scope;
+        if (level !== effectiveScope) continue;
       }
-    } catch {
-      // store 不存在或损坏，跳过
+      rows.push({ entry, scope: level });
     }
+  } catch {
+    // DB 不存在或损坏，跳过
   }
 
   // 按 created_at 倒序
@@ -81,7 +87,7 @@ export function executeReview(opts: ReviewOptions = {}): string {
   }
 
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  lines.push("  想调整？直接编辑 .teamagent/knowledge.jsonl 或 ~/.teamagent/*");
+  lines.push("  想调整？用 teamagent pitfall 或直接编辑 .teamagent/knowledge.db");
   lines.push("  改完 teamagent stats 验证，再开新 Claude Code 会话生效。");
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   return lines.join("\n") + "\n";

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { executePitfall, parsePitfallArgs } from "../commands/pitfall.js";
-import { JsonlKnowledgeStore } from "@teamagent/adapters";
+import { DualLayerStore, openDb } from "@teamagent/adapters";
 
 function mkTmp(): { cwd: string; home: string; cleanup: () => void } {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pitfall-cwd-"));
@@ -30,7 +30,7 @@ describe("executePitfall", () => {
     tmp.cleanup();
   });
 
-  it("writes a new entry to personal knowledge store", () => {
+  it("writes a new entry to personal knowledge store (project DB)", () => {
     executePitfall(
       {
         trigger: "npm install moment",
@@ -41,15 +41,17 @@ describe("executePitfall", () => {
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
     );
 
-    const store = new JsonlKnowledgeStore(
-      path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl"),
-    );
-    expect(store.count()).toBe(1);
-    const entry = store.getAll()[0];
-    expect(entry?.trigger).toBe("npm install moment");
-    expect(entry?.wrong_pattern).toBe("moment");
-    expect(entry?.correct_pattern).toBe("dayjs");
-    expect(entry?.scope.level).toBe("personal");
+    const dbPath = path.join(tmp.cwd, ".teamagent", "knowledge.db");
+    const globalDbPath = path.join(tmp.home, ".teamagent", "global.db");
+    const store = new DualLayerStore({ projectDbPath: dbPath, userGlobalDbPath: globalDbPath });
+    const all = store.getAll();
+    store.close();
+    expect(all).toHaveLength(1);
+    const entry = all[0]!;
+    expect(entry.trigger).toBe("npm install moment");
+    expect(entry.wrong_pattern).toBe("moment");
+    expect(entry.correct_pattern).toBe("dayjs");
+    expect(entry.scope.level).toBe("personal");
   });
 
   it("creates CLAUDE.md with TEAMAGENT block", () => {
@@ -139,13 +141,15 @@ describe("executePitfall", () => {
       },
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
     );
-    const store = new JsonlKnowledgeStore(
-      path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl"),
-    );
-    expect(store.getAll()[0]?.type).toBe("practice");
+    const dbPath = path.join(tmp.cwd, ".teamagent", "knowledge.db");
+    const globalDbPath = path.join(tmp.home, ".teamagent", "global.db");
+    const store = new DualLayerStore({ projectDbPath: dbPath, userGlobalDbPath: globalDbPath });
+    const all = store.getAll();
+    store.close();
+    expect(all[0]?.type).toBe("practice");
   });
 
-  it("team level writes to project .teamagent dir", () => {
+  it("team level → personal scope in project DB (v2 maps team→personal)", () => {
     executePitfall(
       {
         trigger: "t",
@@ -157,21 +161,13 @@ describe("executePitfall", () => {
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
     );
 
-    const teamFile = path.join(tmp.cwd, ".teamagent", "knowledge.jsonl");
-    expect(fs.existsSync(teamFile)).toBe(true);
-    const personalFile = path.join(
-      tmp.home,
-      ".teamagent",
-      "personal",
-      "knowledge.jsonl",
-    );
-    // personal dir wouldn't be created (no personal entries)
-    const personalExists = fs.existsSync(personalFile);
-    if (personalExists) {
-      expect(
-        new JsonlKnowledgeStore(personalFile).count(),
-      ).toBe(0);
-    }
+    const dbPath = path.join(tmp.cwd, ".teamagent", "knowledge.db");
+    const globalDbPath = path.join(tmp.home, ".teamagent", "global.db");
+    const store = new DualLayerStore({ projectDbPath: dbPath, userGlobalDbPath: globalDbPath });
+    const all = store.getAll();
+    store.close();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.scope.level).toBe("personal");
   });
 
   it("subjective nature caps enforcement at warn even with high confidence", () => {
@@ -185,12 +181,12 @@ describe("executePitfall", () => {
       },
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
     );
-    const store = new JsonlKnowledgeStore(
-      path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl"),
-    );
-    const entry = store.getAll()[0]!;
-    // confidence = 0.7 → warn; subjective caps at warn regardless
-    expect(entry.enforcement).toBe("warn");
+    const dbPath = path.join(tmp.cwd, ".teamagent", "knowledge.db");
+    const globalDbPath = path.join(tmp.home, ".teamagent", "global.db");
+    const store = new DualLayerStore({ projectDbPath: dbPath, userGlobalDbPath: globalDbPath });
+    const all = store.getAll();
+    store.close();
+    expect(all[0]?.enforcement).toBe("warn");
   });
 });
 

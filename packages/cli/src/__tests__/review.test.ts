@@ -3,6 +3,7 @@ import nodeFs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { executeReview, parseReviewArgs } from "../commands/review.js";
+import { DualLayerStore, openDb } from "@teamagent/adapters";
 import type { KnowledgeEntry } from "@teamagent/types";
 
 function mkTmp() {
@@ -16,7 +17,7 @@ function mkTmp() {
 function makeEntry(over: Partial<KnowledgeEntry>): KnowledgeEntry {
   return {
     id: "x",
-    scope: { level: "team" },
+    scope: { level: "personal" },
     category: "E",
     tags: ["test"],
     type: "avoidance",
@@ -41,12 +42,12 @@ function makeEntry(over: Partial<KnowledgeEntry>): KnowledgeEntry {
   };
 }
 
-function writeStore(filePath: string, entries: KnowledgeEntry[]): void {
-  nodeFs.mkdirSync(path.dirname(filePath), { recursive: true });
-  nodeFs.writeFileSync(
-    filePath,
-    entries.map((e) => JSON.stringify(e)).join("\n") + "\n",
-  );
+function openStore(dir: string) {
+  const projectDbPath = path.join(dir, ".teamagent", "knowledge.db");
+  const userGlobalDbPath = path.join(dir, ".teamagent", "global.db");
+  nodeFs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+  nodeFs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
+  return new DualLayerStore({ projectDbPath, userGlobalDbPath });
 }
 
 describe("executeReview", () => {
@@ -65,33 +66,11 @@ describe("executeReview", () => {
   });
 
   it("sorts by created_at desc across all scopes", () => {
-    const teamPath = path.join(tmp.dir, ".teamagent", "knowledge.jsonl");
-    const personalPath = path.join(
-      tmp.dir,
-      ".teamagent",
-      "personal",
-      "knowledge.jsonl",
-    );
-    writeStore(teamPath, [
-      makeEntry({
-        id: "t-old",
-        trigger: "old-team",
-        created_at: "2026-04-10T00:00:00Z",
-      }),
-      makeEntry({
-        id: "t-new",
-        trigger: "new-team",
-        created_at: "2026-04-14T10:00:00Z",
-      }),
-    ]);
-    writeStore(personalPath, [
-      makeEntry({
-        id: "p-mid",
-        scope: { level: "personal" },
-        trigger: "mid-personal",
-        created_at: "2026-04-12T00:00:00Z",
-      }),
-    ]);
+    const store = openStore(tmp.dir);
+    store.add(makeEntry({ id: "t-old", trigger: "old-personal", created_at: "2026-04-10T00:00:00Z" }));
+    store.add(makeEntry({ id: "t-new", trigger: "new-personal", created_at: "2026-04-14T10:00:00Z" }));
+    store.add(makeEntry({ id: "g-mid", scope: { level: "global" }, trigger: "mid-global", created_at: "2026-04-12T00:00:00Z" }));
+    store.close();
 
     const out = executeReview({
       homeDir: tmp.dir,
@@ -99,26 +78,24 @@ describe("executeReview", () => {
       limit: 10,
     });
 
-    const idxNew = out.indexOf("new-team");
-    const idxMid = out.indexOf("mid-personal");
-    const idxOld = out.indexOf("old-team");
+    const idxNew = out.indexOf("new-personal");
+    const idxMid = out.indexOf("mid-global");
+    const idxOld = out.indexOf("old-personal");
     expect(idxNew).toBeGreaterThan(-1);
     expect(idxMid).toBeGreaterThan(idxNew);
     expect(idxOld).toBeGreaterThan(idxMid);
   });
 
   it("honors --limit", () => {
-    const teamPath = path.join(tmp.dir, ".teamagent", "knowledge.jsonl");
-    writeStore(
-      teamPath,
-      Array.from({ length: 5 }, (_, i) =>
-        makeEntry({
-          id: `x-${i}`,
-          trigger: `trig-${i}`,
-          created_at: `2026-04-14T0${i}:00:00Z`,
-        }),
-      ),
-    );
+    const store = openStore(tmp.dir);
+    for (let i = 0; i < 5; i++) {
+      store.add(makeEntry({
+        id: `x-${i}`,
+        trigger: `trig-${i}`,
+        created_at: `2026-04-14T0${i}:00:00Z`,
+      }));
+    }
+    store.close();
 
     const out = executeReview({
       homeDir: tmp.dir,
@@ -126,59 +103,60 @@ describe("executeReview", () => {
       limit: 2,
     });
     expect(out).toContain("展示最近 2");
-    // Only 2 triggers rendered
     const hits = ["trig-4", "trig-3", "trig-2", "trig-1", "trig-0"].filter(
       (t) => out.includes(t),
     );
     expect(hits).toHaveLength(2);
   });
 
-  it("honors --scope filter", () => {
-    const teamPath = path.join(tmp.dir, ".teamagent", "knowledge.jsonl");
-    const personalPath = path.join(
-      tmp.dir,
-      ".teamagent",
-      "personal",
-      "knowledge.jsonl",
-    );
-    writeStore(teamPath, [
-      makeEntry({ id: "t1", trigger: "only-in-team" }),
-    ]);
-    writeStore(personalPath, [
-      makeEntry({
-        id: "p1",
-        scope: { level: "personal" },
-        trigger: "only-in-personal",
-      }),
-    ]);
+  it("honors --scope=personal filter", () => {
+    const store = openStore(tmp.dir);
+    store.add(makeEntry({ id: "p1", trigger: "only-in-personal", scope: { level: "personal" } }));
+    store.add(makeEntry({ id: "g1", scope: { level: "global" }, trigger: "only-in-global" }));
+    store.close();
 
     const out = executeReview({
       homeDir: tmp.dir,
       cwd: tmp.dir,
-      scope: "team",
+      scope: "personal",
     });
-    expect(out).toContain("only-in-team");
+    expect(out).toContain("only-in-personal");
+    expect(out).not.toContain("only-in-global");
+  });
+
+  it("honors --scope=global filter", () => {
+    const store = openStore(tmp.dir);
+    store.add(makeEntry({ id: "p1", trigger: "only-in-personal" }));
+    store.add(makeEntry({ id: "g1", scope: { level: "global" }, trigger: "only-in-global" }));
+    store.close();
+
+    const out = executeReview({
+      homeDir: tmp.dir,
+      cwd: tmp.dir,
+      scope: "global",
+    });
     expect(out).not.toContain("only-in-personal");
+    expect(out).toContain("only-in-global");
   });
 
   it("renders category/tags/confidence/enforcement", () => {
-    const teamPath = path.join(tmp.dir, ".teamagent", "knowledge.jsonl");
-    writeStore(teamPath, [
-      makeEntry({
-        id: "t1",
-        category: "K",
-        tags: ["cognition"],
-        confidence: 0.82,
-        enforcement: "warn",
-        trigger: "t",
-        correct_pattern: "c",
-      }),
-    ]);
+    const store = openStore(tmp.dir);
+    store.add(makeEntry({
+      id: "t1",
+      category: "K",
+      tags: ["cognition"],
+      confidence: 0.82,
+      enforcement: "warn",
+      trigger: "t",
+      correct_pattern: "c",
+    }));
+    store.close();
+
     const out = executeReview({
       homeDir: tmp.dir,
       cwd: tmp.dir,
     });
-    expect(out).toMatch(/team\/K\/cognition/);
+    expect(out).toMatch(/personal\/K\/cognition/);
     expect(out).toContain("conf=0.82");
     expect(out).toContain("warn");
   });

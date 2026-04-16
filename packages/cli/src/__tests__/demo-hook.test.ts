@@ -4,6 +4,8 @@ import path from "node:path";
 import os from "node:os";
 import { executeDemoHook, parseDemoHookArgs } from "../commands/demo-hook.js";
 import { executePitfall } from "../commands/pitfall.js";
+import { DualLayerStore } from "@teamagent/adapters";
+import type { KnowledgeEntry } from "@teamagent/types";
 
 function mkTmp() {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "demo-cwd-"));
@@ -59,7 +61,6 @@ describe("executeDemoHook", () => {
       toolInput: { command: "ls" },
       cwd: tmp.cwd,
       homeDir: tmp.home,
-      now: () => fixedNow,
     });
     expect(out).toContain("通过 (无规则命中)");
     expect(out).toContain("🟢");
@@ -82,7 +83,6 @@ describe("executeDemoHook", () => {
       toolInput: { command: "npm install moment" },
       cwd: tmp.cwd,
       homeDir: tmp.home,
-      now: () => fixedNow,
     });
 
     expect(out).toContain("💡");
@@ -91,12 +91,12 @@ describe("executeDemoHook", () => {
   });
 
   it("block-level match → 🚫 + 拦截原因", () => {
-    // 直接 seed 一个 block 规则（pitfall 默认 confidence=0.7 出 warn；这里手动）
-    // 借用 pitfall 但 nature=objective + 后续 confidence high 才 block
-    // 简化：手写到 personal store
-    const personalPath = path.join(tmp.home, ".teamagent", "personal", "knowledge.jsonl");
-    fs.mkdirSync(path.dirname(personalPath), { recursive: true });
-    const entry = {
+    // 直接 seed 一个 block 规则（pitfall 默认 confidence=0.7 出 warn；这里手动写高置信 block 规则）
+    const projectDbPath = path.join(tmp.cwd, ".teamagent", "knowledge.db");
+    const userGlobalDbPath = path.join(tmp.home, ".teamagent", "global.db");
+    fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
+    const blockEntry: KnowledgeEntry = {
       id: "block-test",
       scope: { level: "personal" },
       category: "C",
@@ -120,14 +120,17 @@ describe("executeDemoHook", () => {
       source: "accumulated",
       conflict_with: [],
     };
-    fs.writeFileSync(personalPath, JSON.stringify(entry) + "\n");
+    const store = new DualLayerStore({ projectDbPath, userGlobalDbPath });
+    store.add(blockEntry);
+    store.close();
 
     const out = executeDemoHook({
       toolName: "Bash",
       toolInput: { command: "rm -rf /important" },
       cwd: tmp.cwd,
       homeDir: tmp.home,
-      now: () => fixedNow,
+      projectDbPath,
+      userGlobalDbPath,
     });
 
     expect(out).toContain("🚫");

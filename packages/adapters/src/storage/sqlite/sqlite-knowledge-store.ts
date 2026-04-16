@@ -177,6 +177,46 @@ export class SqliteKnowledgeStore {
     return rows.map(deserializeRow);
   }
 
+  /** KnowledgeStore port compatibility */
+  getActive(): KnowledgeEntry[] {
+    return this.findActive();
+  }
+
+  count(): number {
+    const row = this.db.prepare("SELECT COUNT(*) as n FROM knowledge").get() as { n: number };
+    return row.n;
+  }
+
+  query(options: {
+    keyword?: string;
+    category?: string;
+    minConfidence?: number;
+    includeArchived?: boolean;
+    limit?: number;
+  } = {}): KnowledgeEntry[] {
+    let entries = options.includeArchived ? this.getAll() : this.findActive();
+    if (options.keyword) {
+      const kw = options.keyword.toLowerCase();
+      entries = entries.filter(
+        (e) =>
+          e.trigger.toLowerCase().includes(kw) ||
+          e.correct_pattern.toLowerCase().includes(kw) ||
+          (e.wrong_pattern ?? "").toLowerCase().includes(kw) ||
+          e.tags.some((t) => t.toLowerCase().includes(kw)),
+      );
+    }
+    if (options.category) {
+      entries = entries.filter((e) => e.category === options.category);
+    }
+    if (options.minConfidence !== undefined) {
+      entries = entries.filter((e) => e.confidence >= options.minConfidence!);
+    }
+    if (options.limit !== undefined) {
+      entries = entries.slice(0, options.limit);
+    }
+    return entries;
+  }
+
   update(id: string, patch: Partial<KnowledgeEntry> & Record<string, unknown>): void {
     const existing = this.getById(id);
     if (!existing) {

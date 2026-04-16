@@ -1,14 +1,17 @@
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { JsonlEventLog, JsonlKnowledgeStore } from "@teamagent/adapters";
+import {
+  DualLayerStore,
+  SqliteEventLog,
+  openDb,
+} from "@teamagent/adapters";
 import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
 export interface StatsOptions {
-  personalPath?: string;
-  teamPath?: string;
-  globalPath?: string;
-  eventsPath?: string;
+  projectDbPath?: string;
+  userGlobalDbPath?: string;
+  eventsDbPath?: string;
   cwd?: string;
   homeDir?: string;
   /** 校准变化窗口（天），默认 7 */
@@ -28,12 +31,12 @@ function resolvePaths(opts: StatsOptions) {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
   return {
-    personalPath:
-      opts.personalPath ?? path.join(home, ".teamagent", "personal", "knowledge.jsonl"),
-    teamPath: opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl"),
-    globalPath:
-      opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl"),
-    eventsPath: opts.eventsPath ?? path.join(home, ".teamagent", "events.jsonl"),
+    projectDbPath:
+      opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db"),
+    userGlobalDbPath:
+      opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
+    eventsDbPath:
+      opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db"),
   };
 }
 
@@ -79,15 +82,6 @@ export function aggregateConfidenceMovements(
   return [...byId.values()].sort(
     (a, b) => Math.abs(b.totalDelta) - Math.abs(a.totalDelta),
   );
-}
-
-function loadIfExists(p: string): KnowledgeEntry[] {
-  if (!fs.existsSync(p)) return [];
-  try {
-    return new JsonlKnowledgeStore(p).getAll();
-  } catch {
-    return [];
-  }
 }
 
 /** 纯函数：给定条目列表 + 校准变化，生成 stats 报告文本。 */
@@ -189,7 +183,7 @@ export function renderStats(
   return lines.join("\n") + "\n";
 }
 
-/** IO 入口：读三个 scope 的知识库 + events.jsonl 并渲染统计。 */
+/** IO 入口：读 SQLite 知识库 + events.db 并渲染统计。 */
 export function executeStats(opts: StatsOptions = {}): string {
   const paths = resolvePaths(opts);
   const windowDays = opts.windowDays ?? 7;
@@ -197,20 +191,40 @@ export function executeStats(opts: StatsOptions = {}): string {
 
   let events: PersistedEvent[] = [];
   try {
-    if (fs.existsSync(paths.eventsPath)) {
-      events = new JsonlEventLog(paths.eventsPath).readAll();
+    if (fs.existsSync(paths.eventsDbPath)) {
+      const eventLog = new SqliteEventLog(openDb(paths.eventsDbPath));
+      events = eventLog.readAll();
+      eventLog.close();
     }
   } catch {
     // 损坏 → 视为空
   }
   const movements = aggregateConfidenceMovements(events, windowDays, now);
 
+  let personal: KnowledgeEntry[] = [];
+  let global: KnowledgeEntry[] = [];
+
+  try {
+    const projectDbExists = fs.existsSync(paths.projectDbPath);
+    const globalDbExists = fs.existsSync(paths.userGlobalDbPath);
+    if (projectDbExists || globalDbExists) {
+      fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+      fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+      const store = new DualLayerStore({
+        projectDbPath: paths.projectDbPath,
+        userGlobalDbPath: paths.userGlobalDbPath,
+      });
+      const all = store.getAll();
+      store.close();
+      personal = all.filter((e) => e.scope.level === "personal");
+      global = all.filter((e) => e.scope.level === "global");
+    }
+  } catch {
+    // DB 损坏 → 视为空
+  }
+
   return renderStats(
-    {
-      personal: loadIfExists(paths.personalPath),
-      team: loadIfExists(paths.teamPath),
-      global: loadIfExists(paths.globalPath),
-    },
+    { personal, team: [], global },
     movements,
     windowDays,
   );

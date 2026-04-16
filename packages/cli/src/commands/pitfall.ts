@@ -1,10 +1,12 @@
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
 import {
-  JsonlKnowledgeStore,
+  DualLayerStore,
   InMemoryAttributionBus,
   MarkdownCompiler,
   StdoutRenderer,
+  openDb,
 } from "@teamagent/adapters";
 import {
   computeEnforcement,
@@ -22,7 +24,7 @@ export interface PitfallInput {
   category?: "C" | "E" | "S" | "K";
   /** 自由标签列表 */
   tags?: string[];
-  /** personal / team / global，默认 personal */
+  /** personal / team / global，默认 personal (v2: team→personal) */
   level?: "personal" | "team" | "global";
   /** objective / subjective，默认 subjective（入门友好，不强制 block）*/
   nature?: "objective" | "subjective";
@@ -31,12 +33,10 @@ export interface PitfallInput {
 }
 
 export interface PitfallOptions {
-  /** 个人知识文件，默认 ~/.teamagent/personal/knowledge.jsonl */
-  personalPath?: string;
-  /** 项目知识文件，默认 {cwd}/.teamagent/knowledge.jsonl */
-  teamPath?: string;
-  /** global 知识文件，默认 ~/.teamagent/global/knowledge.jsonl */
-  globalPath?: string;
+  /** 项目知识 DB，默认 {cwd}/.teamagent/knowledge.db */
+  projectDbPath?: string;
+  /** global 知识 DB，默认 ~/.teamagent/global.db */
+  userGlobalDbPath?: string;
   /** CLAUDE.md 路径，默认 {cwd}/CLAUDE.md */
   claudeMdPath?: string;
   cwd?: string;
@@ -49,32 +49,34 @@ function resolvePaths(opts: PitfallOptions) {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
   return {
-    personalPath:
-      opts.personalPath ?? path.join(home, ".teamagent", "personal", "knowledge.jsonl"),
-    teamPath:
-      opts.teamPath ?? path.join(cwd, ".teamagent", "knowledge.jsonl"),
-    globalPath:
-      opts.globalPath ?? path.join(home, ".teamagent", "global", "knowledge.jsonl"),
+    projectDbPath:
+      opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db"),
+    userGlobalDbPath:
+      opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
   };
 }
 
 function generateId(level: string, ts: string): string {
-  const prefix = level === "personal" ? "pers" : level === "team" ? "team" : "glob";
+  const prefix = level === "personal" || level === "team"
+    ? "pers"
+    : "glob";
   const short = Math.random().toString(36).slice(2, 8);
   return `${prefix}-${ts.replace(/[-:T.Z]/g, "").slice(0, 14)}-${short}`;
 }
 
 function buildEntry(input: PitfallInput, now: string): KnowledgeEntry {
-  const level = input.level ?? "personal";
+  // v2: team → personal
+  const rawLevel = input.level ?? "personal";
+  const level: "personal" | "global" = rawLevel === "global" ? "global" : "personal";
   const nature = input.nature ?? "subjective";
-  const confidence = 0.7; // 新录入默认中等置信度
+  const confidence = 0.7;
   const enforcement = computeEnforcement(confidence, nature);
   const category = input.category ?? "E";
   const tags = input.tags && input.tags.length > 0 ? input.tags : [category.toLowerCase()];
 
   return {
-    id: generateId(level, now),
+    id: generateId(rawLevel, now),
     scope: {
       level,
       ...(input.project ? { project: input.project } : {}),
@@ -116,33 +118,27 @@ export function executePitfall(
     (opts.env ?? process.env).TEAMAGENT_VISIBILITY,
   );
 
-  const level = input.level ?? "personal";
-  const storePath =
-    level === "personal"
-      ? paths.personalPath
-      : level === "team"
-        ? paths.teamPath
-        : paths.globalPath;
+  fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
 
-  const store = new JsonlKnowledgeStore(storePath);
-  const before = store.count();
+  const store = new DualLayerStore({
+    projectDbPath: paths.projectDbPath,
+    userGlobalDbPath: paths.userGlobalDbPath,
+  });
+
+  const before = store.getAll().length;
 
   const entry = buildEntry(input, now);
   store.add(entry);
 
   // 重新编译 CLAUDE.md —— 合并所有 scope 的活跃条目
-  const allActive: KnowledgeEntry[] = [];
-  for (const p of [paths.personalPath, paths.teamPath, paths.globalPath]) {
-    try {
-      const s = new JsonlKnowledgeStore(p);
-      allActive.push(...s.getActive());
-    } catch {
-      // 文件不存在或损坏，跳过
-    }
-  }
+  const allActive = store.findActive();
 
   const compiler = new MarkdownCompiler(paths.claudeMdPath, () => now);
   const writeInfo = compiler.writeToFile(allActive);
+
+  const after = store.getAll().length;
+  store.close();
 
   const bus = new InMemoryAttributionBus();
   bus.emit({
@@ -153,8 +149,8 @@ export function executePitfall(
     target: { file: writeInfo.filePath, count: writeInfo.blockStartLine + 1 },
     before: { knowledgeCount: before },
     after: {
-      knowledgeCount: store.count(),
-      categoryTag: `${level}/${entry.category}/${entry.tags[0]}`,
+      knowledgeCount: after,
+      categoryTag: `${entry.scope.level}/${entry.category}/${entry.tags[0]}`,
     },
     userFacingValue:
       entry.type === "avoidance"
@@ -169,7 +165,6 @@ export function executePitfall(
 
 /**
  * 交互模式入口——用 readline 从 stdin 收集输入，调用 executePitfall。
- * readline 用动态 import 避免 vitest worker 启动时的副作用（Windows OOM）。
  */
 export async function runPitfallInteractive(
   opts: PitfallOptions = {},
@@ -238,7 +233,6 @@ function normalizeNature(raw: string): "objective" | "subjective" {
 
 /**
  * 解析 CLI 参数，支持 --non-interactive + flag 方式非交互调用。
- * 未指定 --non-interactive 时返回 null（调用方走交互模式）。
  */
 export function parsePitfallArgs(argv: string[]): PitfallInput | null {
   if (!argv.includes("--non-interactive")) return null;
