@@ -36,6 +36,7 @@ import {
   executeDogfoodReport,
   parseDogfoodReportArgs,
 } from "./commands/dogfood-report.js";
+import { executeIngest, parseIngestArgs } from "./commands/ingest.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -157,6 +158,21 @@ async function main(): Promise<void> {
       if (result.passed !== result.total) process.exit(1);
       return;
     }
+    case "ingest": {
+      let opts;
+      try {
+        opts = parseIngestArgs(rest);
+      } catch (err) {
+        process.stderr.write(
+          `${err instanceof Error ? err.message : String(err)}\n`,
+        );
+        process.exit(1);
+        return;
+      }
+      const output = await executeIngest(opts);
+      process.stdout.write(output);
+      return;
+    }
     case "dogfood-report": {
       const opts = parseDogfoodReportArgs(rest);
       const r = await executeDogfoodReport(opts);
@@ -221,6 +237,10 @@ async function main(): Promise<void> {
           "                                   跑 5 个验证场景（踩坑→学习→避坑），输出 PRR/KP 指标",
           "  teamagent dogfood-report [--output=path]",
           "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
+          "  teamagent ingest --from-insights <path> | --from-audit | --from-pr <n>",
+          "                   | --from-git [--since=30d] | --from-ci [--since=30d] | --from-candidates <path>",
+          "                                   多源摄入：Claude /insights / npm audit / PR review / git hotspot / CI failure",
+          "                                   半自动源加 --dry-run 只产出候选 md 供人工勾选",
           "",
           "环境变量:",
           "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",

@@ -11,7 +11,8 @@
     "./storage/sqlite/dual-layer-store": "./src/storage/sqlite/dual-layer-store.ts",
     "./storage/sqlite/sqlite-knowledge-store": "./src/storage/sqlite/sqlite-knowledge-store.ts",
     "./storage/sqlite/sqlite-event-log": "./src/storage/sqlite/sqlite-event-log.ts",
-    "./storage/sqlite/sqlite-observations": "./src/storage/sqlite/sqlite-observations.ts"
+    "./storage/sqlite/sqlite-observations": "./src/storage/sqlite/sqlite-observations.ts",
+    "./ingest/insights": "./src/ingest/insights.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
