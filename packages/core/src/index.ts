@@ -95,3 +95,16 @@ export { filterSignals } from "./error-collector/signal-filter.js";
 export type { FilterOptions } from "./error-collector/signal-filter.js";
 export { buildErrorBatches } from "./error-collector/error-batch-builder.js";
 export type { ErrorBatch } from "./error-collector/error-batch-builder.js";
+export {
+  filterByStack,
+  filterByAge,
+  validateWikiItem,
+  buildWikiEntry,
+  detectStackPackages,
+  mergeStack,
+  autoSubscribe,
+  STACK_TO_SOURCES,
+  type ValidationResult,
+  type WikiEntry,
+  type JudgedWikiItem,
+} from "./wiki/index.js";
