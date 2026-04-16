@@ -6,6 +6,8 @@ import {
   executeStats,
   renderStats,
   aggregateConfidenceMovements,
+  findStuckInPromotion,
+  renderStuckInPromotion,
 } from "../commands/stats.js";
 import { DualLayerStore, SqliteEventLog, openDb } from "@teamagent/adapters";
 import { executePitfall } from "../commands/pitfall.js";
@@ -142,6 +144,48 @@ describe("renderStats (pure)", () => {
     expect(newIdx).toBeGreaterThan(-1);
     expect(oldIdx).toBeGreaterThan(-1);
     expect(newIdx).toBeLessThan(oldIdx);
+  });
+});
+
+describe("findStuckInPromotion (pure)", () => {
+  const now = new Date("2026-04-14T00:00:00Z");
+
+  it("returns entries in probation older than stuckDays", () => {
+    const entries = [
+      makeEntry({ id: "stuck", current_tier: "probation", tier_entered_at: "2026-03-25T00:00:00Z" }),
+      makeEntry({ id: "fresh", current_tier: "probation", tier_entered_at: "2026-04-13T00:00:00Z" }),
+      makeEntry({ id: "experimental", current_tier: "experimental", tier_entered_at: "2026-03-01T00:00:00Z" }),
+    ];
+    const result = findStuckInPromotion(entries, 14, now);
+    expect(result.map((e) => e.id)).toEqual(["stuck"]);
+  });
+
+  it("ignores archived entries", () => {
+    const e = makeEntry({ id: "archived", current_tier: "probation", tier_entered_at: "2026-03-01T00:00:00Z", status: "archived" });
+    expect(findStuckInPromotion([e], 7, now)).toHaveLength(0);
+  });
+
+  it("empty store → empty result", () => {
+    expect(findStuckInPromotion([], 14, now)).toHaveLength(0);
+  });
+});
+
+describe("renderStuckInPromotion (pure)", () => {
+  const now = new Date("2026-04-14T00:00:00Z");
+
+  it("empty list shows no-stuck message", () => {
+    const out = renderStuckInPromotion([], 14, now);
+    expect(out).toContain("无规则卡在 probation");
+  });
+
+  it("non-empty list shows rule ids and triggers", () => {
+    const entries = [
+      makeEntry({ id: "rule-stuck", current_tier: "probation", tier_entered_at: "2026-03-25T00:00:00Z", trigger: "use-fetch" }),
+    ];
+    const out = renderStuckInPromotion(entries, 14, now);
+    expect(out).toContain("rule-stuck");
+    expect(out).toContain("use-fetch");
+    expect(out).toContain("20"); // 20 days ago
   });
 });
 
@@ -304,6 +348,38 @@ describe("executeStats (IO)", () => {
       const entry = makeEntry({ id: "rule-a" });
       const out = renderStats({ personal: [entry], team: [], global: [] }, []);
       expect(out).not.toContain("confidence 变化");
+    });
+
+    it("executeStats --stuck-in-promotion returns stuck rules", () => {
+      const projectDbPath = path.join(tmp.cwd, ".teamagent", "knowledge.db");
+      const userGlobalDbPath = path.join(tmp.home, ".teamagent", "global.db");
+      fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+      fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
+      const store = new DualLayerStore({ projectDbPath, userGlobalDbPath });
+      // stuck: probation entered 20 days ago
+      store.add(makeEntry({
+        id: "stuck-rule",
+        current_tier: "probation",
+        tier_entered_at: "2026-03-25T00:00:00Z",
+        trigger: "use-fetch-not-axios",
+      }));
+      // not stuck: experimental
+      store.add(makeEntry({
+        id: "ok-rule",
+        current_tier: "experimental",
+        tier_entered_at: "2026-03-25T00:00:00Z",
+      }));
+      store.close();
+
+      const out = executeStats({
+        cwd: tmp.cwd,
+        homeDir: tmp.home,
+        stuckInPromotion: true,
+        stuckDays: 14,
+        now: () => new Date("2026-04-14T00:00:00Z"),
+      });
+      expect(out).toContain("stuck-rule");
+      expect(out).not.toContain("ok-rule");
     });
 
     it("executeStats reads events.db and shows movement section", () => {

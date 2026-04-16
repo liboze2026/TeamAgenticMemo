@@ -62,7 +62,20 @@ async function main(): Promise<void> {
       return;
     }
     case "stats": {
-      process.stdout.write(executeStats());
+      const statsOpts: import("./commands/stats.js").StatsOptions = {};
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!;
+        if (a === "--stuck-in-promotion") {
+          statsOpts.stuckInPromotion = true;
+        } else if (a === "--explain" && rest[i + 1]) {
+          statsOpts.explain = rest[++i];
+        } else if (a.startsWith("--explain=")) {
+          statsOpts.explain = a.slice("--explain=".length);
+        } else if (a.startsWith("--stuck-days=")) {
+          statsOpts.stuckDays = parseInt(a.slice("--stuck-days=".length), 10);
+        }
+      }
+      process.stdout.write(executeStats(statsOpts));
       return;
     }
     case "demo": {
@@ -226,7 +239,8 @@ async function main(): Promise<void> {
           "  teamagent pitfall                手动记录一条踩坑经验 (交互)",
           "  teamagent pitfall --non-interactive --trigger=... --wrong=... --correct=... --reason=...",
           "                                   非交互模式 (可选: --category=C|E|S|K --tags=a,b --level=personal|team|global --nature=objective|subjective)",
-          "  teamagent stats                  展示知识库统计",
+          "  teamagent stats [--stuck-in-promotion] [--stuck-days=N] [--explain=<id>]",
+          "                                   展示知识库统计；--stuck-in-promotion 列出卡在 probation 超 N 天的规则",
           "  teamagent demo hook <tool> <k=v>...",
           "                                   离线模拟 PreToolUse hook (例: teamagent demo hook Bash 'command=npm install moment')",
           "  teamagent install-hook           把 PreToolUse hook 注册到当前项目 .claude/settings.local.json",

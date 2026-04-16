@@ -19,6 +19,10 @@ export interface StatsOptions {
   now?: () => Date;
   /** 展示单条规则的 tier/confidence/demerit 详情 */
   explain?: string;
+  /** 列出被卡在晋升通道的规则（current_tier=probation，tier_entered_at 超 N 天） */
+  stuckInPromotion?: boolean;
+  /** --stuck-in-promotion 的天数阈值，默认 14 */
+  stuckDays?: number;
 }
 
 /** 校准变化聚合：按 knowledge_id 累计该窗口内的总 delta */
@@ -200,11 +204,88 @@ export function renderExplain(entry: KnowledgeEntry | undefined, id: string): st
   return lines.join("\n") + "\n";
 }
 
+/** 纯函数：找出卡在晋升通道的规则（current_tier=probation，且已在该 tier 超 stuckDays 天）。 */
+export function findStuckInPromotion(
+  entries: KnowledgeEntry[],
+  stuckDays: number,
+  now: Date,
+): KnowledgeEntry[] {
+  const cutoffMs = now.getTime() - stuckDays * 24 * 3600 * 1000;
+  return entries.filter((e) => {
+    if (e.status !== "active") return false;
+    if (e.current_tier !== "probation") return false;
+    const enteredAt = e.tier_entered_at || e.created_at;
+    if (!enteredAt) return true; // unknown entry date → report it
+    try {
+      return new Date(enteredAt).getTime() <= cutoffMs;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** 纯函数：渲染 stuck-in-promotion 表格。 */
+export function renderStuckInPromotion(stuck: KnowledgeEntry[], stuckDays: number, now: Date): string {
+  if (stuck.length === 0) {
+    return `📌 stuck-in-promotion: 无规则卡在 probation 超 ${stuckDays} 天\n`;
+  }
+  const lines: string[] = [];
+  lines.push(`📌 stuck-in-promotion（probation tier > ${stuckDays} 天，共 ${stuck.length} 条）:`);
+  lines.push("");
+  const COL_ID = 24;
+  const COL_DAYS = 6;
+  lines.push(
+    `  ${"ID".padEnd(COL_ID)} ${"天数".padStart(COL_DAYS)}  Trigger`,
+  );
+  lines.push("  " + "─".repeat(COL_ID + COL_DAYS + 14));
+  for (const e of stuck) {
+    const enteredAt = e.tier_entered_at || e.created_at;
+    let days = "?";
+    if (enteredAt) {
+      try {
+        const d = Math.floor((now.getTime() - new Date(enteredAt).getTime()) / (24 * 3600 * 1000));
+        days = String(d);
+      } catch {
+        // ignore
+      }
+    }
+    lines.push(
+      `  ${e.id.padEnd(COL_ID)} ${days.padStart(COL_DAYS)}  ${e.trigger.slice(0, 60)}`,
+    );
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 /** IO 入口：读 SQLite 知识库 + events.db 并渲染统计。 */
 export function executeStats(opts: StatsOptions = {}): string {
   const paths = resolvePaths(opts);
   const windowDays = opts.windowDays ?? 7;
   const now = (opts.now ?? (() => new Date()))();
+
+  // --stuck-in-promotion: show rules stuck in probation tier
+  if (opts.stuckInPromotion) {
+    const stuckDays = opts.stuckDays ?? 14;
+    let allEntries: KnowledgeEntry[] = [];
+    try {
+      const projectDbExists = fs.existsSync(paths.projectDbPath);
+      const globalDbExists = fs.existsSync(paths.userGlobalDbPath);
+      if (projectDbExists || globalDbExists) {
+        fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+        fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+        const store = new DualLayerStore({
+          projectDbPath: paths.projectDbPath,
+          userGlobalDbPath: paths.userGlobalDbPath,
+        });
+        allEntries = store.getAll();
+        store.close();
+      }
+    } catch {
+      // DB 损坏 → 视为空
+    }
+    const stuck = findStuckInPromotion(allEntries, stuckDays, now);
+    return renderStuckInPromotion(stuck, stuckDays, now);
+  }
 
   // --explain <rule-id>: just look up the entry and print v2 fields
   if (opts.explain !== undefined) {
