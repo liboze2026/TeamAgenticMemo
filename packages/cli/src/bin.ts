@@ -165,6 +165,27 @@ async function main(): Promise<void> {
       );
       return;
     }
+    case "migrate": {
+      const dryRun = rest.includes("--dry-run");
+      const { executeMigrate } = await import("./commands/migrate-v1-to-v2.js");
+      const r = await executeMigrate({ dryRun });
+      process.stdout.write(`Phase 1 → v2 迁移:\n`);
+      process.stdout.write(`  读取条目: ${r.readEntries}\n`);
+      process.stdout.write(`    personal: ${r.byScope.personal}\n`);
+      process.stdout.write(`    team → personal: ${r.byScope.team}\n`);
+      process.stdout.write(`    global: ${r.byScope.global}\n`);
+      if (dryRun) {
+        process.stdout.write(`\n(dry-run 模式，未写入 SQLite)\n`);
+      } else {
+        process.stdout.write(`  写入: ${r.written} 条; 拒绝: ${r.rejected} 条\n`);
+        if (r.rejectionLog.length > 0) {
+          for (const entry of r.rejectionLog) {
+            process.stderr.write(`  rejected ${entry.id}: ${entry.reason}\n`);
+          }
+        }
+      }
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
