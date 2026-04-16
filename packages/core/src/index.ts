@@ -83,3 +83,5 @@ export {
   validateLevel2,
 } from "./validator/index.js";
 export { formatAsAgentSkill } from "./compiler/agent-skill.js";
+export { runCompile } from "./pipeline/compile-pipeline.js";
+export type { CompilePipelineDeps, CompilePipelineResult, SkillEvent, MarkdownCompilerLike } from "./pipeline/compile-pipeline.js";
