@@ -64,3 +64,10 @@ export {
   type ExtractPipelineDeps,
   type ExtractPipelineResult,
 } from "./pipeline/extract-pipeline.js";
+export { v2Calibrator } from "./calibrator/v2/index.js";
+export {
+  runCalibrationPipelineV2,
+  type CalibrationV2Deps,
+  type CalibrationV2Result,
+  type CalibrationV2Record,
+} from "./pipeline/calibration-pipeline-v2.js";

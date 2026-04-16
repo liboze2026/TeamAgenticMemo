@@ -11,7 +11,10 @@ import {
 import {
   defaultCalibrator,
   runCalibrationPipeline,
+  v2Calibrator,
+  runCalibrationPipelineV2,
   type AdjustmentRecord,
+  type CalibrationV2Record,
 } from "@teamagent/core";
 import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
@@ -27,6 +30,8 @@ export interface CalibrateOptions {
   /** 只考虑最近 N 天的事件（默认全部） */
   days?: number;
   now?: () => Date;
+  /** 使用旧 v1 pipeline（默认走 v2） */
+  legacy?: boolean;
 }
 
 export interface CalibrateResult {
@@ -38,6 +43,7 @@ export interface CalibrateResult {
     adjustedCount: number;
     archivedCount: number;
     adjustments: AdjustmentRecord[];
+    v2Adjustments?: CalibrationV2Record[];
   }>;
   totalAdjusted: number;
   totalArchived: number;
@@ -108,6 +114,7 @@ export async function executeCalibrate(
 ): Promise<CalibrateResult> {
   const paths = resolvePaths(opts);
   const dryRun = opts.dryRun ?? false;
+  const legacy = opts.legacy ?? false;
   const now = opts.now ?? (() => new Date());
   const nowDate = now();
 
@@ -146,71 +153,111 @@ export async function executeCalibrate(
   let totalAdjusted = 0;
   let totalArchived = 0;
 
-  for (const { label, store, storePath } of scopes) {
-    if (store.count() === 0 && !fs.existsSync(storePath)) {
-      byScope.push({
-        scope: label,
-        storePath,
-        scanned: 0,
-        adjustedCount: 0,
-        archivedCount: 0,
-        adjustments: [],
-      });
-      continue;
-    }
+  if (legacy) {
+    // ── v1 pipeline (unchanged) ──────────────────────────────────────
+    for (const { label, store, storePath } of scopes) {
+      if (store.count() === 0 && !fs.existsSync(storePath)) {
+        byScope.push({
+          scope: label,
+          storePath,
+          scanned: 0,
+          adjustedCount: 0,
+          archivedCount: 0,
+          adjustments: [],
+        });
+        continue;
+      }
 
-    if (dryRun) {
-      const fakeStore = makeReadOnlyStore(store);
-      const pred = await runCalibrationPipeline({
+      if (dryRun) {
+        const fakeStore = makeReadOnlyStore(store);
+        const pred = await runCalibrationPipeline({
+          calibrator: defaultCalibrator,
+          store: fakeStore as any,
+          events,
+          now,
+        });
+        byScope.push({
+          scope: label,
+          storePath,
+          scanned: pred.scanned,
+          adjustedCount: pred.adjusted.length,
+          archivedCount: pred.archivedNew.length,
+          adjustments: pred.adjusted,
+        });
+        totalAdjusted += pred.adjusted.length;
+        totalArchived += pred.archivedNew.length;
+        continue;
+      }
+
+      const result = await runCalibrationPipeline({
         calibrator: defaultCalibrator,
-        store: fakeStore as any,
+        store: store as any,
         events,
         now,
       });
+
+      // 写 calibrator.adjusted 事件
+      if (result.adjusted.length > 0) {
+        if (!eventLog) {
+          eventLog = new SqliteEventLog(openDb(paths.eventsDbPath));
+        }
+        for (const adj of result.adjusted) {
+          try {
+            recordAdjustment(eventLog, adj, nowDate);
+          } catch {
+            // 单条写失败不影响后续
+          }
+        }
+      }
+
       byScope.push({
         scope: label,
         storePath,
-        scanned: pred.scanned,
-        adjustedCount: pred.adjusted.length,
-        archivedCount: pred.archivedNew.length,
-        adjustments: pred.adjusted,
+        scanned: result.scanned,
+        adjustedCount: result.adjusted.length,
+        archivedCount: result.archivedNew.length,
+        adjustments: result.adjusted,
       });
-      totalAdjusted += pred.adjusted.length;
-      totalArchived += pred.archivedNew.length;
-      continue;
+      totalAdjusted += result.adjusted.length;
+      totalArchived += result.archivedNew.length;
     }
-
-    const result = await runCalibrationPipeline({
-      calibrator: defaultCalibrator,
-      store: store as any,
-      events,
-      now,
-    });
-
-    // 写 calibrator.adjusted 事件
-    if (result.adjusted.length > 0) {
-      if (!eventLog) {
-        eventLog = new SqliteEventLog(openDb(paths.eventsDbPath));
+  } else {
+    // ── v2 pipeline (default) ─────────────────────────────────────────
+    for (const { label, store, storePath } of scopes) {
+      if (store.count() === 0 && !fs.existsSync(storePath)) {
+        byScope.push({
+          scope: label,
+          storePath,
+          scanned: 0,
+          adjustedCount: 0,
+          archivedCount: 0,
+          adjustments: [],
+          v2Adjustments: [],
+        });
+        continue;
       }
-      for (const adj of result.adjusted) {
-        try {
-          recordAdjustment(eventLog, adj, nowDate);
-        } catch {
-          // 单条写失败不影响后续
-        }
-      }
+
+      const v2Result = await runCalibrationPipelineV2({
+        calibrator: v2Calibrator,
+        store: store as any,
+        events,
+        observations: [], // T15 will add observations adapter
+        now,
+        dryRun,
+      });
+
+      byScope.push({
+        scope: label,
+        storePath,
+        scanned: v2Result.scanned,
+        adjustedCount: v2Result.adjusted.length,
+        archivedCount: v2Result.dormantNew.length,
+        adjustments: [],
+        v2Adjustments: v2Result.adjusted,
+      });
+      totalAdjusted += v2Result.adjusted.length;
+      totalArchived += v2Result.dormantNew.length;
     }
-
-    byScope.push({
-      scope: label,
-      storePath,
-      scanned: result.scanned,
-      adjustedCount: result.adjusted.length,
-      archivedCount: result.archivedNew.length,
-      adjustments: result.adjusted,
-    });
-    totalAdjusted += result.adjusted.length;
-    totalArchived += result.archivedNew.length;
   }
 
   // 若有调整且非 dry-run，重编译 CLAUDE.md
@@ -234,6 +281,7 @@ export function parseCalibrateArgs(argv: string[]): CalibrateOptions {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--dry-run") opts.dryRun = true;
+    else if (a === "--legacy") opts.legacy = true;
     else if (a === "--days" && argv[i + 1]) {
       opts.days = parseInt(argv[i + 1]!, 10);
       i++;
@@ -248,7 +296,7 @@ export function renderCalibrateResult(r: CalibrateResult): string {
   const lines: string[] = [];
   lines.push(r.dryRun ? "🔍 TeamAgent Calibrate (dry-run)" : "⚖️  TeamAgent Calibrate");
   lines.push("");
-  for (const { scope, scanned, adjustedCount, archivedCount, adjustments } of r.byScope) {
+  for (const { scope, scanned, adjustedCount, archivedCount, adjustments, v2Adjustments } of r.byScope) {
     if (scanned === 0) {
       lines.push(`  ${scope.padEnd(8)} 无 store / 跳过`);
       continue;
@@ -261,17 +309,42 @@ export function renderCalibrateResult(r: CalibrateResult): string {
       `  ${scope.padEnd(8)} 扫描 ${scanned}, 调整 ${adjustedCount}` +
         (archivedCount > 0 ? ` (含归档 ${archivedCount})` : ""),
     );
-    for (const adj of adjustments.slice(0, 5)) {
-      const arrow =
-        adj.status_after !== adj.status_before
-          ? ` → ${adj.status_after}`
-          : "";
-      lines.push(
-        `    - ${adj.knowledge_id}: ${adj.before.toFixed(2)} → ${adj.after.toFixed(2)} (${adj.delta > 0 ? "+" : ""}${adj.delta.toFixed(2)})${arrow}`,
-      );
-    }
-    if (adjustments.length > 5) {
-      lines.push(`    ... (${adjustments.length - 5} more)`);
+
+    if (v2Adjustments && v2Adjustments.length > 0) {
+      // v2 rendering: show tier/demerit alongside confidence
+      for (const adj of v2Adjustments.slice(0, 5)) {
+        const tierPart =
+          adj.tier_transition
+            ? ` [${adj.tier_before} → ${adj.tier_after}]`
+            : adj.tier_after !== adj.tier_before
+              ? ` [${adj.tier_before} → ${adj.tier_after}]`
+              : "";
+        const demPart =
+          Math.abs(adj.demerit_after - adj.demerit_before) > 1e-6
+            ? ` demerit ${adj.demerit_before.toFixed(0)} → ${adj.demerit_after.toFixed(0)}`
+            : "";
+        const confDelta = adj.confidence_after - adj.confidence_before;
+        lines.push(
+          `    - ${adj.knowledge_id}: conf ${adj.confidence_before.toFixed(2)} → ${adj.confidence_after.toFixed(2)} (${confDelta > 0 ? "+" : ""}${confDelta.toFixed(2)})${demPart}${tierPart}`,
+        );
+      }
+      if (v2Adjustments.length > 5) {
+        lines.push(`    ... (${v2Adjustments.length - 5} more)`);
+      }
+    } else {
+      // v1 rendering
+      for (const adj of adjustments.slice(0, 5)) {
+        const arrow =
+          adj.status_after !== adj.status_before
+            ? ` → ${adj.status_after}`
+            : "";
+        lines.push(
+          `    - ${adj.knowledge_id}: ${adj.before.toFixed(2)} → ${adj.after.toFixed(2)} (${adj.delta > 0 ? "+" : ""}${adj.delta.toFixed(2)})${arrow}`,
+        );
+      }
+      if (adjustments.length > 5) {
+        lines.push(`    ... (${adjustments.length - 5} more)`);
+      }
     }
   }
   lines.push("");

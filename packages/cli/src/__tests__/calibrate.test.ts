@@ -94,6 +94,7 @@ describe("executeCalibrate", () => {
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
+      legacy: true,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     expect(r.totalAdjusted).toBe(0);
@@ -110,6 +111,7 @@ describe("executeCalibrate", () => {
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
+      legacy: true,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
 
@@ -141,6 +143,7 @@ describe("executeCalibrate", () => {
       cwd: tmp.cwd,
       homeDir: tmp.home,
       dryRun: true,
+      legacy: true,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     expect(r.dryRun).toBe(true);
@@ -172,6 +175,7 @@ describe("executeCalibrate", () => {
       cwd: tmp.cwd,
       homeDir: tmp.home,
       days: 7,
+      legacy: true,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     expect(r.totalAdjusted).toBe(0);
@@ -190,6 +194,7 @@ describe("executeCalibrate", () => {
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
+      legacy: true,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     expect(r.totalArchived).toBe(1);
@@ -212,6 +217,7 @@ describe("executeCalibrate", () => {
     await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
+      legacy: true,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     const md = nodeFs.readFileSync(tmp.claudeMdPath, "utf-8");
@@ -223,9 +229,48 @@ describe("executeCalibrate", () => {
     const r = await executeCalibrate({
       cwd: tmp.cwd,
       homeDir: tmp.home,
+      legacy: true,
       now: () => new Date("2026-04-15T02:00:00Z"),
     });
     expect(r.totalAdjusted).toBe(0);
+  });
+
+  it("uses v2 calibrator by default (no --legacy)", async () => {
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-v2", confidence: 0.7, demerit: 0 }));
+    // No observations, no demerit events → v2 pipeline should skip (no signal)
+    const r = await executeCalibrate({
+      cwd: tmp.cwd,
+      homeDir: tmp.home,
+      now: () => new Date("2026-04-15T02:00:00Z"),
+    });
+    // Completes without error
+    expect(r.dryRun).toBe(false);
+    // With no observations and demerit=0, v2 skips entries → 0 adjusted
+    expect(r.totalAdjusted).toBe(0);
+    // v2Adjustments field is present on byScope entries
+    const scopeResult = r.byScope[0]!;
+    expect(scopeResult.v2Adjustments).toBeDefined();
+  });
+
+  it("uses v2 pipeline: dry-run mode works without error", async () => {
+    seedEntry(tmp.projectDbPath, entry({ id: "rule-v2", confidence: 0.7, demerit: 0 }));
+
+    const r = await executeCalibrate({
+      cwd: tmp.cwd,
+      homeDir: tmp.home,
+      dryRun: true,
+      now: () => new Date("2026-04-15T02:00:00Z"),
+    });
+    // Completes without error in dry-run mode
+    expect(r.dryRun).toBe(true);
+    // v2Adjustments field present
+    const scopeResult = r.byScope[0]!;
+    expect(scopeResult.v2Adjustments).toBeDefined();
+    // Store not modified (confidence still 0.7)
+    const store = new DualLayerStore({ projectDbPath: tmp.projectDbPath, userGlobalDbPath: tmp.userGlobalDbPath });
+    const still = store.getById("rule-v2")!;
+    store.close();
+    expect(still.confidence).toBe(0.7);
   });
 });
 
@@ -239,6 +284,12 @@ describe("parseCalibrateArgs", () => {
   it("--days form", () => {
     expect(parseCalibrateArgs(["--days", "14"])).toEqual({ days: 14 });
     expect(parseCalibrateArgs(["--days=14"])).toEqual({ days: 14 });
+  });
+  it("--legacy", () => {
+    expect(parseCalibrateArgs(["--legacy"])).toEqual({ legacy: true });
+  });
+  it("--legacy combined with --dry-run", () => {
+    expect(parseCalibrateArgs(["--legacy", "--dry-run"])).toEqual({ legacy: true, dryRun: true });
   });
 });
 
@@ -300,5 +351,40 @@ describe("renderCalibrateResult", () => {
     });
     expect(out).toContain("dry-run");
     expect(out).toContain("(dry-run，未写入)");
+  });
+
+  it("v2 adjustments render with conf/demerit/tier info", () => {
+    const out = renderCalibrateResult({
+      dryRun: false,
+      totalAdjusted: 1,
+      totalArchived: 0,
+      byScope: [
+        {
+          scope: "personal",
+          storePath: "/p",
+          scanned: 3,
+          adjustedCount: 1,
+          archivedCount: 0,
+          adjustments: [],
+          v2Adjustments: [
+            {
+              knowledge_id: "rule-v2",
+              confidence_before: 0.7,
+              confidence_after: 0.7,
+              demerit_before: 0,
+              demerit_after: 10,
+              tier_before: "experimental",
+              tier_after: "experimental",
+              tier_transition: null,
+              delta_breakdown: [],
+            },
+          ],
+        },
+      ],
+    });
+    expect(out).toContain("TeamAgent Calibrate");
+    expect(out).toContain("rule-v2");
+    expect(out).toContain("demerit 0 → 10");
+    expect(out).toContain("总计: 1 条调整");
   });
 });
