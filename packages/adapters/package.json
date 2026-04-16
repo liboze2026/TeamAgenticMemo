@@ -16,7 +16,8 @@
     "./ingest/npm-audit": "./src/ingest/npm-audit.ts",
     "./ingest/pr-review": "./src/ingest/pr-review.ts",
     "./ingest/git-hotspot": "./src/ingest/git-hotspot.ts",
-    "./ingest/candidate-md": "./src/ingest/candidate-md.ts"
+    "./ingest/candidate-md": "./src/ingest/candidate-md.ts",
+    "./ingest/ci-failure": "./src/ingest/ci-failure.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",

@@ -23,6 +23,12 @@ import {
   getGitNumstat,
 } from "@teamagent/adapters/ingest/git-hotspot";
 import {
+  parseGhRunList,
+  runsToCandidateItems,
+  getGhRunList,
+  filterBySince,
+} from "@teamagent/adapters/ingest/ci-failure";
+import {
   formatCandidateMd,
   parseCandidateMd,
   candidatesToExtractionInputs,
@@ -358,7 +364,25 @@ async function handleSemiAuto(
     return formatSemiAutoReport("git-hotspot", items.length, outPath);
   }
 
-  // ci-failure in T11
+  if (opts.source === "ci-failure") {
+    const simpleRunner = (cmd: string) => runner(cmd, {});
+    if (!(await isGhAvailable(simpleRunner))) {
+      throw new Error(
+        "gh CLI 未安装。--from-ci 需要 gh；参考 https://cli.github.com。",
+      );
+    }
+    const raw = await getGhRunList(simpleRunner, { limit: 30 });
+    const allRuns = parseGhRunList(raw);
+    const runs = filterBySince(allRuns, opts.sinceDays, now());
+    const items = runsToCandidateItems(runs);
+    const md = formatCandidateMd("ci-failure", items, {
+      generatedAt: now().toISOString(),
+    });
+    const outPath = path.join(paths.candidatesDir, `ci-failure-${dateSlug}.md`);
+    fs.writeFileSync(outPath, md, "utf-8");
+    return formatSemiAutoReport("ci-failure", items.length, outPath);
+  }
+
   throw new Error(`semi-auto source '${opts.source}' 未实现`);
 }
 
