@@ -13,7 +13,8 @@
     "./storage/sqlite/sqlite-event-log": "./src/storage/sqlite/sqlite-event-log.ts",
     "./storage/sqlite/sqlite-observations": "./src/storage/sqlite/sqlite-observations.ts",
     "./ingest/insights": "./src/ingest/insights.ts",
-    "./ingest/npm-audit": "./src/ingest/npm-audit.ts"
+    "./ingest/npm-audit": "./src/ingest/npm-audit.ts",
+    "./ingest/pr-review": "./src/ingest/pr-review.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",

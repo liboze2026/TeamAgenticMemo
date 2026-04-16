@@ -13,6 +13,11 @@ import {
   getNpmAuditOutput,
 } from "@teamagent/adapters/ingest/npm-audit";
 import {
+  parseGhPrReviews,
+  getGhPrReviews,
+  isGhAvailable,
+} from "@teamagent/adapters/ingest/pr-review";
+import {
   llmBasedKnowledgeExtractor,
   runIngestPipeline,
   validateLevel0,
@@ -126,6 +131,20 @@ async function loadInputs(opts: IngestOptions): Promise<ExtractionInput[]> {
       const runner = opts.cmdRunner ?? defaultRunner;
       const raw = await getNpmAuditOutput(runner, opts.cwd);
       return parseNpmAudit(raw);
+    }
+    case "pr-review": {
+      if (opts.prNumber === undefined || Number.isNaN(opts.prNumber)) {
+        throw new Error("--from-pr 需要 <number>");
+      }
+      const runner = opts.cmdRunner ?? defaultRunner;
+      const simpleRunner = (cmd: string) => runner(cmd, {});
+      if (!(await isGhAvailable(simpleRunner))) {
+        throw new Error(
+          "gh CLI 未安装。参考 https://cli.github.com 安装后重试。",
+        );
+      }
+      const raw = await getGhPrReviews(opts.prNumber, simpleRunner);
+      return parseGhPrReviews(raw);
     }
     default:
       throw new Error(`源 '${opts.source}' 尚未实现（M2.3 后续 task）`);
