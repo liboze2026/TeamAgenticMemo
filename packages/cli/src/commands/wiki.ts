@@ -219,12 +219,11 @@ export async function executeWikiDislike(knowledgeId: string, opts: WikiCommandO
 }
 
 export function parseWikiArgs(args: string[]): { subcommand: string; opts: WikiCommandOptions; extra: string[] } {
-  const subcommand = args[0] ?? "";
-  const rest = args.slice(1);
   const opts: WikiCommandOptions = {};
   const extra: string[] = [];
+  let subcommand = "";
 
-  for (const arg of rest) {
+  for (const arg of args) {
     if (arg === "--dry-run") opts.dryRun = true;
     else if (arg.startsWith("--since=")) opts.since = arg.slice("--since=".length);
     else if (arg.startsWith("--limit=")) opts.limit = parseInt(arg.slice("--limit=".length));
@@ -233,7 +232,10 @@ export function parseWikiArgs(args: string[]): { subcommand: string; opts: WikiC
     else if (arg.startsWith("--rss=")) opts.rss = arg.slice("--rss=".length);
     else if (arg.startsWith("--arxiv=")) opts.arxiv = arg.slice("--arxiv=".length);
     else if (arg.startsWith("--id=")) opts.sourceId = arg.slice("--id=".length);
-    else if (!arg.startsWith("--")) extra.push(arg);
+    else if (!arg.startsWith("--")) {
+      if (!subcommand) subcommand = arg;
+      else extra.push(arg);
+    }
   }
 
   return { subcommand, opts, extra };
