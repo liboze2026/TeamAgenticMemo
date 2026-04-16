@@ -53,3 +53,4 @@ export type {
   ErrorSignalCollector,
   RawErrorSignal,
 } from "./error-signal-collector.js";
+export type { CandidateQueue, RuleCandidate } from "./candidate-queue.js";
