@@ -1,10 +1,14 @@
 import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import { detectCompliedSignals, type OverrideSignalEvent } from "@teamagent/core";
 
 export interface PreToolUseDeps {
   matcher: {
     match(input: { tool_name: string; tool_input: unknown }): Promise<{ matched: any[] }>;
   };
-  eventLog: { append(e: any): void };
+  eventLog: {
+    append(e: any): void;
+    readLast(n: number): any[];
+  };
 }
 
 export interface PreToolUseResult {
@@ -21,6 +25,19 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
     const { matched } = await deps.matcher.match({ tool_name, tool_input });
 
     if (matched.length === 0) {
+      // Clean pass — 检测 AI 是否遵守了近期对同 tool 的警告
+      const recent = deps.eventLog.readLast(50) as OverrideSignalEvent[];
+      const complied = detectCompliedSignals(tool_name, recent, new Date(now));
+      for (const c of complied) {
+        deps.eventLog.append({
+          id: `e-complied-${tool_use_id}-${c.knowledge_id}`,
+          kind: "ai.override.complied",
+          knowledge_id: c.knowledge_id,
+          tool_use_id,
+          timestamp: now,
+          schema_version: 1,
+        });
+      }
       deps.eventLog.append({
         id: `e-${tool_use_id}-passed`,
         kind: "hook-pre.passed",
@@ -56,6 +73,7 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
       kind: "hook-pre.warned",
       knowledge_id: top.id,
       tool_use_id,
+      tool_name,              // M2.5: 供 detectCompliedSignals 用
       timestamp: now,
       schema_version: 1,
     });
