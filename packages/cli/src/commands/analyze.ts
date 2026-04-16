@@ -8,6 +8,7 @@ import {
   SqliteEventLog,
   MarkdownCompiler,
   openDb,
+  makeSkillCompiler,
 } from "@teamagent/adapters";
 import {
   ruleBasedCorrectionDetector,
@@ -17,6 +18,7 @@ import {
   runExtractPipeline,
   defaultCalibrator,
   runCalibrationPipeline,
+  runCompile,
 } from "@teamagent/core";
 import type { LLMClient } from "@teamagent/ports";
 import type { KnowledgeEntry, ParsedSession } from "@teamagent/types";
@@ -128,10 +130,12 @@ async function runCommit(
       return `pers-${ts}-${rand}`;
     });
 
-  const recompile = (_activeFromProject: KnowledgeEntry[]): void => {
-    const all = dualStore.findActive();
-    const compiler = new MarkdownCompiler(claudeMdPath, () => now().toISOString());
-    compiler.writeToFile(all);
+  const recompile = async (_activeFromProject: KnowledgeEntry[]): Promise<void> => {
+    await runCompile({
+      store: dualStore,
+      markdownCompiler: new MarkdownCompiler(claudeMdPath, () => now().toISOString()),
+      skillCompiler: makeSkillCompiler(),
+    });
   };
 
   const before = projectStore.count();
@@ -195,7 +199,7 @@ async function runCommit(
       }
       eventLog.close();
       if (calibrationSummary) {
-        recompile([]);
+        await recompile([]);
       }
     } catch (err) {
       calibrationSummary = `  ⚠ 校准阶段失败: ${String(err).slice(0, 120)}\n`;

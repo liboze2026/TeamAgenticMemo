@@ -48,3 +48,4 @@ export type {
   ValidationL0Result,
   ValidationLLMResult,
 } from "./validator.js";
+export type { SkillCompiler, SkillArtifact } from "./skill-compiler.js";

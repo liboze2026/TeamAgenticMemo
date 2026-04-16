@@ -17,7 +17,9 @@
     "./ingest/pr-review": "./src/ingest/pr-review.ts",
     "./ingest/git-hotspot": "./src/ingest/git-hotspot.ts",
     "./ingest/candidate-md": "./src/ingest/candidate-md.ts",
-    "./ingest/ci-failure": "./src/ingest/ci-failure.ts"
+    "./ingest/ci-failure": "./src/ingest/ci-failure.ts",
+    "./token-counter": "./src/token-counter/index.ts",
+    "./skill-compiler": "./src/compiler/skill-compiler.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
@@ -26,6 +28,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.0",
+    "js-tiktoken": "^1.0.12",
     "@teamagent/core": "workspace:*",
     "@teamagent/ports": "workspace:*",
     "@teamagent/types": "workspace:*",

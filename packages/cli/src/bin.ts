@@ -37,6 +37,11 @@ import {
   parseDogfoodReportArgs,
 } from "./commands/dogfood-report.js";
 import { executeIngest, parseIngestArgs } from "./commands/ingest.js";
+import {
+  executeCompile,
+  parseCompileArgs,
+  renderCompileResult,
+} from "./commands/compile.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -44,20 +49,33 @@ async function main(): Promise<void> {
 
   switch (command) {
     case "skeleton-demo": {
-      const output = runSkeletonDemo();
+      const output = await runSkeletonDemo();
       if (output) process.stdout.write(output + "\n");
       return;
     }
     case "pitfall": {
       const nonInteractive = parsePitfallArgs(rest);
       const output = nonInteractive
-        ? executePitfall(nonInteractive)
+        ? await executePitfall(nonInteractive)
         : await runPitfallInteractive();
       if (output) process.stdout.write(output + "\n");
       return;
     }
     case "stats": {
-      process.stdout.write(executeStats());
+      const statsOpts: import("./commands/stats.js").StatsOptions = {};
+      for (let i = 0; i < rest.length; i++) {
+        const a = rest[i]!;
+        if (a === "--stuck-in-promotion") {
+          statsOpts.stuckInPromotion = true;
+        } else if (a === "--explain" && rest[i + 1]) {
+          statsOpts.explain = rest[++i];
+        } else if (a.startsWith("--explain=")) {
+          statsOpts.explain = a.slice("--explain=".length);
+        } else if (a.startsWith("--stuck-days=")) {
+          statsOpts.stuckDays = parseInt(a.slice("--stuck-days=".length), 10);
+        }
+      }
+      process.stdout.write(executeStats(statsOpts));
       return;
     }
     case "demo": {
@@ -181,6 +199,12 @@ async function main(): Promise<void> {
       );
       return;
     }
+    case "compile": {
+      const opts = parseCompileArgs(rest);
+      const result = await executeCompile(opts);
+      process.stdout.write(renderCompileResult(result, opts.dryRun));
+      return;
+    }
     case "migrate": {
       const dryRun = rest.includes("--dry-run");
       const { executeMigrate } = await import("./commands/migrate-v1-to-v2.js");
@@ -215,7 +239,8 @@ async function main(): Promise<void> {
           "  teamagent pitfall                手动记录一条踩坑经验 (交互)",
           "  teamagent pitfall --non-interactive --trigger=... --wrong=... --correct=... --reason=...",
           "                                   非交互模式 (可选: --category=C|E|S|K --tags=a,b --level=personal|team|global --nature=objective|subjective)",
-          "  teamagent stats                  展示知识库统计",
+          "  teamagent stats [--stuck-in-promotion] [--stuck-days=N] [--explain=<id>]",
+          "                                   展示知识库统计；--stuck-in-promotion 列出卡在 probation 超 N 天的规则",
           "  teamagent demo hook <tool> <k=v>...",
           "                                   离线模拟 PreToolUse hook (例: teamagent demo hook Bash 'command=npm install moment')",
           "  teamagent install-hook           把 PreToolUse hook 注册到当前项目 .claude/settings.local.json",
@@ -237,6 +262,10 @@ async function main(): Promise<void> {
           "                                   跑 5 个验证场景（踩坑→学习→避坑），输出 PRR/KP 指标",
           "  teamagent dogfood-report [--output=path]",
           "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
+          "  teamagent compile [--dry-run] [--skills-only] [--markdown-only] [--force]",
+          "                                   编译双出口：CLAUDE.md (canonical+, 3000 token 预算) + Agent Skills (stable+)",
+          "                                   --dry-run: 预览将写/删哪些文件，不实际写入",
+          "                                   --skills-only / --markdown-only: 只写其中一路出口",
           "  teamagent ingest --from-insights <path> | --from-audit | --from-pr <n>",
           "                   | --from-git [--since=30d] | --from-ci [--since=30d] | --from-candidates <path>",
           "                                   多源摄入：Claude /insights / npm audit / PR review / git hotspot / CI failure",

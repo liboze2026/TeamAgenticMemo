@@ -7,16 +7,18 @@ import {
   DualLayerStore,
   MarkdownCompiler,
   openDb,
+  makeSkillCompiler,
 } from "@teamagent/adapters";
 import {
   defaultCalibrator,
   runCalibrationPipeline,
   v2Calibrator,
   runCalibrationPipelineV2,
+  runCompile,
   type AdjustmentRecord,
   type CalibrationV2Record,
 } from "@teamagent/core";
-import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
+import type { PersistedEvent } from "@teamagent/types";
 
 export interface CalibrateOptions {
   cwd?: string;
@@ -260,11 +262,14 @@ export async function executeCalibrate(
     }
   }
 
-  // 若有调整且非 dry-run，重编译 CLAUDE.md
+  // 若有调整且非 dry-run，重编译 CLAUDE.md + skills
   if (!dryRun && totalAdjusted > 0) {
-    const allActive: KnowledgeEntry[] = dualStore.findActive();
     try {
-      new MarkdownCompiler(paths.claudeMdPath, () => nowDate.toISOString()).writeToFile(allActive);
+      await runCompile({
+        store: dualStore,
+        markdownCompiler: new MarkdownCompiler(paths.claudeMdPath, () => nowDate.toISOString()),
+        skillCompiler: makeSkillCompiler(),
+      });
     } catch {
       // 重编译失败不算 fatal
     }

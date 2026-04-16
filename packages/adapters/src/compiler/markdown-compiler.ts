@@ -8,6 +8,10 @@ import {
 } from "@teamagent/core";
 import type { Compiler } from "@teamagent/ports";
 import type { KnowledgeEntry } from "@teamagent/types";
+import { createTiktokenCounter } from "../token-counter/index.js";
+
+const DEFAULT_TIER_FILTER = ["canonical", "enforced"] as const;
+const DEFAULT_TOKEN_BUDGET = 3000;
 
 /**
  * writeToFile 的返回信息，供归因事件使用。
@@ -98,9 +102,27 @@ export class MarkdownCompiler implements Compiler<string> {
 
 /** 从环境变量解析 compile options。非法值回退到默认。 */
 function resolveOptionsFromEnv(): CompileMarkdownOptions {
-  const raw = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
-  if (!raw) return {};
-  const n = parseInt(raw, 10);
-  if (!Number.isFinite(n) || n <= 0) return {};
-  return { limit: n };
+  const out: CompileMarkdownOptions = {
+    tierFilter: DEFAULT_TIER_FILTER,
+    tokenBudget: DEFAULT_TOKEN_BUDGET,
+    countTokens: createTiktokenCounter(),
+  };
+
+  const rawBudget = process.env.TEAMAGENT_CLAUDE_MD_TOKEN_BUDGET;
+  if (rawBudget) {
+    const n = parseInt(rawBudget, 10);
+    if (Number.isFinite(n) && n > 0) out.tokenBudget = n;
+  }
+
+  const rawLimit = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+  if (rawLimit) {
+    const n = parseInt(rawLimit, 10);
+    if (Number.isFinite(n) && n > 0) {
+      out.limit = n;
+      // 显式设置条目数上限时，禁用 token budget（让 limit 优先）
+      out.tokenBudget = undefined;
+    }
+  }
+
+  return out;
 }

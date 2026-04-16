@@ -6,8 +6,10 @@ import {
   InMemoryAttributionBus,
   MarkdownCompiler,
   StdoutRenderer,
+  makeSkillCompiler,
   openDb,
 } from "@teamagent/adapters";
+import { runCompile } from "@teamagent/core";
 import {
   computeEnforcement,
   parseVisibilityMode,
@@ -101,8 +103,8 @@ function buildEntry(input: PitfallInput, now: string): KnowledgeEntry {
     last_validated_at: now,
     source: "accumulated",
     conflict_with: [],
-    current_tier: "experimental" as const,
-    max_tier_ever: "experimental" as const,
+    current_tier: "canonical" as const,
+    max_tier_ever: "canonical" as const,
     tier_entered_at: "",
     demerit: 0,
     demerit_last_updated: "",
@@ -114,10 +116,10 @@ function buildEntry(input: PitfallInput, now: string): KnowledgeEntry {
  * 核心非 IO 函数：给定 input + paths，写盘 + 编译 CLAUDE.md + 返回归因文本。
  * 供交互模式和非交互模式共用。
  */
-export function executePitfall(
+export async function executePitfall(
   input: PitfallInput,
   opts: PitfallOptions = {},
-): string {
+): Promise<string> {
   const paths = resolvePaths(opts);
   const now = (opts.now ?? (() => new Date().toISOString()))();
   const mode = parseVisibilityMode(
@@ -137,11 +139,12 @@ export function executePitfall(
   const entry = buildEntry(input, now);
   store.add(entry);
 
-  // 重新编译 CLAUDE.md —— 合并所有 scope 的活跃条目
-  const allActive = store.findActive();
-
-  const compiler = new MarkdownCompiler(paths.claudeMdPath, () => now);
-  const writeInfo = compiler.writeToFile(allActive);
+  // 重新编译 CLAUDE.md + skills —— 合并所有 scope 的活跃条目
+  const compileResult = await runCompile({
+    store,
+    markdownCompiler: new MarkdownCompiler(paths.claudeMdPath, () => now),
+    skillCompiler: makeSkillCompiler(),
+  });
 
   const after = store.getAll().length;
   store.close();
@@ -152,7 +155,7 @@ export function executePitfall(
     action: `添加知识条目 ${entry.id} (${entry.category}/${entry.tags[0]})`,
     severity: "highlight",
     timestamp: now,
-    target: { file: writeInfo.filePath, count: writeInfo.blockStartLine + 1 },
+    target: { file: compileResult.markdown.path, count: 0 },
     before: { knowledgeCount: before },
     after: {
       knowledgeCount: after,
@@ -212,7 +215,7 @@ export async function runPitfallInteractive(
       .map((s) => s.trim())
       .filter(Boolean);
 
-    return executePitfall(
+    return await executePitfall(
       { trigger, wrong, correct, reason, category, tags, level, nature },
       opts,
     );

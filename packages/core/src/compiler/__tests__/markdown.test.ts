@@ -176,6 +176,84 @@ describe("compileMarkdownBlock", () => {
   });
 });
 
+describe("tierFilter", () => {
+  it("drops non-canonical+ entries when tierFilter=['canonical','enforced']", () => {
+    const entries = [
+      makeEntry({ id: "a", current_tier: "canonical" as const, correct_pattern: "CANONICAL-A" }),
+      makeEntry({ id: "b", current_tier: "stable" as const, correct_pattern: "STABLE-B" }),
+      makeEntry({ id: "c", current_tier: "enforced" as const, correct_pattern: "ENFORCED-C" }),
+      makeEntry({ id: "d", current_tier: "experimental" as const, correct_pattern: "EXPERIMENTAL-D" }),
+    ];
+    const block = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      tierFilter: ["canonical", "enforced"],
+    });
+    expect(block).toContain("CANONICAL-A");
+    expect(block).toContain("ENFORCED-C");
+    expect(block).not.toContain("STABLE-B");
+    expect(block).not.toContain("EXPERIMENTAL-D");
+  });
+
+  it("empty result with tierFilter shows placeholder", () => {
+    const entries = [makeEntry({ id: "x", current_tier: "experimental" as const })];
+    const block = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      tierFilter: ["canonical", "enforced"],
+    });
+    expect(block).toContain("暂无经验");
+  });
+
+  it("no tierFilter = all active tiers shown (backward compat)", () => {
+    const entries = [
+      makeEntry({ id: "p", current_tier: "probation" as const, correct_pattern: "P-PATTERN" }),
+      makeEntry({ id: "e", current_tier: "experimental" as const, correct_pattern: "E-PATTERN" }),
+    ];
+    const block = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z");
+    expect(block).toContain("P-PATTERN");
+    expect(block).toContain("E-PATTERN");
+  });
+});
+
+describe("tokenBudget", () => {
+  it("truncates when budget exceeded and adds footer hint", () => {
+    const entries = Array.from({ length: 20 }, (_, i) =>
+      makeEntry({
+        id: `r${i}`,
+        current_tier: "canonical" as const,
+        correct_pattern: `PATTERN-${i}`,
+        reasoning: "x".repeat(50),
+      }),
+    );
+    const block = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      tierFilter: ["canonical", "enforced"],
+      tokenBudget: 100,
+      countTokens: (s) => s.length, // 1 char = 1 token
+    });
+    expect(block).toMatch(/还有 \d+ 条 canonical\+ 规则/);
+  });
+
+  it("no truncation when entries fit within budget", () => {
+    const entries = [
+      makeEntry({ id: "fit", current_tier: "canonical" as const, correct_pattern: "FIT" }),
+    ];
+    const block = compileMarkdownBlock(entries, "2026-04-14T00:00:00Z", {
+      tierFilter: ["canonical", "enforced"],
+      tokenBudget: 99999,
+      countTokens: (s) => s.length,
+    });
+    expect(block).not.toMatch(/还有 \d+ 条/);
+    expect(block).toContain("FIT");
+  });
+
+  it("default countTokens works without external dep", () => {
+    const block = compileMarkdownBlock(
+      [makeEntry({ id: "z", current_tier: "canonical" as const })],
+      "2026-04-14T00:00:00Z",
+      { tierFilter: ["canonical", "enforced"], tokenBudget: 2000 },
+    );
+    expect(block).toContain(BLOCK_START);
+    expect(block).toContain(BLOCK_END);
+  });
+});
+
 describe("injectBlockIntoDoc", () => {
   it("adds block to file without previous markers", () => {
     const existing = "# Project\n\nSome user content.\n";

@@ -3,8 +3,9 @@ import {
   InMemoryAttributionBus,
   StdoutRenderer,
 } from "@teamagent/adapters";
-import { compileMarkdownBlock, defaultValidator } from "@teamagent/core";
+import { compileMarkdownBlock, defaultValidator, runCompile, formatAsAgentSkill } from "@teamagent/core";
 import { parseVisibilityMode, type KnowledgeEntry } from "@teamagent/types";
+import type { SkillCompiler, SkillArtifact } from "@teamagent/ports";
 
 /**
  * M0 Walking Skeleton 演示命令。
@@ -15,7 +16,7 @@ import { parseVisibilityMode, type KnowledgeEntry } from "@teamagent/types";
  *
  * Visibility mode 由环境变量 TEAMAGENT_VISIBILITY 控制。
  */
-export function runSkeletonDemo(
+export async function runSkeletonDemo(
   opts: {
     env?: Record<string, string | undefined>;
     now?: string;
@@ -101,6 +102,79 @@ export function runSkeletonDemo(
       ? "（出乎意料：L0 门口没拦住这条坏条目）"
       : `L0 如预期拦下：${l0.failed_checks.join(", ")}`,
     counterfactual: "没有 L0 门闸，坏条目会污染知识库",
+  });
+
+  // M2.4: 演示双出口编译（dry-run，无实际 IO）
+  // 添加 canonical+ 和 stable 条目模拟已晋升规则
+  const canonicalEntry: KnowledgeEntry = {
+    ...entry,
+    id: "skeleton-demo-canonical",
+    trigger: "use-fetch-not-axios",
+    correct_pattern: "fetch",
+    wrong_pattern: "axios",
+    reasoning: "项目统一原生 fetch，减少依赖",
+    current_tier: "canonical" as const,
+    max_tier_ever: "canonical" as const,
+  };
+  const stableEntry: KnowledgeEntry = {
+    ...entry,
+    id: "skeleton-demo-stable",
+    trigger: "batch-insert-over-loop",
+    correct_pattern: "batch insert",
+    wrong_pattern: "for.*insert",
+    reasoning: "批量插入避免逐条往返开销",
+    current_tier: "stable" as const,
+    max_tier_ever: "stable" as const,
+  };
+  store.add(canonicalEntry);
+  store.add(stableEntry);
+
+  // 内存版 MarkdownCompilerLike（dry-run 不写文件）
+  const mdCompilerStub = {
+    compile(entries: KnowledgeEntry[]) {
+      return compileMarkdownBlock(entries, now, { tierFilter: ["canonical", "enforced"] });
+    },
+    writeToFile(entries: KnowledgeEntry[]) {
+      const content = compileMarkdownBlock(entries, now, { tierFilter: ["canonical", "enforced"] });
+      return { filePath: "(demo: CLAUDE.md)", blockLineCount: content.split("\n").length, blockStartLine: 0 };
+    },
+  };
+
+  // 内存版 SkillCompiler（dry-run 不写文件）
+  const STABLE_PLUS = new Set(["stable", "canonical", "enforced"]);
+  const skillCompilerStub: SkillCompiler = {
+    compile(entries: KnowledgeEntry[]): SkillArtifact[] {
+      return entries
+        .filter((e) => e.status === "active" && STABLE_PLUS.has(e.current_tier))
+        .map((e) => ({ ruleId: e.id, dirname: e.id, skillMd: formatAsAgentSkill(e) }));
+    },
+    async write(artifacts: SkillArtifact[]) {
+      return { written: artifacts.map((a) => a.ruleId), skipped: [] };
+    },
+    async cleanup(ids: string[]) {
+      return { removed: ids };
+    },
+  };
+
+  const compileResult = await runCompile({
+    store,
+    markdownCompiler: mdCompilerStub,
+    skillCompiler: skillCompilerStub,
+    bus,
+    dryRun: true,
+  });
+
+  bus.emit({
+    source: "compile",
+    action: "[skeleton] 双出口编译演示",
+    severity: "highlight",
+    timestamp: now,
+    userFacingValue: [
+      `CLAUDE.md 出口：canonical+ 规则 ${compileResult.markdown.blockLineCount} 行（dry-run，未实际写入）`,
+      `Skills 出口：stable+ 规则 ${compileResult.skills.written.length} 条 → ~/.claude/skills/teamagent/ 目录（dry-run，未实际写入）`,
+      `  导出 skill: [${compileResult.skills.written.join(", ")}]`,
+    ].join("\n  "),
+    counterfactual: "没有双出口编译，规则无法作为 Claude Code skill 被所有项目复用",
   });
 
   const renderer = new StdoutRenderer();
