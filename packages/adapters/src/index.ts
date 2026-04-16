@@ -37,3 +37,5 @@ export {
   type Spawner,
   type SpawnResult,
 } from "./llm/claude-code-client.js";
+export { makeSkillCompiler } from "./compiler/skill-compiler.js";
+export type { SkillCompilerOptions } from "./compiler/skill-compiler.js";

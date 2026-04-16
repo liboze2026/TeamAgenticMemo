@@ -18,7 +18,8 @@
     "./ingest/git-hotspot": "./src/ingest/git-hotspot.ts",
     "./ingest/candidate-md": "./src/ingest/candidate-md.ts",
     "./ingest/ci-failure": "./src/ingest/ci-failure.ts",
-    "./token-counter": "./src/token-counter/index.ts"
+    "./token-counter": "./src/token-counter/index.ts",
+    "./skill-compiler": "./src/compiler/skill-compiler.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
