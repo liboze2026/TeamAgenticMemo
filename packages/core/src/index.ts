@@ -76,4 +76,9 @@ export {
   type IngestPipelineDeps,
   type IngestPipelineResult,
 } from "./pipeline/ingest-pipeline.js";
-export { validateLevel0 } from "./validator/l0.js";
+export {
+  defaultValidator,
+  validateLevel0,
+  validateLevel1,
+  validateLevel2,
+} from "./validator/index.js";
