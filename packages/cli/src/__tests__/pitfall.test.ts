@@ -30,8 +30,8 @@ describe("executePitfall", () => {
     tmp.cleanup();
   });
 
-  it("writes a new entry to personal knowledge store (project DB)", () => {
-    executePitfall(
+  it("writes a new entry to personal knowledge store (project DB)", async () => {
+    await executePitfall(
       {
         trigger: "npm install moment",
         wrong: "moment",
@@ -54,8 +54,8 @@ describe("executePitfall", () => {
     expect(entry.scope.level).toBe("personal");
   });
 
-  it("creates CLAUDE.md with TEAMAGENT block", () => {
-    executePitfall(
+  it("creates CLAUDE.md with TEAMAGENT block", async () => {
+    await executePitfall(
       {
         trigger: "t",
         wrong: "w",
@@ -72,11 +72,11 @@ describe("executePitfall", () => {
     expect(content).toContain("使用 c 而非 w");
   });
 
-  it("preserves existing CLAUDE.md content when updating", () => {
+  it("preserves existing CLAUDE.md content when updating", async () => {
     const mdPath = path.join(tmp.cwd, "CLAUDE.md");
     fs.writeFileSync(mdPath, "# My Project\n\nRule: always X\n", "utf-8");
 
-    executePitfall(
+    await executePitfall(
       { trigger: "t", wrong: "w", correct: "c", reason: "r" },
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
     );
@@ -87,8 +87,8 @@ describe("executePitfall", () => {
     expect(content).toContain("TEAMAGENT:START");
   });
 
-  it("returns attribution block in smart mode by default", () => {
-    const out = executePitfall(
+  it("returns attribution block in smart mode by default", async () => {
+    const out = await executePitfall(
       {
         trigger: "t",
         wrong: "moment",
@@ -105,8 +105,8 @@ describe("executePitfall", () => {
     expect(out).toContain("dayjs");
   });
 
-  it("silent mode returns empty output", () => {
-    const out = executePitfall(
+  it("silent mode returns empty output", async () => {
+    const out = await executePitfall(
       { trigger: "t", wrong: "w", correct: "c", reason: "r" },
       {
         cwd: tmp.cwd,
@@ -118,8 +118,8 @@ describe("executePitfall", () => {
     expect(out).toBe("");
   });
 
-  it("verbose mode includes counterfactual", () => {
-    const out = executePitfall(
+  it("verbose mode includes counterfactual", async () => {
+    const out = await executePitfall(
       { trigger: "t", wrong: "w", correct: "c", reason: "r" },
       {
         cwd: tmp.cwd,
@@ -131,8 +131,8 @@ describe("executePitfall", () => {
     expect(out).toContain("如果没有 TeamAgent");
   });
 
-  it("empty wrong_pattern → type=practice", () => {
-    executePitfall(
+  it("empty wrong_pattern → type=practice", async () => {
+    await executePitfall(
       {
         trigger: "代码审查前",
         wrong: "",
@@ -149,8 +149,8 @@ describe("executePitfall", () => {
     expect(all[0]?.type).toBe("practice");
   });
 
-  it("team level → personal scope in project DB (v2 maps team→personal)", () => {
-    executePitfall(
+  it("team level → personal scope in project DB (v2 maps team→personal)", async () => {
+    await executePitfall(
       {
         trigger: "t",
         wrong: "w",
@@ -170,8 +170,8 @@ describe("executePitfall", () => {
     expect(all[0]?.scope.level).toBe("personal");
   });
 
-  it("subjective nature caps enforcement at warn even with high confidence", () => {
-    executePitfall(
+  it("subjective nature caps enforcement at warn even with high confidence", async () => {
+    await executePitfall(
       {
         trigger: "t",
         wrong: "w",

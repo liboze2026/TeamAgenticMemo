@@ -51,7 +51,7 @@ async function main(): Promise<void> {
     case "pitfall": {
       const nonInteractive = parsePitfallArgs(rest);
       const output = nonInteractive
-        ? executePitfall(nonInteractive)
+        ? await executePitfall(nonInteractive)
         : await runPitfallInteractive();
       if (output) process.stdout.write(output + "\n");
       return;

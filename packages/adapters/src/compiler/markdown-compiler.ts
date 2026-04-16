@@ -117,7 +117,11 @@ function resolveOptionsFromEnv(): CompileMarkdownOptions {
   const rawLimit = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
   if (rawLimit) {
     const n = parseInt(rawLimit, 10);
-    if (Number.isFinite(n) && n > 0) out.limit = n;
+    if (Number.isFinite(n) && n > 0) {
+      out.limit = n;
+      // 显式设置条目数上限时，禁用 token budget（让 limit 优先）
+      out.tokenBudget = undefined;
+    }
   }
 
   return out;
