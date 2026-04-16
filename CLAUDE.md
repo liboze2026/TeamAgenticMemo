@@ -43,10 +43,13 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（35条活跃知识）
+## TeamAgent 经验（38条活跃知识）
 - 使用 demote=0 时返回 enforced（无约束），让 effectiveTier 能产出比当前 tier 高的候选 而非 demote=0 时返回 currentTier，effectiveTier 永远无法升级—— [0.70]
 - 使用 const enteredMs = input.tier_entered_at ? new Date(input.tier_entered_at).getTime() : 0；显式判空再计算 而非 new Date("") 产生 Invalid Date，daysSince=NaN，NaN<7=false 导致 7 天降级保护被静默绕过—— [0.70]
 - 使用 tierFromDemerit 的返回值是死亡链允许的最高 tier；无约束（demote=0）应返回 enforced，测试必须反映此语义 而非 测试写 tierFromDemerit(4, 'stable') → 'stable' 表示无约束时返回 currentTier—— [0.70]
+- 使用 先在 packages/types/src/attribution.ts 的 source union 加成员，再 emit 而非 直接在 pipeline emit 新 source 值——AttributionEvent.source 是闭合 union；新组件 emit 未声明的 source 值 TS 编译就挂 [0.70]
+- 使用 dry-run 只跳过 store.add；extractor/L1/L2 仍会调用 LLM。想零 LLM 预览用 --from-git/--from-ci 半自动源 而非 以为 dry-run 不花 LLM 费用——ingest-pipeline 的 dryRun 只是 store.add 的 bypass，不控制 LLM 调用链路——extractor 仍要跑，按源计费 [0.70]
+- 使用 先在 packages/adapters/package.json 的 exports 字段加 './xxx': './src/xxx.ts'，再 import 而非 新建 src/xxx.ts 就直接 import @teamagent/adapters/xxx——pnpm workspace 包的 exports 字段是 API 边界；未声明的 subpath 在安装/构建阶段解析失败。M2.3 加 ingest/* 时踩过这个节拍 [0.70]
 - 使用 通过目标包 package.json 的 exports 字段暴露 subpath（例如 "./contracts"）再 import 而非 import ... from "@teamagent/ports/src/__tests__/xxx.js"——workspace 包的 exports 字段是 API 边界，pnpm/vite 不会解析未暴露的深路径；深路径 import 会在安装后构建阶段失败 [0.00]
 - 使用 passive 在打分公式里仍有 0.1 权重，所以 passive 条目 score 最低为 0.01（0.1 × 0.1） 而非 期望 passive 条目 score=0——spec v5.2 评分公式: confidence×0.4 + hit×0.3 + recency×0.2 + enforcement×0.1；passive 不是 0 分，只是最小分 [0.00]
 - 使用 先检查下载目录（~/Downloads、./data、./models、./vendor、node_modules 等可能的位置）是否已有目标内容；已有就复用，避免重复下载 而非 wget|curl|git clone|pip download|pip install -t|huggingface-cli download——重复下载浪费时间和带宽（尤其大模型权重几十 GB），可能覆盖正在使用的旧副本，甚至因网络问题下到损坏文件；先检查是一次极低成本的稳妥动作 [0.00]
