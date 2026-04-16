@@ -38,6 +38,9 @@ importers:
       '@teamagent/types':
         specifier: workspace:*
         version: link:../types
+      js-tiktoken:
+        specifier: ^1.0.12
+        version: 1.0.21
       mitt:
         specifier: ^3.0.1
         version: 3.0.1
