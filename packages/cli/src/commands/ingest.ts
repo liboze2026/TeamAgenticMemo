@@ -18,6 +18,17 @@ import {
   isGhAvailable,
 } from "@teamagent/adapters/ingest/pr-review";
 import {
+  parseGitHotspots,
+  hotspotsToCandidateItems,
+  getGitNumstat,
+} from "@teamagent/adapters/ingest/git-hotspot";
+import {
+  formatCandidateMd,
+  parseCandidateMd,
+  candidatesToExtractionInputs,
+  type CandidateSource,
+} from "@teamagent/adapters/ingest/candidate-md";
+import {
   llmBasedKnowledgeExtractor,
   runIngestPipeline,
   validateLevel0,
@@ -132,6 +143,26 @@ async function loadInputs(opts: IngestOptions): Promise<ExtractionInput[]> {
       const raw = await getNpmAuditOutput(runner, opts.cwd);
       return parseNpmAudit(raw);
     }
+    case "git-hotspot": {
+      // 半自动源永远产出 candidate md（即使没传 --dry-run）——这一步不摄入规则。
+      // 用户勾选后再 teamagent ingest --from-candidates <path>。
+      throw new Error(
+        "git-hotspot 源只产出候选文件，不直接 ingest。见 executeIngest 的 handleSemiAuto。",
+      );
+    }
+    case "ci-failure": {
+      throw new Error(
+        "ci-failure 源只产出候选文件，不直接 ingest。见 executeIngest 的 handleSemiAuto。",
+      );
+    }
+    case "candidates": {
+      if (!opts.filePath) {
+        throw new Error("--from-candidates 需要 <path>");
+      }
+      const raw = fs.readFileSync(opts.filePath, "utf-8");
+      const parsed = parseCandidateMd(raw);
+      return candidatesToExtractionInputs(parsed);
+    }
     case "pr-review": {
       if (opts.prNumber === undefined || Number.isNaN(opts.prNumber)) {
         throw new Error("--from-pr 需要 <number>");
@@ -162,6 +193,11 @@ export async function executeIngest(opts: IngestOptions): Promise<string> {
       const rand = Math.random().toString(36).slice(2, 8);
       return `ing-${ts}-${rand}`;
     });
+
+  // 半自动源：git-hotspot / ci-failure → 只写候选 md，不走 ingest-pipeline。
+  if (opts.source === "git-hotspot" || opts.source === "ci-failure") {
+    return handleSemiAuto(opts, paths, now);
+  }
 
   fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
   fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
@@ -293,6 +329,54 @@ export function parseIngestArgs(argv: string[]): IngestOptions {
     );
   }
   return opts as IngestOptions;
+}
+
+async function handleSemiAuto(
+  opts: IngestOptions,
+  paths: ReturnType<typeof resolvePaths>,
+  now: () => Date,
+): Promise<string> {
+  fs.mkdirSync(paths.candidatesDir, { recursive: true });
+  const runner = opts.cmdRunner ?? defaultRunner;
+  const dateSlug = now().toISOString().slice(0, 10);
+
+  if (opts.source === "git-hotspot") {
+    const raw = await getGitNumstat(runner, {
+      cwd: paths.cwd,
+      sinceDays: opts.sinceDays,
+    });
+    const hotspots = parseGitHotspots(raw, { threshold: opts.threshold });
+    const items = hotspotsToCandidateItems(hotspots);
+    const md = formatCandidateMd("git-hotspot", items, {
+      generatedAt: now().toISOString(),
+    });
+    const outPath = path.join(
+      paths.candidatesDir,
+      `git-hotspot-${dateSlug}.md`,
+    );
+    fs.writeFileSync(outPath, md, "utf-8");
+    return formatSemiAutoReport("git-hotspot", items.length, outPath);
+  }
+
+  // ci-failure in T11
+  throw new Error(`semi-auto source '${opts.source}' 未实现`);
+}
+
+function formatSemiAutoReport(
+  source: CandidateSource,
+  candidateCount: number,
+  outPath: string,
+): string {
+  return [
+    `🔍 TeamAgent Ingest (${source}, 候选生成)`,
+    "",
+    `  候选数: ${candidateCount}`,
+    `  写入: ${outPath}`,
+    "",
+    `  编辑该文件，把想摄入的条目改为 - [x]，然后运行：`,
+    `    teamagent ingest --from-candidates ${outPath}`,
+    "",
+  ].join("\n");
 }
 
 // Re-export for T8-T11 to hook additional sources
