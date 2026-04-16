@@ -20,6 +20,8 @@ export interface PersistedEvent {
     | "hook-pre.blocked"
     | "hook-pre.warned"
     | "hook-post.result"
+    | "ai.override.ignored"
+    | "ai.override.complied"
     | "pitfall.added"
     | "compiler.updated"
     | "extractor.extracted"
