@@ -17,6 +17,8 @@ export interface StatsOptions {
   /** 校准变化窗口（天），默认 7 */
   windowDays?: number;
   now?: () => Date;
+  /** 展示单条规则的 tier/confidence/demerit 详情 */
+  explain?: string;
 }
 
 /** 校准变化聚合：按 knowledge_id 累计该窗口内的总 delta */
@@ -183,11 +185,49 @@ export function renderStats(
   return lines.join("\n") + "\n";
 }
 
+/** 纯函数：渲染单条规则的 explain 详情。 */
+export function renderExplain(entry: KnowledgeEntry | undefined, id: string): string {
+  if (!entry) {
+    return `rule ${id} not found\n`;
+  }
+  const debitUpdated = entry.demerit_last_updated || "never";
+  const lines: string[] = [
+    `rule ${entry.id}`,
+    `  tier: ${entry.current_tier} (max ever: ${entry.max_tier_ever})`,
+    `  confidence: ${entry.confidence.toFixed(3)}`,
+    `  demerit: ${entry.demerit.toFixed(2)} (updated ${debitUpdated})`,
+  ];
+  return lines.join("\n") + "\n";
+}
+
 /** IO 入口：读 SQLite 知识库 + events.db 并渲染统计。 */
 export function executeStats(opts: StatsOptions = {}): string {
   const paths = resolvePaths(opts);
   const windowDays = opts.windowDays ?? 7;
   const now = (opts.now ?? (() => new Date()))();
+
+  // --explain <rule-id>: just look up the entry and print v2 fields
+  if (opts.explain !== undefined) {
+    const id = opts.explain;
+    let entry: KnowledgeEntry | undefined;
+    try {
+      const projectDbExists = fs.existsSync(paths.projectDbPath);
+      const globalDbExists = fs.existsSync(paths.userGlobalDbPath);
+      if (projectDbExists || globalDbExists) {
+        fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+        fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+        const store = new DualLayerStore({
+          projectDbPath: paths.projectDbPath,
+          userGlobalDbPath: paths.userGlobalDbPath,
+        });
+        entry = store.getById(id);
+        store.close();
+      }
+    } catch {
+      // DB 损坏 → entry remains undefined
+    }
+    return renderExplain(entry, id);
+  }
 
   let events: PersistedEvent[] = [];
   try {
