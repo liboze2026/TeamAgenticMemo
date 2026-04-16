@@ -46,6 +46,12 @@ export function runCalibratorContract(makeCalibrator: () => Calibrator): void {
       last_validated_at: "2026-04-15T00:00:00Z",
       source: "accumulated",
       conflict_with: [],
+      current_tier: "experimental" as const,
+      max_tier_ever: "experimental" as const,
+      tier_entered_at: "",
+      demerit: 0,
+      demerit_last_updated: "",
+      resurrect_count: 0,
     };
 
     function evt(over: Partial<PersistedEvent>): PersistedEvent {

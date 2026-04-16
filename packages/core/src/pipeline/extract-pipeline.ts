@@ -227,6 +227,12 @@ function assembleEntry(
     last_validated_at: nowIso,
     source: deps.source ?? "accumulated",
     conflict_with: [],
+    current_tier: "experimental" as const,
+    max_tier_ever: "experimental" as const,
+    tier_entered_at: "",
+    demerit: 0,
+    demerit_last_updated: "",
+    resurrect_count: 0,
   };
 }
 

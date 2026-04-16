@@ -52,6 +52,12 @@ export function runSkeletonDemo(
     last_validated_at: now,
     source: "preset",
     conflict_with: [],
+    current_tier: "experimental" as const,
+    max_tier_ever: "experimental" as const,
+    tier_entered_at: "",
+    demerit: 0,
+    demerit_last_updated: "",
+    resurrect_count: 0,
   };
   store.add(entry);
 
