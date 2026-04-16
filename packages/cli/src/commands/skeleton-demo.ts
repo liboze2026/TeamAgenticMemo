@@ -3,7 +3,7 @@ import {
   InMemoryAttributionBus,
   StdoutRenderer,
 } from "@teamagent/adapters";
-import { compileMarkdownBlock } from "@teamagent/core";
+import { compileMarkdownBlock, defaultValidator } from "@teamagent/core";
 import { parseVisibilityMode, type KnowledgeEntry } from "@teamagent/types";
 
 /**
@@ -74,6 +74,33 @@ export function runSkeletonDemo(
     after: { knowledgeCount: store.count(), blockLines: lineCount },
     userFacingValue: `模拟知识条目已编译成 ${lineCount} 行 markdown，真实场景下会写入 CLAUDE.md`,
     counterfactual: "没有 Walking Skeleton 的骨架贯通，后续 Milestone 没有落脚点",
+  });
+
+  // M2.3: 演示 L0 validator 拒掉一个明显不合格的候选条目
+  const badEntry: Partial<KnowledgeEntry> = {
+    id: "skeleton-demo-bad",
+    scope: { level: "team", paths: [] }, // 空 paths 会触发 scope_paths_empty
+    type: "avoidance",
+    trigger: "bad-rule",
+    wrong_pattern: "nonexistent-pattern",
+    correct_pattern: "c",
+  };
+  const l0 = defaultValidator.validateLevel0({
+    entry: badEntry,
+    sourceText: "nothing matches here",
+    existingRules: [],
+    projectStack: ["ts"],
+  });
+  bus.emit({
+    source: "validator",
+    action: "[skeleton] L0 拒绝演示",
+    severity: l0.ok ? "info" : "warning",
+    timestamp: now,
+    target: { id: "skeleton-demo-bad" },
+    userFacingValue: l0.ok
+      ? "（出乎意料：L0 门口没拦住这条坏条目）"
+      : `L0 如预期拦下：${l0.failed_checks.join(", ")}`,
+    counterfactual: "没有 L0 门闸，坏条目会污染知识库",
   });
 
   const renderer = new StdoutRenderer();
