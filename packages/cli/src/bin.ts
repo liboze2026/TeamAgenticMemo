@@ -42,6 +42,11 @@ import {
   parseCompileArgs,
   renderCompileResult,
 } from "./commands/compile.js";
+import { executeScanErrors, parseScanErrorsArgs } from "./commands/scan-errors.js";
+import {
+  executeReviewCandidates,
+  parseReviewCandidatesArgs,
+} from "./commands/review-candidates.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -228,6 +233,18 @@ async function main(): Promise<void> {
       }
       return;
     }
+    case "scan-errors": {
+      const scanOpts = parseScanErrorsArgs(rest);
+      const output = await executeScanErrors(scanOpts);
+      if (output) process.stdout.write(output);
+      return;
+    }
+    case "review-candidates": {
+      const reviewOpts = parseReviewCandidatesArgs(rest);
+      const output = await executeReviewCandidates(reviewOpts);
+      if (output) process.stdout.write(output);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -268,6 +285,10 @@ async function main(): Promise<void> {
           "                                   编译双出口：CLAUDE.md (canonical+, 3000 token 预算) + Agent Skills (stable+)",
           "                                   --dry-run: 预览将写/删哪些文件，不实际写入",
           "                                   --skills-only / --markdown-only: 只写其中一路出口",
+          "  teamagent scan-errors [--mode=efficient|full] [--since=<duration|ISO>] [--min-freq=N] [--dry-run] [--quiet]",
+          "                                   自动采集错误信号 → 提取候选规则 → 写入候选队列",
+          "  teamagent review-candidates [--limit=N]",
+          "                                   交互式审核候选规则：[a]批准 [r]拒绝 [s]跳过 [q]退出",
           "  teamagent ingest --from-insights <path> | --from-audit | --from-pr <n>",
           "                   | --from-git [--since=30d] | --from-ci [--since=30d] | --from-candidates <path>",
           "                                   多源摄入：Claude /insights / npm audit / PR review / git hotspot / CI failure",

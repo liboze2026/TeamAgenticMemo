@@ -10,3 +10,5 @@ export { runCalibratorContract } from "./__tests__/calibrator-contract.js";
 export { runCalibratorV2Contract } from "./__tests__/calibrator-v2-contract.js";
 export { runValidatorContract } from "./__tests__/validator-contract.js";
 export { runSkillCompilerContract } from "./__tests__/skill-compiler-contract.js";
+export { runErrorSignalCollectorContract } from "./__tests__/error-signal-collector-contract.js";
+export { runCandidateQueueContract } from "./__tests__/candidate-queue-contract.js";

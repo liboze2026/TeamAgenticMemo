@@ -93,6 +93,19 @@ CREATE TABLE IF NOT EXISTS wiki_meta (
   FOREIGN KEY(knowledge_id) REFERENCES knowledge(id) ON DELETE CASCADE
 );
 
+-- 候选规则队列（M2.5-half，review-candidates 用）
+CREATE TABLE IF NOT EXISTS rule_candidates (
+  id          TEXT PRIMARY KEY,
+  entry_json  TEXT NOT NULL,
+  source_signals TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','approved','rejected','skipped')),
+  created_at  TEXT NOT NULL,
+  reviewed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_candidates_status ON rule_candidates(status, created_at ASC);
+
 -- schema 版本表（后续 migration 用）
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER PRIMARY KEY,
