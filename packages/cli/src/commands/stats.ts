@@ -23,6 +23,8 @@ export interface StatsOptions {
   stuckInPromotion?: boolean;
   /** --stuck-in-promotion 的天数阈值，默认 14 */
   stuckDays?: number;
+  /** 展示 ai.override.ignored / complied 的统计 */
+  overrideSignals?: boolean;
 }
 
 /** 校准变化聚合：按 knowledge_id 累计该窗口内的总 delta */
@@ -257,6 +259,39 @@ export function renderStuckInPromotion(stuck: KnowledgeEntry[], stuckDays: numbe
   return lines.join("\n");
 }
 
+/** 纯函数：渲染 ai.override.ignored / complied 的统计。 */
+export function renderOverrideSignals(events: PersistedEvent[]): string {
+  const counts = new Map<string, { ignored: number; complied: number }>();
+
+  for (const e of events) {
+    if (e.kind !== "ai.override.ignored" && e.kind !== "ai.override.complied") continue;
+    const id = e.knowledge_id ?? "(unknown)";
+    const entry = counts.get(id) ?? { ignored: 0, complied: 0 };
+    if (e.kind === "ai.override.ignored") entry.ignored++;
+    else entry.complied++;
+    counts.set(id, entry);
+  }
+
+  if (counts.size === 0) {
+    return "TeamAgent Override Signals\n\n  (无记录)\n";
+  }
+
+  const rows = [...counts.entries()].sort((a, b) => b[1].ignored - a[1].ignored);
+
+  const lines = ["TeamAgent Override Signals", ""];
+  lines.push(
+    "  Rule ID".padEnd(32) + "ignored".padEnd(10) + "complied",
+  );
+  lines.push("  " + "─".repeat(50));
+  for (const [id, { ignored, complied }] of rows) {
+    lines.push(
+      `  ${id.slice(0, 30).padEnd(32)}ignored: ${String(ignored).padEnd(6)}complied: ${complied}`,
+    );
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 /** IO 入口：读 SQLite 知识库 + events.db 并渲染统计。 */
 export function executeStats(opts: StatsOptions = {}): string {
   const paths = resolvePaths(opts);
@@ -285,6 +320,21 @@ export function executeStats(opts: StatsOptions = {}): string {
     }
     const stuck = findStuckInPromotion(allEntries, stuckDays, now);
     return renderStuckInPromotion(stuck, stuckDays, now);
+  }
+
+  // --override-signals: show per-rule ignored/complied counts
+  if (opts.overrideSignals) {
+    let events: PersistedEvent[] = [];
+    try {
+      if (fs.existsSync(paths.eventsDbPath)) {
+        const eventLog = new SqliteEventLog(openDb(paths.eventsDbPath));
+        events = eventLog.readAll();
+        eventLog.close();
+      }
+    } catch {
+      // 损坏 → 视为空
+    }
+    return renderOverrideSignals(events);
   }
 
   // --explain <rule-id>: just look up the entry and print v2 fields

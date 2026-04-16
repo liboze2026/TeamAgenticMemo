@@ -417,3 +417,37 @@ describe("executeStats (IO)", () => {
     });
   });
 });
+
+describe("executeStats --override-signals", () => {
+  it("renders override signal counts per rule", () => {
+    const tmp = {
+      cwd: fs.mkdtempSync(path.join(os.tmpdir(), "stats-override-")),
+    };
+    const eventsDbPath = path.join(tmp.cwd, "events.db");
+    const db = openDb(eventsDbPath);
+    const log = new SqliteEventLog(db);
+
+    const now = new Date().toISOString();
+    log.append({ id: "e1", kind: "ai.override.ignored",  knowledge_id: "rule-A", tool_use_id: "t1", timestamp: now, schema_version: 1 });
+    log.append({ id: "e2", kind: "ai.override.ignored",  knowledge_id: "rule-A", tool_use_id: "t2", timestamp: now, schema_version: 1 });
+    log.append({ id: "e3", kind: "ai.override.complied", knowledge_id: "rule-A", tool_use_id: "t3", timestamp: now, schema_version: 1 });
+    log.append({ id: "e4", kind: "ai.override.complied", knowledge_id: "rule-B", tool_use_id: "t4", timestamp: now, schema_version: 1 });
+    db.close();
+
+    const result = executeStats({
+      eventsDbPath,
+      projectDbPath: path.join(tmp.cwd, "knowledge.db"),
+      userGlobalDbPath: path.join(tmp.cwd, "global.db"),
+      overrideSignals: true,
+    });
+
+    expect(result).toContain("rule-A");
+    expect(result).toContain("ignored: 2");
+    expect(result).toContain("complied: 1");
+    expect(result).toContain("rule-B");
+    expect(result).toContain("complied: 1");
+
+    // cleanup
+    fs.rmSync(tmp.cwd, { recursive: true, force: true });
+  });
+});
