@@ -276,7 +276,7 @@ describe("v2 tier/demerit fields round-trip", () => {
       demerit: 3,
       current_tier: "probation" as const,
       tier_entered_at: "2026-04-16T00:00:00Z",
-    } as any);
+    });
     const back = store.getById("r-u");
     expect(back?.demerit).toBe(3);
     expect(back?.current_tier).toBe("probation");
