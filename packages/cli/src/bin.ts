@@ -49,7 +49,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case "skeleton-demo": {
-      const output = runSkeletonDemo();
+      const output = await runSkeletonDemo();
       if (output) process.stdout.write(output + "\n");
       return;
     }
