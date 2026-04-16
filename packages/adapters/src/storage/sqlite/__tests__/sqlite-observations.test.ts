@@ -38,8 +38,8 @@ describe("SqliteObservations", () => {
     obs.add({ id: "o2", knowledge_id: "r-1", timestamp: "2026-04-15T00:02:00Z", outcome: "failure" });
     const list = obs.listForKnowledge("r-1");
     expect(list).toHaveLength(2);
-    expect(list[0].outcome).toBe("failure"); // DESC 默认
-    expect(list[1].outcome).toBe("success");
+    expect(list[0]!.outcome).toBe("failure"); // DESC 默认
+    expect(list[1]!.outcome).toBe("success");
   });
 
   it("cascade delete — 删 knowledge 时 observations 一起删", () => {

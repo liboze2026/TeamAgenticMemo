@@ -154,7 +154,7 @@ export class SqliteKnowledgeStore {
 
   add(entry: KnowledgeEntry): void {
     const params = serializeEntry(entry);
-    this.db.prepare(INSERT_SQL).run(params);
+    this.db.prepare(INSERT_SQL).run(params as Record<string, any>);
   }
 
   getById(id: string): KnowledgeEntry | undefined {
@@ -163,17 +163,17 @@ export class SqliteKnowledgeStore {
   }
 
   getAll(): KnowledgeEntry[] {
-    const rows = this.db.prepare(SELECT_ALL).all() as KnowledgeRow[];
+    const rows = this.db.prepare(SELECT_ALL).all() as unknown as KnowledgeRow[];
     return rows.map(deserializeRow);
   }
 
   findByScopeLevel(level: "personal" | "team" | "global"): KnowledgeEntry[] {
-    const rows = this.db.prepare(SELECT_BY_SCOPE).all({ level }) as KnowledgeRow[];
+    const rows = this.db.prepare(SELECT_BY_SCOPE).all({ level }) as unknown as KnowledgeRow[];
     return rows.map(deserializeRow);
   }
 
   findActive(): KnowledgeEntry[] {
-    const rows = this.db.prepare(SELECT_ACTIVE).all() as KnowledgeRow[];
+    const rows = this.db.prepare(SELECT_ACTIVE).all() as unknown as KnowledgeRow[];
     return rows.map(deserializeRow);
   }
 
@@ -255,7 +255,7 @@ export class SqliteKnowledgeStore {
     ];
 
     const sql = `UPDATE knowledge SET ${setClauses.join(", ")} WHERE id = @id`;
-    this.db.prepare(sql).run(params);
+    this.db.prepare(sql).run(params as Record<string, any>);
   }
 
   delete(id: string): void {

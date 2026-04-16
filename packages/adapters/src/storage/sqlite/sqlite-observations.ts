@@ -31,7 +31,7 @@ export class SqliteObservations {
       SELECT id, knowledge_id, timestamp, outcome, source_event, tool_use_id
       FROM observations WHERE knowledge_id = ?
       ORDER BY timestamp DESC
-    `).all(knowledge_id) as Observation[];
+    `).all(knowledge_id) as unknown as Observation[];
   }
 
   countByOutcome(knowledge_id: string, outcome: "success" | "failure"): number {

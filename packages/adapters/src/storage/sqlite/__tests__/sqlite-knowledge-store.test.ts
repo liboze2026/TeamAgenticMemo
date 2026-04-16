@@ -179,7 +179,7 @@ describe("SqliteKnowledgeStore", () => {
 
     const personal = store.findByScopeLevel("personal");
     expect(personal).toHaveLength(1);
-    expect(personal[0].id).toBe("p1");
+    expect(personal[0]!.id).toBe("p1");
   });
 
   // 7. findActive excludes archived

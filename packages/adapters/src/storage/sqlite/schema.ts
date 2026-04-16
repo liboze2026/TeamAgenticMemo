@@ -1,9 +1,10 @@
 import { createRequire } from "node:module";
+import type { DatabaseSync } from "node:sqlite";
 
 // node:sqlite 是 Node 22+ 实验性内置模块，不在 builtinModules 列表里，
 // vite/vitest 的静态 import 无法解析。用 createRequire 在运行时加载。
 const require = createRequire(import.meta.url);
-const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
+const { DatabaseSync: DatabaseSyncCtor } = require("node:sqlite") as typeof import("node:sqlite");
 
 /** 所有 DDL 集中在这里，首次打开 DB 时幂等执行一次。 */
 export const INIT_SQL = `
@@ -107,7 +108,7 @@ export const CURRENT_SCHEMA_VERSION = 1;
  * 幂等——重复调用无副作用。
  */
 export function openDb(path: string): DatabaseSync {
-  const db = new DatabaseSync(path);
+  const db = new DatabaseSyncCtor(path);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec(INIT_SQL);

@@ -32,8 +32,8 @@ describe("SqliteEventLog", () => {
     log.append(e);
     const all = log.readAll();
     expect(all).toHaveLength(1);
-    expect(all[0].kind).toBe("hook-pre.matched");
-    expect(all[0].knowledge_id).toBe("r-1");
+    expect(all[0]!.kind).toBe("hook-pre.matched");
+    expect(all[0]!.knowledge_id).toBe("r-1");
   });
 
   it("readByKind filters", () => {
@@ -46,7 +46,7 @@ describe("SqliteEventLog", () => {
 
   it("readLast returns N most recent", () => {
     for (let i = 0; i < 5; i++) {
-      log.append({ id: `e${i}`, kind: "x", timestamp: `2026-04-15T00:00:0${i}Z`, schema_version: 1 });
+      log.append({ id: `e${i}`, kind: "hook-pre.matched", timestamp: `2026-04-15T00:00:0${i}Z`, schema_version: 1 });
     }
     const last3 = log.readLast(3);
     expect(last3.map(e => e.id)).toEqual(["e4", "e3", "e2"]);

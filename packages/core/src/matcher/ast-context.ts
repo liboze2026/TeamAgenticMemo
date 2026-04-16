@@ -53,6 +53,8 @@ export function isInsideCommentOrString(
   if (!parser) return false; // 未知语言 → 保守：当作真命中，不过滤
 
   const tree = parser.parse(code);
+  if (!tree) return false;
+
   const node = tree.rootNode.descendantForIndex(offset);
 
   let cur: ReturnType<typeof tree.rootNode.descendantForIndex> | null = node;

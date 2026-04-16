@@ -37,7 +37,7 @@ describe("sqlite schema", () => {
     const db2 = openDb(p);
     const versions = db2.prepare("SELECT version FROM schema_version").all() as { version: number }[];
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(CURRENT_SCHEMA_VERSION);
+    expect(versions[0]!.version).toBe(CURRENT_SCHEMA_VERSION);
     closeDb(db2);
   });
 
