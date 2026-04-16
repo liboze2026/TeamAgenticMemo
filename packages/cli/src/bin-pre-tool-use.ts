@@ -1,52 +1,83 @@
 #!/usr/bin/env node
 /**
- * Hook 入口：从 stdin 读 PreToolUseInput JSON，写 HookOutput JSON 到 stdout。
+ * PreToolUse Hook 入口 (v2 — Claude Agent SDK 版)
  *
- * 由 Claude Code 通过 .claude/settings.json 的 hooks.PreToolUse 配置调用。
- *
- * 设计原则：
- * - 任何异常都退化为"通过"（exit 0 + 空 stdout），不阻断用户工作流
- * - 不写 console.log（污染 stdout 协议），错误走 stderr
- * - 全部用同步 IO + 同步逻辑，避免 hook 进程死锁
+ * 读 stdin JSON → matchRules → createPreToolUseHandler → stdout JSON
+ * 任何异常都退化为 exit 0（不阻断工作流）
  */
-import { handlePreToolUse } from "@teamagent/adapters";
-import type { PreToolUseInput } from "@teamagent/types";
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs";
+import {
+  normalizeCwd,
+  createPreToolUseHandler,
+  DualLayerStore,
+  SqliteEventLog,
+  openDb,
+} from "@teamagent/adapters";
+import { matchRulesAsync } from "@teamagent/core";
+
+async function readStdinJson(): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+}
 
 async function main(): Promise<void> {
-  let raw = "";
+  let input: any;
   try {
-    for await (const chunk of process.stdin) {
-      raw += chunk;
-    }
+    input = await readStdinJson();
   } catch (err) {
-    process.stderr.write(`teamagent hook: stdin read failed: ${String(err)}\n`);
+    process.stderr.write(`teamagent pre-hook: stdin read/parse failed: ${String(err)}\n`);
     process.exit(0);
   }
 
-  if (!raw.trim()) {
+  if (!input) {
     process.exit(0);
   }
 
-  let input: PreToolUseInput;
   try {
-    input = JSON.parse(raw) as PreToolUseInput;
+    const cwd = normalizeCwd(input.cwd ?? process.cwd());
+    const home = os.homedir();
+
+    const projectDbPath = path.join(cwd, ".teamagent", "knowledge.db");
+    const globalDbPath = path.join(home, ".teamagent", "global.db");
+    const eventsDbPath = path.join(home, ".teamagent", "events.db");
+
+    fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(globalDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(eventsDbPath), { recursive: true });
+
+    const store = new DualLayerStore({ projectDbPath, userGlobalDbPath: globalDbPath });
+    const eventLog = new SqliteEventLog(openDb(eventsDbPath));
+
+    const matcher = {
+      match: async ({ tool_name, tool_input }: { tool_name: string; tool_input: unknown }) => {
+        const rules = store.findActive();
+        const result = await matchRulesAsync(
+          { ...(typeof tool_input === "object" && tool_input !== null ? tool_input : {}), tool_name },
+          rules,
+          {},
+        );
+        return result;
+      },
+    };
+
+    const handler = createPreToolUseHandler({ matcher, eventLog });
+    const result = await handler(input);
+
+    store.close();
+    eventLog.close();
+
+    process.stdout.write(JSON.stringify(result));
+    process.exit(0);
   } catch (err) {
-    process.stderr.write(`teamagent hook: JSON parse failed: ${String(err)}\n`);
+    process.stderr.write(`teamagent pre-hook: handler error: ${String(err)}\n`);
     process.exit(0);
   }
-
-  const output = handlePreToolUse(input);
-
-  // 空对象 → exit 0 不输出，让 Claude Code 默认通过
-  if (Object.keys(output).length === 0) {
-    process.exit(0);
-  }
-
-  process.stdout.write(JSON.stringify(output));
-  process.exit(0);
 }
 
 main().catch((err) => {
-  process.stderr.write(`teamagent hook: unexpected error: ${String(err)}\n`);
+  process.stderr.write(`teamagent pre-hook: unexpected: ${String(err)}\n`);
   process.exit(0);
 });

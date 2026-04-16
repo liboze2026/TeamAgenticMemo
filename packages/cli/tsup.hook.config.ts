@@ -25,4 +25,6 @@ export default defineConfig({
     "@teamagent/adapters",
     "zod",
   ],
+  // 注入 __dirname/__filename/__esm 等 CJS shims，让 import.meta.url 在 CJS bundle 正常工作
+  shims: true,
 });

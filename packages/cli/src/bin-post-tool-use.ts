@@ -1,48 +1,61 @@
 #!/usr/bin/env node
 /**
- * PostToolUse Hook 入口：从 stdin 读 PostToolUseInput，关联 PreToolUse 的
- * intervention_id + knowledge_id，写 hook-post.result 事件。
+ * PostToolUse Hook 入口 (v2 — Claude Agent SDK 版)
  *
- * 由 Claude Code 通过 .claude/settings.json 的 hooks.PostToolUse 配置调用。
- * 设计与 bin-pre-tool-use.ts 一致：异常退化为通过，不污染 stdout。
+ * 读 stdin JSON → createPostToolUseHandler → 落盘 hook-post.result 事件
+ * 任何异常都退化为 exit 0（不阻断工作流）
  */
-import { handlePostToolUse } from "@teamagent/adapters";
-import type { PostToolUseInput } from "@teamagent/types";
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs";
+import {
+  normalizeCwd,
+  createPostToolUseHandler,
+  SqliteEventLog,
+  openDb,
+} from "@teamagent/adapters";
+
+async function readStdinJson(): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+}
 
 async function main(): Promise<void> {
-  let raw = "";
+  let input: any;
   try {
-    for await (const chunk of process.stdin) {
-      raw += chunk;
-    }
+    input = await readStdinJson();
   } catch (err) {
-    process.stderr.write(`teamagent post-hook: stdin read failed: ${String(err)}\n`);
+    process.stderr.write(`teamagent post-hook: stdin read/parse failed: ${String(err)}\n`);
     process.exit(0);
   }
 
-  if (!raw.trim()) {
+  if (!input) {
     process.exit(0);
   }
 
-  let input: PostToolUseInput;
   try {
-    input = JSON.parse(raw) as PostToolUseInput;
+    const cwd = normalizeCwd(input.cwd ?? process.cwd());
+    void cwd; // cwd not needed for post-hook currently
+
+    const eventsDbPath = path.join(os.homedir(), ".teamagent", "events.db");
+    fs.mkdirSync(path.dirname(eventsDbPath), { recursive: true });
+    const eventLog = new SqliteEventLog(openDb(eventsDbPath));
+
+    const handler = createPostToolUseHandler({ eventLog });
+    const result = await handler(input);
+
+    eventLog.close();
+
+    process.stdout.write(JSON.stringify(result));
+    process.exit(0);
   } catch (err) {
-    process.stderr.write(`teamagent post-hook: JSON parse failed: ${String(err)}\n`);
+    process.stderr.write(`teamagent post-hook: handler error: ${String(err)}\n`);
     process.exit(0);
   }
-
-  const output = handlePostToolUse(input);
-
-  if (Object.keys(output).length === 0) {
-    process.exit(0);
-  }
-
-  process.stdout.write(JSON.stringify(output));
-  process.exit(0);
 }
 
 main().catch((err) => {
-  process.stderr.write(`teamagent post-hook: unexpected error: ${String(err)}\n`);
+  process.stderr.write(`teamagent post-hook: unexpected: ${String(err)}\n`);
   process.exit(0);
 });

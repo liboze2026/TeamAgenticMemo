@@ -10,6 +10,11 @@ export {
   matchRules,
   type ToolCallContext,
 } from "./matcher/keyword-matcher.js";
+export {
+  matchRules as matchRulesAsync,
+  type MatchContext,
+  type MatchResult,
+} from "./matcher/match.js";
 export { ruleBasedCorrectionDetector } from "./correction-detector/rule-based.js";
 export { ruleBasedSuccessDetector } from "./success-detector/rule-based.js";
 export { parseSessionFile } from "./session-parser/index.js";
