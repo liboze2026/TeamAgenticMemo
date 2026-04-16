@@ -1,4 +1,4 @@
-import type { KnowledgeStore, SkillCompiler, AttributionBus } from "@teamagent/ports";
+import type { SkillCompiler, AttributionBus } from "@teamagent/ports";
 import type { KnowledgeEntry } from "@teamagent/types";
 
 /** MarkdownCompiler 的最小接口，让 compile-pipeline 依赖注入而非具体实现。 */
@@ -13,7 +13,8 @@ export interface SkillEvent {
 }
 
 export interface CompilePipelineDeps {
-  store: KnowledgeStore;
+  /** 只需要 getAll()——caller 可传 KnowledgeStore 或 DualLayerStore 等任意实现 */
+  store: { getAll(): KnowledgeEntry[] };
   markdownCompiler: MarkdownCompilerLike;
   skillCompiler: SkillCompiler;
   bus?: AttributionBus;
