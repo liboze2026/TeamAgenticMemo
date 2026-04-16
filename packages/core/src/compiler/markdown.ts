@@ -24,6 +24,24 @@ export interface CompileMarkdownOptions {
    * - 大仓库多经验场景：传 100（需要 Claude 能 handle 更大上下文）
    */
   limit?: number;
+
+  /**
+   * 只编译这些 tier 的规则。默认 undefined = 不过滤（保持旧行为）。
+   * M2.4 推荐传 ["canonical", "enforced"]。
+   */
+  tierFilter?: ReadonlyArray<"canonical" | "enforced" | "stable" | "probation" | "experimental">;
+
+  /**
+   * Token 预算硬上限。超过时按 score 截断并在 footer 加注。
+   * 缺省 undefined = 不做 token 限制（回退到 limit 行数行为）。
+   */
+  tokenBudget?: number;
+
+  /**
+   * 计算字符串 token 数。默认用 Math.ceil(s.length / 3.5) 粗估。
+   * Adapter 注入 js-tiktoken 得到精确值。
+   */
+  countTokens?: (s: string) => number;
 }
 
 /**
@@ -55,30 +73,65 @@ export function compileMarkdownBlock(
   const limit = Math.max(1, options.limit ?? DEFAULT_CONTENT_BUDGET);
   const active = entries.filter((e) => e.status === "active");
 
-  if (active.length === 0) {
+  const tierFiltered = options.tierFilter
+    ? active.filter((e) => (options.tierFilter as ReadonlyArray<string>).includes(e.current_tier))
+    : active;
+
+  if (tierFiltered.length === 0) {
     return [BLOCK_START, "## TeamAgent 经验", "暂无经验，使用过程中会自动积累。", BLOCK_END].join("\n");
   }
 
   // 按综合分数排序（block 优先通过 enforcement 权重体现）
-  const maxHitCount = Math.max(1, ...active.map((e) => e.hit_count));
-  const sorted = active
+  const maxHitCount = Math.max(1, ...tierFiltered.map((e) => e.hit_count));
+  const sorted = tierFiltered
     .map((e) => ({ entry: e, score: scoreEntry(e, maxHitCount, now) }))
     .sort((a, b) => b.score - a.score);
 
+  const countFn = options.countTokens ?? ((s: string) => Math.ceil(s.length / 3.5));
+  let usedTokens = 0;
+
   const lines: string[] = [];
+  let truncatedCount = 0;
+
   for (const { entry } of sorted) {
-    if (lines.length >= limit) break;
-    lines.push(formatEntry(entry));
+    if (options.tokenBudget !== undefined) {
+      const line = formatEntry(entry);
+      const lineTokens = countFn(line);
+      if (usedTokens + lineTokens > options.tokenBudget) {
+        truncatedCount++;
+        continue;
+      }
+      usedTokens += lineTokens;
+      lines.push(line);
+    } else {
+      if (lines.length >= limit) break;
+      lines.push(formatEntry(entry));
+    }
   }
 
   const total = active.length;
   const shown = lines.length;
-  const header =
-    total > shown
-      ? `## TeamAgent 经验（${total}条活跃知识，为你编译了Top ${shown}）`
-      : `## TeamAgent 经验（${total}条活跃知识）`;
 
-  return [BLOCK_START, header, ...lines, BLOCK_END].join("\n");
+  let header: string;
+  if (options.tokenBudget !== undefined) {
+    if (truncatedCount > 0) {
+      header = `## TeamAgent 经验（${total}条活跃知识，为你编译了 ${shown} 条（token 预算 ${options.tokenBudget}）)`;
+    } else {
+      header = `## TeamAgent 经验（${total}条活跃知识）`;
+    }
+  } else {
+    header =
+      total > shown
+        ? `## TeamAgent 经验（${total}条活跃知识，为你编译了Top ${shown}）`
+        : `## TeamAgent 经验（${total}条活跃知识）`;
+  }
+
+  const parts = [BLOCK_START, header, ...lines];
+  if (truncatedCount > 0 && options.tokenBudget !== undefined) {
+    parts.push(`> 还有 ${truncatedCount} 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）`);
+  }
+  parts.push(BLOCK_END);
+  return parts.join("\n");
 }
 
 /**
