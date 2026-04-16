@@ -33,10 +33,20 @@ export function makeSkillCompiler(opts: SkillCompilerOptions = {}): SkillCompile
         const ruleDir = path.join(dir, a.dirname);
         await fs.mkdir(ruleDir, { recursive: true });
         const filePath = path.join(ruleDir, "SKILL.md");
-        // 原子写
+        // 原子写（Windows 下 rename 到已存在文件需先 unlink）
         const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
         await fs.writeFile(tmp, a.skillMd, "utf-8");
-        await fs.rename(tmp, filePath);
+        try {
+          await fs.rename(tmp, filePath);
+        } catch (e: unknown) {
+          if ((e as NodeJS.ErrnoException).code === "EPERM") {
+            await fs.unlink(filePath).catch(() => {});
+            await fs.rename(tmp, filePath);
+          } else {
+            await fs.unlink(tmp).catch(() => {});
+            throw e;
+          }
+        }
         written.push(a.ruleId);
       }
       return { written, skipped };
