@@ -27,7 +27,10 @@ export interface PersistedEvent {
     | "extractor.extracted"
     | "calibrator.adjusted"
     | "init.completed"
-    | "scenario.run";
+    | "scenario.run"
+    | "error.candidate.added"    // CandidateQueue 入队（payload: { count: number }）
+    | "error.candidate.approved" // 用户批准（payload: { knowledge_id: string }）
+    | "error.candidate.rejected"; // 用户拒绝（payload: { candidate_id: string }）
   /** Claude Code 会话 id（从 hook input 拿到） */
   session_id?: string;
   /** 涉及的知识条目 id（如 hook 命中某条规则） */
