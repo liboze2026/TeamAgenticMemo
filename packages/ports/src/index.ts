@@ -27,3 +27,12 @@ export type {
   CalibrationResult,
   AppliedSignal,
 } from "./calibrator.js";
+export type {
+  CalibratorV2,
+  CalibratorV2Input,
+  CalibrationResultV2,
+  Observation,
+  Tier,
+  TierTransition,
+  DeltaStep,
+} from "./calibrator-v2.js";
