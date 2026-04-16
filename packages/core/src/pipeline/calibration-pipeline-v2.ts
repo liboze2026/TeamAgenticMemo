@@ -166,6 +166,31 @@ export async function runCalibrationPipelineV2(
     const tierChanged = result.tier_transition !== null;
     if (!confChanged && !demChanged && !tierChanged) continue;
 
+    // ── M2.4: skill 导出事件 ─────────────────────────────────────────────
+    if (tierChanged) {
+      const wasStablePlus = STABLE_PLUS.has(result.tier_before);
+      const isStablePlus = STABLE_PLUS.has(result.tier_after);
+      if (!wasStablePlus && isStablePlus) {
+        deps.bus?.emit({
+          source: "compile",
+          action: "skill_should_write",
+          target: { id: entry.id },
+          severity: "info",
+          userFacingValue: `tier ${result.tier_before} → ${result.tier_after}，将导出 skill`,
+          timestamp: now.toISOString(),
+        });
+      } else if (wasStablePlus && !isStablePlus) {
+        deps.bus?.emit({
+          source: "compile",
+          action: "skill_should_remove",
+          target: { id: entry.id },
+          severity: "info",
+          userFacingValue: `tier ${result.tier_before} → ${result.tier_after}，将移除 skill`,
+          timestamp: now.toISOString(),
+        });
+      }
+    }
+
     if (!deps.dryRun) {
       deps.store.update(entry.id, {
         confidence: result.confidence,
@@ -249,6 +274,7 @@ function isPromotion(from: string, to: string): boolean {
 
 const L1_GATED_TIERS = new Set(["stable", "canonical", "enforced"]);
 const L2_GATED_TIERS = new Set(["canonical", "enforced"]);
+const STABLE_PLUS = new Set(["stable", "canonical", "enforced"]);
 
 /**
  * Validator 阻断晋升时：回退 tier 到 revertTo；清除 tier_transition；

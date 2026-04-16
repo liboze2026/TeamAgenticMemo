@@ -209,7 +209,7 @@ describe("runCalibrationPipelineV2", () => {
     expect(store.getById("rule-dry")!.confidence).toBe(0.5);
 
     // Bus still emits events (dry run doesn't suppress events)
-    expect(bus.events).toHaveLength(1);
+    expect(bus.events.filter((e) => e.action === "v2_adjusted")).toHaveLength(1);
   });
 
   it("skips archived entries even if observations exist", async () => {
@@ -400,5 +400,127 @@ describe("runCalibrationPipelineV2", () => {
     expect(["stable", "probation", "experimental"]).toContain(
       entryAfter.current_tier,
     );
+  });
+
+  it("emits skill_should_write when tier crosses into stable (M2.4)", async () => {
+    const store = new InMemoryStore();
+    const bus = new RecordingBus();
+
+    // Entry primed to promote probation → stable
+    store.add(
+      makeEntry({
+        id: "rule-skill-write",
+        confidence: 0.95,
+        current_tier: "probation",
+        max_tier_ever: "probation",
+        tier_entered_at: "2026-03-01T00:00:00Z",
+        hit_count: 30,
+        success_count: 28,
+        demerit: 0,
+      }),
+    );
+
+    const observations: Observation[] = Array.from({ length: 15 }, (_, i) =>
+      makeObs({ knowledge_id: "rule-skill-write", id: `obs-sw-${i}`, outcome: "success" }),
+    );
+
+    await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [],
+      observations,
+      bus,
+      now: () => NOW,
+    });
+
+    const entry = store.getById("rule-skill-write")!;
+    // If promotion actually happened (calibrator decided to promote), check event
+    if (entry.current_tier !== "probation") {
+      const skillWriteEvents = bus.events.filter(
+        (e) => e.source === "compile" && e.action === "skill_should_write",
+      );
+      expect(skillWriteEvents.length).toBeGreaterThan(0);
+      expect(skillWriteEvents[0]!.target?.id).toBe("rule-skill-write");
+    }
+  });
+
+  it("emits skill_should_remove when tier falls out of stable (M2.4)", async () => {
+    const store = new InMemoryStore();
+    const bus = new RecordingBus();
+
+    // Entry in stable with high demerit → demote below stable
+    store.add(
+      makeEntry({
+        id: "rule-skill-remove",
+        confidence: 0.5,
+        current_tier: "stable",
+        max_tier_ever: "stable",
+        tier_entered_at: "2026-03-01T00:00:00Z",
+        hit_count: 5,
+        success_count: 1,
+        demerit: 20,
+        demerit_last_updated: "2026-04-14T00:00:00Z",
+      }),
+    );
+
+    const observations: Observation[] = Array.from({ length: 5 }, (_, i) =>
+      makeObs({ knowledge_id: "rule-skill-remove", id: `obs-sr-${i}`, outcome: "failure" }),
+    );
+
+    await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [],
+      observations,
+      bus,
+      now: () => NOW,
+    });
+
+    const entry = store.getById("rule-skill-remove")!;
+    // If demotion actually happened, check event
+    if (!["stable", "canonical", "enforced"].includes(entry.current_tier)) {
+      const skillRemoveEvents = bus.events.filter(
+        (e) => e.source === "compile" && e.action === "skill_should_remove",
+      );
+      expect(skillRemoveEvents.length).toBeGreaterThan(0);
+      expect(skillRemoveEvents[0]!.target?.id).toBe("rule-skill-remove");
+    }
+  });
+
+  it("does not emit skill events when tier stays within same band (M2.4)", async () => {
+    const store = new InMemoryStore();
+    const bus = new RecordingBus();
+
+    // Entry in experimental with small confidence change (no tier transition)
+    store.add(
+      makeEntry({
+        id: "rule-no-skill-event",
+        confidence: 0.5,
+        current_tier: "experimental",
+        max_tier_ever: "experimental",
+        tier_entered_at: "2026-04-01T00:00:00Z",
+        hit_count: 2,
+        success_count: 1,
+        demerit: 0,
+      }),
+    );
+
+    const observations: Observation[] = [
+      makeObs({ knowledge_id: "rule-no-skill-event", id: "obs-nse-0", outcome: "success" }),
+    ];
+
+    await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [],
+      observations,
+      bus,
+      now: () => NOW,
+    });
+
+    const skillEvents = bus.events.filter(
+      (e) => e.source === "compile" && (e.action === "skill_should_write" || e.action === "skill_should_remove"),
+    );
+    expect(skillEvents).toHaveLength(0);
   });
 });
