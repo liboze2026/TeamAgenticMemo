@@ -82,3 +82,4 @@ export {
   validateLevel1,
   validateLevel2,
 } from "./validator/index.js";
+export { formatAsAgentSkill } from "./compiler/agent-skill.js";
