@@ -49,7 +49,20 @@ export async function runCalibrationPipelineV2(
   const entries = deps.store.getAll();
   const now = deps.now();
 
-  const obsIdx = indexByKnowledgeId(deps.observations);
+  // M2.5: ai.override.complied events → synthetic success observations
+  const syntheticObs: Observation[] = deps.events
+    .filter((e) => e.kind === "ai.override.complied" && e.knowledge_id)
+    .map((e) => ({
+      id: `synth-complied-${e.id}`,
+      knowledge_id: e.knowledge_id!,
+      timestamp: e.timestamp,
+      outcome: "success" as const,
+      source_event: e.id,
+      tool_use_id: e.tool_use_id,
+    }));
+  const allObservations = [...deps.observations, ...syntheticObs];
+
+  const obsIdx = indexByKnowledgeId(allObservations);
   const evtIdx = indexByKnowledgeId(deps.events);
 
   const adjusted: CalibrationV2Record[] = [];
