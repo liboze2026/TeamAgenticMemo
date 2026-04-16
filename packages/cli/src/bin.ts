@@ -42,6 +42,11 @@ import {
   parseCompileArgs,
   renderCompileResult,
 } from "./commands/compile.js";
+import { executeScanErrors, parseScanErrorsArgs } from "./commands/scan-errors.js";
+import {
+  executeReviewCandidates,
+  parseReviewCandidatesArgs,
+} from "./commands/review-candidates.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -226,6 +231,18 @@ async function main(): Promise<void> {
           }
         }
       }
+      return;
+    }
+    case "scan-errors": {
+      const scanOpts = parseScanErrorsArgs(rest);
+      const output = await executeScanErrors(scanOpts);
+      if (output) process.stdout.write(output);
+      return;
+    }
+    case "review-candidates": {
+      const reviewOpts = parseReviewCandidatesArgs(rest);
+      const output = await executeReviewCandidates(reviewOpts);
+      if (output) process.stdout.write(output);
       return;
     }
     case undefined:
