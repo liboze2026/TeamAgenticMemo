@@ -21,7 +21,7 @@ export async function runSkeletonDemo(
     env?: Record<string, string | undefined>;
     now?: string;
   } = {},
-): string {
+): Promise<string> {
   const env = opts.env ?? process.env;
   const now = opts.now ?? new Date().toISOString();
   const mode = parseVisibilityMode(env.TEAMAGENT_VISIBILITY);

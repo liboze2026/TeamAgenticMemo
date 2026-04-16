@@ -4,7 +4,7 @@ import { createPreToolUseHandler } from "../pre-tool-use-sdk.js";
 describe("createPreToolUseHandler (SDK)", () => {
   it("returns allow when no rules match", async () => {
     const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [] }) };
-    const mockEventLog = { append: vi.fn() };
+    const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
     const handler = createPreToolUseHandler({ matcher: mockMatcher as any, eventLog: mockEventLog as any });
 
     const result = await handler({
@@ -29,7 +29,7 @@ describe("createPreToolUseHandler (SDK)", () => {
       confidence: 0.9,
     };
     const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [enforcedRule] }) };
-    const mockEventLog = { append: vi.fn() };
+    const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
     const handler = createPreToolUseHandler({ matcher: mockMatcher as any, eventLog: mockEventLog as any });
 
     const result = await handler({
@@ -44,7 +44,7 @@ describe("createPreToolUseHandler (SDK)", () => {
     expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "hook-pre.blocked" }));
   });
 
-  it("warned rules → allow + systemMessage (exit 0 JSON)", async () => {
+  it("warned rules → allow + systemMessage + tool_name in warned event", async () => {
     const warnRule = {
       id: "r1",
       current_tier: "stable",
@@ -55,7 +55,7 @@ describe("createPreToolUseHandler (SDK)", () => {
       confidence: 0.7,
     };
     const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [warnRule] }) };
-    const mockEventLog = { append: vi.fn() };
+    const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
     const handler = createPreToolUseHandler({ matcher: mockMatcher as any, eventLog: mockEventLog as any });
 
     const result = await handler({
@@ -67,6 +67,56 @@ describe("createPreToolUseHandler (SDK)", () => {
 
     expect(result.permissionDecision).toBe("allow");
     expect(result.systemMessage).toContain("fetch");
-    expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "hook-pre.warned" }));
+    expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "hook-pre.warned",
+      tool_name: "Edit",   // NEW: tool_name must be stored
+    }));
+  });
+
+  it("emits ai.override.complied on clean pass after a recent warn for same tool_name", async () => {
+    const recentEvents = [
+      {
+        kind: "hook-pre.warned",
+        tool_use_id: "t-prev",
+        knowledge_id: "rule-A",
+        timestamp: new Date(Date.now() - 60_000).toISOString(), // 1 min ago
+        tool_name: "Write",
+      },
+    ];
+    const appended: any[] = [];
+    const handler = createPreToolUseHandler({
+      matcher: { match: async () => ({ matched: [] }) } as any,
+      eventLog: {
+        append: (e: any) => appended.push(e),
+        readLast: (_n: number) => recentEvents,
+      } as any,
+    });
+    await handler({
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: {},
+      tool_use_id: "t-new",
+    } as any);
+    const complied = appended.filter((e: any) => e.kind === "ai.override.complied");
+    expect(complied).toHaveLength(1);
+    expect(complied[0]).toMatchObject({ knowledge_id: "rule-A" });
+  });
+
+  it("does NOT emit complied when no recent warns exist", async () => {
+    const appended: any[] = [];
+    const handler = createPreToolUseHandler({
+      matcher: { match: async () => ({ matched: [] }) } as any,
+      eventLog: {
+        append: (e: any) => appended.push(e),
+        readLast: (_n: number) => [],
+      } as any,
+    });
+    await handler({
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: {},
+      tool_use_id: "t-new",
+    } as any);
+    expect(appended.filter((e: any) => e.kind === "ai.override.complied")).toHaveLength(0);
   });
 });

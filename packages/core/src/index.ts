@@ -85,3 +85,8 @@ export {
 export { formatAsAgentSkill } from "./compiler/agent-skill.js";
 export { runCompile } from "./pipeline/compile-pipeline.js";
 export type { CompilePipelineDeps, CompilePipelineResult, SkillEvent, MarkdownCompilerLike } from "./pipeline/compile-pipeline.js";
+export {
+  detectIgnoredSignals,
+  detectCompliedSignals,
+  type OverrideSignalEvent,
+} from "./pipeline/override-signal.js";

@@ -73,6 +73,8 @@ async function main(): Promise<void> {
           statsOpts.explain = a.slice("--explain=".length);
         } else if (a.startsWith("--stuck-days=")) {
           statsOpts.stuckDays = parseInt(a.slice("--stuck-days=".length), 10);
+        } else if (a === "--override-signals") {
+          statsOpts.overrideSignals = true;
         }
       }
       process.stdout.write(executeStats(statsOpts));

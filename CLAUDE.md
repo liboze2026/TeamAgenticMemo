@@ -43,8 +43,7 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（19条活跃知识）
-- 使用 lazy singleton: 首次调用时初始化 encoder，后续调用复用同一实例 而非 每次 compile 调用都 new encoder——js-tiktoken cl100k_base encoder 加载词表有 ~20ms 一次性代价（读取 JSON 词表文件）；CLI 短生命周期里可忽略，但 compile pipeline 多次调用时应复用 cached encoder 避免重复初始化 [0.70]
-- 使用 path.join(os.homedir(), '.claude', 'skills', 'teamagent') 而非 os.homedir() + '/.claude/skills'——os.homedir() 在 Windows 返回 C:\\Users\\...；字符串拼接正斜杠会产生混合分隔符路径 C:\\Users\\foo/.claude/skills，在某些 Windows API 下失效。path.join 自动选择平台分隔符且处理尾斜杠。M2.4 技能目录跨平台必须用 path.join [0.70]
-- 使用 try { await fs.rename(tmp, filePath); } catch(e) { if (e.code === 'EPERM') { await fs.unlink(filePath).catch(()=>{}); await fs.rename(tmp, filePath); } } 而非 直接 await fs.rename(tmp, filePath)——Windows 上若目标文件已存在，fs.rename 会抛 EPERM（operation not permitted），不像 Unix 下原子替换。M2.4 SkillCompiler.write 就踩过这个坑：第二次写同一 rule 的 SKILL.md 报 EPERM。解法：捕获 EPERM，先 unlink 目标再 rename [0.70]
+## TeamAgent 经验（18条活跃知识）
+- 使用 用 5 min 时间窗 + tool_name 匹配；接受 false positive 而非 用 session_id 精确判断——hook input 不保证有 session_id—— [0.70]
+- 使用 先在 packages/types/src/persisted-event.ts 的 kind union 加类型，再 emit；DEMERIT_KIND_TO_SOURCE 已就绪，只需类型补全 而非 直接 emit 未声明 kind → TS 编译挂（M2.3 教训重演）—— [0.70]
 <!-- TEAMAGENT:END -->

@@ -524,3 +524,67 @@ describe("runCalibrationPipelineV2", () => {
     expect(skillEvents).toHaveLength(0);
   });
 });
+
+describe("ai.override.complied → synthetic Observation boosts confidence", () => {
+  it("complied event creates synthetic success observation for target rule", async () => {
+    const entry = makeEntry({ id: "rule-X", confidence: 0.1, demerit: 0 });
+    const store = new InMemoryStore();
+    store.add(entry);
+
+    const compliedEvent = {
+      id: "e-complied-1",
+      kind: "ai.override.complied" as const,
+      knowledge_id: "rule-X",
+      tool_use_id: "t1",
+      timestamp: new Date().toISOString(),
+      schema_version: 1 as const,
+    };
+
+    const result = await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [compliedEvent],
+      observations: [],
+      now: () => NOW,
+      dryRun: true,
+    });
+
+    // Should have adjusted rule-X (synthetic obs → confidence change)
+    const adj = result.adjusted.find((a) => a.knowledge_id === "rule-X");
+    expect(adj).toBeDefined();
+    // confidence should be higher (or at least not lower) than before
+    if (adj) {
+      expect(adj.confidence_after).toBeGreaterThanOrEqual(entry.confidence);
+    }
+  });
+
+  it("ignored event increases demerit for target rule", async () => {
+    const entry = makeEntry({ id: "rule-Y", confidence: 0.5, demerit: 0 });
+    const store = new InMemoryStore();
+    store.add(entry);
+
+    const ignoredEvent = {
+      id: "e-ignored-1",
+      kind: "ai.override.ignored" as const,
+      knowledge_id: "rule-Y",
+      tool_use_id: "t2",
+      timestamp: new Date().toISOString(),
+      schema_version: 1 as const,
+    };
+
+    const result = await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [ignoredEvent],
+      observations: [],
+      now: () => NOW,
+      dryRun: true,
+    });
+
+    const adj = result.adjusted.find((a) => a.knowledge_id === "rule-Y");
+    expect(adj).toBeDefined();
+    if (adj) {
+      expect(adj.demerit_after).toBeGreaterThan(0);
+    }
+  });
+});
