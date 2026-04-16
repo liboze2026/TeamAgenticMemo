@@ -98,9 +98,9 @@ export class WikiPipeline {
     // 4. Fetch from all sources
     const { items: rawItems, errors } = await this.registry.fetchAll(configs, since);
 
-    // 5. Filter by stack + age
+    // 5. Filter by stack + age (manual URL skips stack filter — user chose it explicitly)
     const filtered = rawItems
-      .filter(item => filterByStack(item, stack))
+      .filter(item => opts.manualUrl ? true : filterByStack(item, stack))
       .filter(item => filterByAge(item, 180));
 
     if (opts.dryRun) {
