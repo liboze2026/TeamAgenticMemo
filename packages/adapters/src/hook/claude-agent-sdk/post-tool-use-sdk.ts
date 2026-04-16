@@ -1,4 +1,5 @@
 import type { PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import { detectIgnoredSignals, type OverrideSignalEvent } from "@teamagent/core";
 
 export interface PostToolUseDeps {
   eventLog: {
@@ -29,6 +30,19 @@ export function createPostToolUseHandler(deps: PostToolUseDeps) {
         timestamp: now,
         schema_version: 1,
         payload: { success, source_pre_kind: pre.kind },
+      });
+    }
+
+    // M2.5: detect ignored signals
+    const ignoredList = detectIgnoredSignals(tool_use_id, recent as OverrideSignalEvent[]);
+    for (const ig of ignoredList) {
+      deps.eventLog.append({
+        id: `e-override-ignored-${tool_use_id}-${ig.knowledge_id}`,
+        kind: "ai.override.ignored",
+        knowledge_id: ig.knowledge_id,
+        tool_use_id,
+        timestamp: now,
+        schema_version: 1,
       });
     }
 

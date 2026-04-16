@@ -57,4 +57,46 @@ describe("createPostToolUseHandler (SDK)", () => {
     expect(call).toBeDefined();
     expect(call![0].payload?.success).toBe(false);
   });
+
+  it("emits ai.override.ignored when hook-pre.warned exists for same tool_use_id", async () => {
+    const recentEvents = [
+      {
+        kind: "hook-pre.warned",
+        tool_use_id: "t1",
+        knowledge_id: "rule-A",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    const appended: any[] = [];
+    const handler = createPostToolUseHandler({
+      eventLog: {
+        append: (e: any) => appended.push(e),
+        readLast: (_n: number) => recentEvents,
+      } as any,
+    });
+    await handler({ tool_use_id: "t1", tool_response: { is_error: false } } as any);
+    const ignored = appended.filter((e: any) => e.kind === "ai.override.ignored");
+    expect(ignored).toHaveLength(1);
+    expect(ignored[0]).toMatchObject({ knowledge_id: "rule-A", tool_use_id: "t1" });
+  });
+
+  it("does NOT emit ai.override.ignored when only hook-pre.blocked exists", async () => {
+    const recentEvents = [
+      {
+        kind: "hook-pre.blocked",
+        tool_use_id: "t1",
+        knowledge_id: "rule-A",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    const appended: any[] = [];
+    const handler = createPostToolUseHandler({
+      eventLog: {
+        append: (e: any) => appended.push(e),
+        readLast: (_n: number) => recentEvents,
+      } as any,
+    });
+    await handler({ tool_use_id: "t1", tool_response: {} } as any);
+    expect(appended.filter((e: any) => e.kind === "ai.override.ignored")).toHaveLength(0);
+  });
 });
