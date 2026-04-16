@@ -39,3 +39,5 @@ export {
 } from "./llm/claude-code-client.js";
 export { makeSkillCompiler } from "./compiler/skill-compiler.js";
 export type { SkillCompilerOptions } from "./compiler/skill-compiler.js";
+export { SqliteCandidateQueue } from "./storage/sqlite/sqlite-candidate-queue.js";
+export { CompositeErrorSignalCollector } from "./error-collector/composite-error-signal-collector.js";
