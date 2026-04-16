@@ -41,3 +41,5 @@ export { makeSkillCompiler } from "./compiler/skill-compiler.js";
 export type { SkillCompilerOptions } from "./compiler/skill-compiler.js";
 export { SqliteCandidateQueue } from "./storage/sqlite/sqlite-candidate-queue.js";
 export { CompositeErrorSignalCollector } from "./error-collector/composite-error-signal-collector.js";
+export { HaikuJudge, buildJudgePrompt, parseJudgeResponse } from "./wiki/haiku-judge.js";
+export { XenovaEmbedder } from "./wiki/xenova-embedder.js";
