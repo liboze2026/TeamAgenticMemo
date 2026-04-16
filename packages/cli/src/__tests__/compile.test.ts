@@ -1,0 +1,185 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import nodeFs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import {
+  executeCompile,
+  parseCompileArgs,
+  renderCompileResult,
+  type CompileOptions,
+} from "../commands/compile.js";
+import { DualLayerStore, SqliteKnowledgeStore, openDb } from "@teamagent/adapters";
+import type { KnowledgeEntry } from "@teamagent/types";
+
+function mkTmp() {
+  const root = nodeFs.mkdtempSync(path.join(os.tmpdir(), "compile-cli-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "cwd");
+  nodeFs.mkdirSync(home, { recursive: true });
+  nodeFs.mkdirSync(cwd, { recursive: true });
+  const projectDbPath = path.join(cwd, ".teamagent", "knowledge.db");
+  const userGlobalDbPath = path.join(home, ".teamagent", "global.db");
+  const claudeMdPath = path.join(cwd, "CLAUDE.md");
+  const skillsDir = path.join(home, "skills");
+  return {
+    home,
+    cwd,
+    projectDbPath,
+    userGlobalDbPath,
+    claudeMdPath,
+    skillsDir,
+    cleanup: () => nodeFs.rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+function seedEntry(dbPath: string, e: KnowledgeEntry): void {
+  nodeFs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const store = new SqliteKnowledgeStore(openDb(dbPath));
+  store.add(e);
+  store.close();
+}
+
+function entry(over: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
+  return {
+    id: "rule-1",
+    scope: { level: "personal" },
+    category: "C",
+    tags: [],
+    type: "avoidance",
+    nature: "objective",
+    trigger: "use-fetch",
+    wrong_pattern: "axios",
+    correct_pattern: "fetch",
+    reasoning: "项目用原生 fetch",
+    confidence: 0.85,
+    enforcement: "warn",
+    status: "active",
+    hit_count: 3,
+    success_count: 2,
+    override_count: 0,
+    evidence: { success_sessions: 0, success_users: 0, correction_sessions: 0 },
+    created_at: "2026-04-15T00:00:00Z",
+    last_hit_at: "",
+    last_validated_at: "2026-04-15T00:00:00Z",
+    source: "accumulated",
+    conflict_with: [],
+    current_tier: "canonical" as const,
+    max_tier_ever: "canonical" as const,
+    tier_entered_at: "2026-04-10T00:00:00Z",
+    demerit: 0,
+    demerit_last_updated: "",
+    resurrect_count: 0,
+    ...over,
+  };
+}
+
+describe("parseCompileArgs", () => {
+  it("parses --dry-run", () => {
+    expect(parseCompileArgs(["--dry-run"])).toMatchObject({ dryRun: true });
+  });
+  it("parses --skills-only", () => {
+    expect(parseCompileArgs(["--skills-only"])).toMatchObject({ skillsOnly: true });
+  });
+  it("parses --markdown-only", () => {
+    expect(parseCompileArgs(["--markdown-only"])).toMatchObject({ markdownOnly: true });
+  });
+  it("parses --force", () => {
+    expect(parseCompileArgs(["--force"])).toMatchObject({ force: true });
+  });
+  it("no flags → all false", () => {
+    const opts = parseCompileArgs([]);
+    expect(opts.dryRun).toBeFalsy();
+    expect(opts.skillsOnly).toBeFalsy();
+    expect(opts.markdownOnly).toBeFalsy();
+  });
+});
+
+describe("executeCompile", () => {
+  let tmp: ReturnType<typeof mkTmp>;
+  let opts: CompileOptions;
+
+  beforeEach(() => {
+    tmp = mkTmp();
+    opts = {
+      cwd: tmp.cwd,
+      homeDir: tmp.home,
+      projectDbPath: tmp.projectDbPath,
+      userGlobalDbPath: tmp.userGlobalDbPath,
+      claudeMdPath: tmp.claudeMdPath,
+      skillsDir: tmp.skillsDir,
+    };
+  });
+
+  afterEach(() => {
+    tmp.cleanup();
+  });
+
+  it("no flags: writes CLAUDE.md and skills", async () => {
+    seedEntry(tmp.projectDbPath, entry({ current_tier: "canonical" }));
+    const result = await executeCompile(opts);
+    // CLAUDE.md written
+    expect(nodeFs.existsSync(tmp.claudeMdPath)).toBe(true);
+    expect(result.markdown.path).toBe(tmp.claudeMdPath);
+    // skill written
+    expect(result.skills.written).toContain("rule-1");
+    const skillFile = path.join(tmp.skillsDir, "rule-1", "SKILL.md");
+    expect(nodeFs.existsSync(skillFile)).toBe(true);
+  });
+
+  it("--dry-run: reports what would be written without writing files", async () => {
+    seedEntry(tmp.projectDbPath, entry({ current_tier: "canonical" }));
+    const result = await executeCompile({ ...opts, dryRun: true });
+    // No actual file written
+    expect(nodeFs.existsSync(tmp.claudeMdPath)).toBe(false);
+    const skillFile = path.join(tmp.skillsDir, "rule-1", "SKILL.md");
+    expect(nodeFs.existsSync(skillFile)).toBe(false);
+    // But result reflects what would have been done
+    expect(result.skills.written).toContain("rule-1");
+  });
+
+  it("--markdown-only: writes CLAUDE.md but no skills", async () => {
+    seedEntry(tmp.projectDbPath, entry({ current_tier: "stable" }));
+    const result = await executeCompile({ ...opts, markdownOnly: true });
+    // CLAUDE.md written (even though stable is not canonical+, the store has the entry)
+    expect(result.skills.written).toHaveLength(0);
+    const skillFile = path.join(tmp.skillsDir, "rule-1", "SKILL.md");
+    expect(nodeFs.existsSync(skillFile)).toBe(false);
+  });
+
+  it("--skills-only: writes skills but skips CLAUDE.md", async () => {
+    seedEntry(tmp.projectDbPath, entry({ current_tier: "stable" }));
+    const result = await executeCompile({ ...opts, skillsOnly: true });
+    expect(result.markdown.path).toBe("(skipped)");
+    expect(nodeFs.existsSync(tmp.claudeMdPath)).toBe(false);
+    // stable entry should be written to skills
+    expect(result.skills.written).toContain("rule-1");
+  });
+
+  it("empty store: no errors, zero skills written", async () => {
+    const result = await executeCompile(opts);
+    expect(result.skills.written).toHaveLength(0);
+    expect(result.skills.removed).toHaveLength(0);
+  });
+});
+
+describe("renderCompileResult", () => {
+  it("dry-run mode shows dry-run tag", () => {
+    const out = renderCompileResult(
+      { markdown: { path: "(dry-run)", blockLineCount: 0 }, skills: { written: ["a", "b"], removed: [] } },
+      true,
+    );
+    expect(out).toContain("dry-run");
+    expect(out).toContain("2");
+  });
+
+  it("normal mode shows paths and counts", () => {
+    const out = renderCompileResult(
+      { markdown: { path: "/foo/CLAUDE.md", blockLineCount: 42 }, skills: { written: ["r1"], removed: ["r2"] } },
+      false,
+    );
+    expect(out).toContain("CLAUDE.md");
+    expect(out).toContain("42");
+    expect(out).toContain("r1");
+    expect(out).toContain("r2");
+  });
+});

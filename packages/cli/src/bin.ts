@@ -37,6 +37,11 @@ import {
   parseDogfoodReportArgs,
 } from "./commands/dogfood-report.js";
 import { executeIngest, parseIngestArgs } from "./commands/ingest.js";
+import {
+  executeCompile,
+  parseCompileArgs,
+  renderCompileResult,
+} from "./commands/compile.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -181,6 +186,12 @@ async function main(): Promise<void> {
       );
       return;
     }
+    case "compile": {
+      const opts = parseCompileArgs(rest);
+      const result = await executeCompile(opts);
+      process.stdout.write(renderCompileResult(result, opts.dryRun));
+      return;
+    }
     case "migrate": {
       const dryRun = rest.includes("--dry-run");
       const { executeMigrate } = await import("./commands/migrate-v1-to-v2.js");
@@ -237,6 +248,10 @@ async function main(): Promise<void> {
           "                                   跑 5 个验证场景（踩坑→学习→避坑），输出 PRR/KP 指标",
           "  teamagent dogfood-report [--output=path]",
           "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
+          "  teamagent compile [--dry-run] [--skills-only] [--markdown-only] [--force]",
+          "                                   编译双出口：CLAUDE.md (canonical+, 3000 token 预算) + Agent Skills (stable+)",
+          "                                   --dry-run: 预览将写/删哪些文件，不实际写入",
+          "                                   --skills-only / --markdown-only: 只写其中一路出口",
           "  teamagent ingest --from-insights <path> | --from-audit | --from-pr <n>",
           "                   | --from-git [--since=30d] | --from-ci [--since=30d] | --from-candidates <path>",
           "                                   多源摄入：Claude /insights / npm audit / PR review / git hotspot / CI failure",
