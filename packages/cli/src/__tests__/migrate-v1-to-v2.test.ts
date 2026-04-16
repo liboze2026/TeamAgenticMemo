@@ -84,3 +84,49 @@ describe("executeMigrate", () => {
     expect(r.byScope.personal).toBe(0);
   });
 });
+
+describe("executeMigrate write-side", () => {
+  it("writes entries to new SQLite DBs", async () => {
+    const r = await executeMigrate({ homeDir: tmpHome, cwd: tmpCwd, dryRun: false });
+    expect(r.written).toBeGreaterThan(0);
+
+    const projectDb = path.join(tmpCwd, ".teamagent", "knowledge.db");
+    const globalDb = path.join(tmpHome, ".teamagent", "global.db");
+    expect(fs.existsSync(projectDb)).toBe(true);
+    expect(fs.existsSync(globalDb)).toBe(true);
+  });
+
+  it("Q5 决策 B: all migrated entries → experimental tier, confidence=0, demerit=0", async () => {
+    await executeMigrate({ homeDir: tmpHome, cwd: tmpCwd, dryRun: false });
+
+    const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
+    const projectDb = openDb(path.join(tmpCwd, ".teamagent", "knowledge.db"));
+    const rows = projectDb.prepare("SELECT id, current_tier, confidence, demerit FROM knowledge").all() as any[];
+    for (const r of rows) {
+      expect(r.current_tier).toBe("experimental");
+      expect(r.confidence).toBe(0);
+      expect(r.demerit).toBe(0);
+    }
+    projectDb.close();
+  });
+
+  it("preserves hit_count/last_hit_at in tags for reference", async () => {
+    await executeMigrate({ homeDir: tmpHome, cwd: tmpCwd, dryRun: false });
+    const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
+    const projectDb = openDb(path.join(tmpCwd, ".teamagent", "knowledge.db"));
+    const row = projectDb.prepare("SELECT tags FROM knowledge WHERE id = 'r-p1'").get() as any;
+    const tags = JSON.parse(row.tags);
+    expect(tags).toContain("phase1_hit_count:5");
+    expect(tags.some((t: string) => t.startsWith("phase1_last_hit:"))).toBe(true);
+    projectDb.close();
+  });
+
+  it("team-scoped Phase 1 entries go to project DB (team 在 Phase 4 再启用)", async () => {
+    await executeMigrate({ homeDir: tmpHome, cwd: tmpCwd, dryRun: false });
+    const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
+    const projectDb = openDb(path.join(tmpCwd, ".teamagent", "knowledge.db"));
+    const row = projectDb.prepare("SELECT id, scope_level FROM knowledge WHERE id = 'r-t1'").get() as any;
+    expect(row.scope_level).toBe("personal"); // 降级到 personal
+    projectDb.close();
+  });
+});

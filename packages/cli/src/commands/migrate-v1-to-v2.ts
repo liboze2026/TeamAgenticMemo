@@ -64,6 +64,53 @@ export async function executeMigrate(opts: MigrateOptions = {}): Promise<Migrate
     return result;
   }
 
-  // write-side: Task 9 填充
-  throw new Error("write-side not implemented yet (see Task 9)");
+  // write-side (Q5 决策 B: 干净重启)
+  const projectDbPath = path.join(cwd, ".teamagent", "knowledge.db");
+  const globalDbPath = path.join(home, ".teamagent", "global.db");
+
+  fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(globalDbPath), { recursive: true });
+
+  const { DualLayerStore } = await import("@teamagent/adapters/storage/sqlite/dual-layer-store");
+  const store = new DualLayerStore({ projectDbPath, userGlobalDbPath: globalDbPath });
+
+  const now = new Date().toISOString();
+
+  for (const old of all) {
+    const phase1HitTag = `phase1_hit_count:${old.hit_count ?? 0}`;
+    const phase1LastHitTag = `phase1_last_hit:${(old as any).last_hit_at || "unknown"}`;
+
+    // team 作用域降级到 personal（Phase 2 不支持 team）
+    const targetLevel = old.scope.level === "team" ? "personal" : old.scope.level;
+
+    const newEntry = {
+      ...old,
+      scope: { ...old.scope, level: targetLevel },
+      tags: [...(old.tags ?? []), phase1HitTag, phase1LastHitTag],
+      confidence: 0.0,
+      enforcement: "passive" as const,
+      status: "active" as const,
+      hit_count: 0,
+      success_count: 0,
+      override_count: 0,
+      last_hit_at: "",
+      demerit: 0,
+      demerit_last_updated: now,
+      current_tier: "experimental",
+      max_tier_ever: "experimental",
+      tier_entered_at: now,
+      resurrect_count: 0,
+    };
+
+    try {
+      store.add(newEntry as any);
+      result.written++;
+    } catch (err) {
+      result.rejected++;
+      result.rejectionLog.push({ id: old.id, reason: String(err) });
+    }
+  }
+
+  store.close();
+  return result;
 }
