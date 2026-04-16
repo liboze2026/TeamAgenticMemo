@@ -1,0 +1,72 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { openDb } from "../schema.js";
+import { SqliteEventLog } from "../sqlite-event-log.js";
+import type { PersistedEvent } from "@teamagent/types";
+
+let tmpDir: string;
+let log: SqliteEventLog;
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teamagent-eventlog-"));
+  const db = openDb(path.join(tmpDir, "test.db"));
+  log = new SqliteEventLog(db);
+});
+
+afterEach(() => {
+  log.close();
+  if (tmpDir && fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("SqliteEventLog", () => {
+  it("append + readAll roundtrips", () => {
+    const e: PersistedEvent = {
+      id: "e-1",
+      kind: "hook-pre.matched",
+      knowledge_id: "r-1",
+      timestamp: "2026-04-15T00:00:00Z",
+      schema_version: 1,
+    };
+    log.append(e);
+    const all = log.readAll();
+    expect(all).toHaveLength(1);
+    expect(all[0].kind).toBe("hook-pre.matched");
+    expect(all[0].knowledge_id).toBe("r-1");
+  });
+
+  it("readByKind filters", () => {
+    log.append({ id: "e1", kind: "hook-pre.matched", timestamp: "t1", schema_version: 1 });
+    log.append({ id: "e2", kind: "hook-pre.warned", timestamp: "t2", schema_version: 1 });
+    log.append({ id: "e3", kind: "hook-pre.matched", timestamp: "t3", schema_version: 1 });
+    expect(log.readByKind("hook-pre.matched")).toHaveLength(2);
+    expect(log.readByKind("hook-pre.warned")).toHaveLength(1);
+  });
+
+  it("readLast returns N most recent", () => {
+    for (let i = 0; i < 5; i++) {
+      log.append({ id: `e${i}`, kind: "x", timestamp: `2026-04-15T00:00:0${i}Z`, schema_version: 1 });
+    }
+    const last3 = log.readLast(3);
+    expect(last3.map(e => e.id)).toEqual(["e4", "e3", "e2"]);
+  });
+
+  it("preserves payload fields (tool_use_id, confidence_before/after)", () => {
+    const e = {
+      id: "e-p",
+      kind: "calibrator.adjusted",
+      knowledge_id: "r-x",
+      timestamp: "2026-04-15T00:00:00Z",
+      schema_version: 1,
+      tool_use_id: "tu-1",
+      confidence_before: 0.5,
+      confidence_after: 0.6,
+    } as any;
+    log.append(e);
+    const got = log.readAll()[0] as any;
+    expect(got.tool_use_id).toBe("tu-1");
+    expect(got.confidence_before).toBe(0.5);
+    expect(got.confidence_after).toBe(0.6);
+  });
+});
