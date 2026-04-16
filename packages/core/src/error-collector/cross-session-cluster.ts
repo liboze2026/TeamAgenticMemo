@@ -61,13 +61,29 @@ export function clusterByTag(
 }
 
 const STOP_WORDS = new Set([
+  // 通用英文虚词
   "the", "and", "for", "with", "from", "that", "this", "have",
+  "been", "were", "they", "their", "there", "when", "what", "which",
+  "will", "also", "into", "more", "some", "then", "than", "these",
+  "those", "such", "your", "about", "after", "before",
+  // session compaction 摘要高频词（防止 H 聚类把元信息当错误模式）
+  "session", "conversation", "context", "summary", "previous",
+  "continued", "earlier", "portion", "covers", "below",
+  "request", "intent", "primary", "being", "user",
+  // 错误类通用词（太宽泛，无区分度）
   "error", "fail", "failed", "failure", "could", "would", "should",
 ]);
 
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .split(/[\s\-_./\\:,;()[\]{}'"!?]+/)
-    .filter((t) => t.length >= 4 && !STOP_WORDS.has(t));
+    // 包含 ASCII 标点 + 全角冒号/逗号/顿号（防止中文标签被误识别为关键词）
+    .split(/[\s\-_./\\:,;()[\]{}'"!?\uff01\uff0c\uff1a\uff1b\u3001\u3002]+/)
+    .filter((t) => t.length >= 4 && !STOP_WORDS.has(t) && !isLabelToken(t));
+}
+
+/** 过滤纯中文标签词（如"用户纠正"、"上一句"），只保留技术词汇 */
+function isLabelToken(t: string): boolean {
+  // 完全由汉字/假名/韩文组成且无 ASCII 字符 → 是标签，不是技术术语
+  return /^[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]+$/.test(t);
 }

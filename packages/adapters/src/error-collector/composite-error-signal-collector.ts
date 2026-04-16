@@ -33,6 +33,10 @@ export class CompositeErrorSignalCollector implements ErrorSignalCollector {
       if (sessionEnd && sessionEnd < sinceIso) continue;
       const corrections = ruleBasedCorrectionDetector.detect(session);
       for (const c of corrections) {
+        // 过滤空内容、系统注入文本、context-resumption 摘要
+        if (!c.correctionText.trim()) continue;
+        if (isSystemInjectedText(c.correctionText)) continue;
+        if (isContextResumptionText(c.correctionText)) continue;
         signals.push({
           id: `a-${session.sessionId}-${c.turnIndex}`,
           signalType: "A",
@@ -135,7 +139,7 @@ export class CompositeErrorSignalCollector implements ErrorSignalCollector {
       });
     }
 
-    // --- H: 跨 session 聚类 ---
+    // --- H: 跨 session 聚类（仅对非 H 信号聚类，避免二次放大） ---
     const minCluster = this.opts.minClusterSessions ?? 2;
     const nowTs = this.opts.now ?? new Date();
     const hSignals = clusterByTag(signals, minCluster, nowTs);
@@ -143,4 +147,29 @@ export class CompositeErrorSignalCollector implements ErrorSignalCollector {
 
     return signals;
   }
+}
+
+/**
+ * 过滤 hook 或工具注入的系统文本（以 XML 标签开头，如 <local-command-caveat>、<system-reminder>）。
+ * 这类文本是 Claude Code 工具链注入的，不是真实用户纠正。
+ */
+function isSystemInjectedText(text: string): boolean {
+  return text.trimStart().startsWith("<");
+}
+
+/**
+ * Claude Code 在 session compaction 时会把上一轮摘要注入为 user message，
+ * 格式固定为 "This session is being continued from a previous conversation..."。
+ * 这类文本不是真实的用户纠正，必须过滤。
+ */
+function isContextResumptionText(text: string): boolean {
+  const t = text.trimStart();
+  return (
+    t.startsWith("This session is being continued") ||
+    t.startsWith("The summary below covers") ||
+    t.startsWith("Continue the conversation from where it left off") ||
+    // 中文压缩模式
+    t.startsWith("本次对话是") ||
+    t.startsWith("以下是之前对话的摘要")
+  );
 }
