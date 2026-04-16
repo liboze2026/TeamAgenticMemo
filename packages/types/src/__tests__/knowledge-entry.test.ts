@@ -5,6 +5,57 @@ import {
   type KnowledgeEntry,
 } from "../knowledge-entry.js";
 
+describe("KnowledgeEntrySchema v2 fields", () => {
+  const baseValid = {
+    id: "r1",
+    scope: { level: "team" as const },
+    category: "E" as const,
+    tags: [],
+    type: "avoidance" as const,
+    nature: "subjective" as const,
+    trigger: "t",
+    correct_pattern: "c",
+    reasoning: "r",
+    confidence: 0.5,
+    enforcement: "passive" as const,
+    created_at: "2026-04-16T00:00:00Z",
+    source: "accumulated" as const,
+  };
+
+  it("accepts entry with new v2 tier fields", () => {
+    const parsed = KnowledgeEntrySchema.parse({
+      ...baseValid,
+      current_tier: "probation",
+      max_tier_ever: "probation",
+      tier_entered_at: "2026-04-16T00:00:00Z",
+      demerit: 0,
+      demerit_last_updated: "2026-04-16T00:00:00Z",
+      resurrect_count: 0,
+    });
+    expect(parsed.current_tier).toBe("probation");
+    expect(parsed.demerit).toBe(0);
+  });
+
+  it("defaults v2 fields when omitted (backward compat)", () => {
+    const parsed = KnowledgeEntrySchema.parse(baseValid);
+    expect(parsed.current_tier).toBe("experimental");
+    expect(parsed.max_tier_ever).toBe("experimental");
+    expect(parsed.demerit).toBe(0);
+    expect(parsed.resurrect_count).toBe(0);
+  });
+
+  it("status accepts 'dormant'", () => {
+    const parsed = KnowledgeEntrySchema.parse({ ...baseValid, status: "dormant" });
+    expect(parsed.status).toBe("dormant");
+  });
+
+  it("current_tier enum rejects invalid value", () => {
+    expect(() =>
+      KnowledgeEntrySchema.parse({ ...baseValid, current_tier: "super-enforced" }),
+    ).toThrow();
+  });
+});
+
 describe("KnowledgeEntrySchema", () => {
   const validEntry: KnowledgeEntry = {
     id: "test-001",
@@ -29,6 +80,12 @@ describe("KnowledgeEntrySchema", () => {
     last_validated_at: "",
     source: "preset",
     conflict_with: [],
+    current_tier: "experimental",
+    max_tier_ever: "experimental",
+    tier_entered_at: "",
+    demerit: 0,
+    demerit_last_updated: "",
+    resurrect_count: 0,
   };
 
   it("accepts a valid entry", () => {

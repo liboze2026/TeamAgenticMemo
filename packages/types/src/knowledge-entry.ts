@@ -58,8 +58,8 @@ export const KnowledgeEntrySchema = z.object({
   /** block=≥0.9 warn=0.7-0.9 suggest=0.5-0.7 passive=<0.5 */
   enforcement: z.enum(["block", "warn", "suggest", "passive"]),
 
-  /** active=生效 conflict=与他冲突 stale=待重验 archived=已归档 */
-  status: z.enum(["active", "conflict", "stale", "archived"]).default("active"),
+  /** active=生效 conflict=与他冲突 stale=待重验 archived=已归档 dormant=休眠 */
+  status: z.enum(["active", "conflict", "stale", "archived", "dormant"]).default("active"),
 
   hit_count: z.number().int().nonnegative().default(0),
   success_count: z.number().int().nonnegative().default(0),
@@ -81,6 +81,23 @@ export const KnowledgeEntrySchema = z.object({
 
   /** 与本条冲突的其他条目 id 列表 */
   conflict_with: z.array(z.string()).default([]),
+
+  /** v2 Tier system — promotion/demotion decisions */
+  current_tier: z
+    .enum(["experimental", "probation", "stable", "canonical", "enforced", "dormant"])
+    .default("experimental"),
+  /** Historical max tier (selects half-life for decay) */
+  max_tier_ever: z
+    .enum(["experimental", "probation", "stable", "canonical", "enforced"])
+    .default("experimental"),
+  /** Timestamp when current tier was entered (for hysteresis duration check) */
+  tier_entered_at: z.string().default(""),
+  /** Demerit accumulation (driver's license penalty system) */
+  demerit: z.number().nonnegative().default(0),
+  /** When demerit was last changed (for decay calculation) */
+  demerit_last_updated: z.string().default(""),
+  /** Number of times rule was revived from dormant (3 = permanent archive) */
+  resurrect_count: z.number().int().nonnegative().default(0),
 });
 
 export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
