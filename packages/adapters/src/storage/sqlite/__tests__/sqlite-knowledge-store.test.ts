@@ -27,6 +27,12 @@ function mkEntry(over: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
     correct_pattern: "fetch",
     reasoning: "project is fetch-only",
     confidence: 0,
+    current_tier: "experimental",
+    max_tier_ever: "experimental",
+    tier_entered_at: "2026-04-15T00:00:00Z",
+    demerit: 0,
+    demerit_last_updated: "",
+    resurrect_count: 0,
     enforcement: "passive",
     status: "active",
     hit_count: 0,
@@ -222,5 +228,57 @@ describe("SqliteKnowledgeStore", () => {
     expect(store.getById("d1")).toBeDefined();
     store.delete("d1");
     expect(store.getById("d1")).toBeUndefined();
+  });
+});
+
+// Need a baseEntry alias for the v2 tests
+const baseEntry = mkEntry();
+
+describe("v2 tier/demerit fields round-trip", () => {
+  it("persists and reads back tier/demerit fields", () => {
+    const entry = {
+      ...baseEntry,
+      id: "r-v2",
+      current_tier: "stable" as const,
+      max_tier_ever: "stable" as const,
+      tier_entered_at: "2026-04-16T00:00:00Z",
+      demerit: 3.5,
+      demerit_last_updated: "2026-04-16T00:00:00Z",
+      resurrect_count: 1,
+    };
+    store.add(entry);
+    const back = store.getById("r-v2");
+    expect(back?.current_tier).toBe("stable");
+    expect(back?.demerit).toBe(3.5);
+    expect(back?.resurrect_count).toBe(1);
+    expect(back?.max_tier_ever).toBe("stable");
+    expect(back?.tier_entered_at).toBe("2026-04-16T00:00:00Z");
+  });
+
+  it("partial update preserves v2 fields not in patch", () => {
+    store.add({
+      ...baseEntry,
+      id: "r-partial",
+      demerit: 5,
+      current_tier: "probation" as const,
+      max_tier_ever: "probation" as const,
+      tier_entered_at: "2026-04-16T00:00:00Z",
+    });
+    store.update("r-partial", { confidence: 0.8 });
+    const back = store.getById("r-partial");
+    expect(back?.demerit).toBe(5);
+    expect(back?.current_tier).toBe("probation");
+  });
+
+  it("update({ demerit, current_tier }) persists to DB", () => {
+    store.add({ ...baseEntry, id: "r-u", tier_entered_at: "2026-04-01T00:00:00Z" });
+    store.update("r-u", {
+      demerit: 3,
+      current_tier: "probation" as const,
+      tier_entered_at: "2026-04-16T00:00:00Z",
+    } as any);
+    const back = store.getById("r-u");
+    expect(back?.demerit).toBe(3);
+    expect(back?.current_tier).toBe("probation");
   });
 });
