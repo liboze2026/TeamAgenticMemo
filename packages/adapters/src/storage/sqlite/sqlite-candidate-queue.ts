@@ -27,7 +27,7 @@ export class SqliteCandidateQueue implements CandidateQueue {
   listPending(): RuleCandidate[] {
     const rows = this.db
       .prepare(
-        `SELECT * FROM rule_candidates WHERE status = 'pending' ORDER BY created_at ASC`,
+        `SELECT * FROM rule_candidates WHERE status IN ('pending', 'skipped') ORDER BY created_at ASC`,
       )
       .all() as any[];
     return rows.map(this.hydrate);

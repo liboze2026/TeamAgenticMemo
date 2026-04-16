@@ -9,6 +9,7 @@ import type { RawErrorSignal } from "@teamagent/ports";
 export function clusterByTag(
   signals: RawErrorSignal[],
   minSessions: number,
+  now: Date,
 ): RawErrorSignal[] {
   if (signals.length === 0) return [];
 
@@ -52,7 +53,7 @@ export function clusterByTag(
       sessionIds,
       context: contextSummary,
       suggestedCategory: undefined,
-      timestamp: new Date().toISOString(),
+      timestamp: now.toISOString(),
     });
   }
 

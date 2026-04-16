@@ -9,6 +9,7 @@ import {
   CompositeErrorSignalCollector,
   openDb,
 } from "@teamagent/adapters";
+import type { PersistedEvent } from "@teamagent/types";
 import {
   filterSignals,
   buildErrorBatches,
@@ -144,7 +145,7 @@ export async function executeScanErrors(
   }
 
   // Collect signals
-  const collector = new CompositeErrorSignalCollector({ events, sessions, since });
+  const collector = new CompositeErrorSignalCollector({ events, sessions, since, now });
   let signals = await collector.collect(since);
 
   // Efficient mode: pre-filter
@@ -231,6 +232,24 @@ export async function executeScanErrors(
 
   queueDb.close();
   saveScanState(home, now, opts.mode);
+
+  // Emit error.candidate.added event
+  if (totalCandidates > 0 && fs.existsSync(eventsDbPath)) {
+    try {
+      const eventLog = new SqliteEventLog(openDb(eventsDbPath));
+      const addedEvent: PersistedEvent = {
+        id: `ev-cand-added-${now.getTime()}`,
+        kind: "error.candidate.added",
+        timestamp: now.toISOString(),
+        schema_version: 1,
+      } as PersistedEvent & { count: number };
+      (addedEvent as any).count = totalCandidates;
+      eventLog.append(addedEvent);
+      eventLog.close();
+    } catch {
+      // non-fatal
+    }
+  }
 
   lines.push(`  ✓ 新增候选规则: ${totalCandidates} 条`);
   if (totalCandidates > 0) {

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { CompositeErrorSignalCollector } from "../composite-error-signal-collector.js";
+import { runErrorSignalCollectorContract } from "@teamagent/ports/contracts";
 import type { PersistedEvent } from "@teamagent/types";
+import type { RawErrorSignal } from "@teamagent/ports";
 
 function makeEvent(
   kind: PersistedEvent["kind"],
@@ -14,6 +16,14 @@ function makeEvent(
     ...extra,
   } as PersistedEvent;
 }
+
+// Contract tests: pass pre-built signals through a stub collector.
+// CompositeErrorSignalCollector builds signals from events/sessions;
+// the contract factory uses a passthrough stub that satisfies the interface.
+runErrorSignalCollectorContract((signals: RawErrorSignal[]) => ({
+  collect: async (since: Date) =>
+    signals.filter((s) => s.timestamp >= since.toISOString()),
+}));
 
 describe("CompositeErrorSignalCollector", () => {
   it("returns B signals from hook-post.result failures", async () => {

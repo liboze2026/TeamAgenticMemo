@@ -5,11 +5,13 @@ import * as readline from "node:readline";
 import {
   DualLayerStore,
   SqliteCandidateQueue,
+  SqliteEventLog,
   openDb,
   MarkdownCompiler,
   makeSkillCompiler,
 } from "@teamagent/adapters";
 import { runCalibrationPipeline, defaultCalibrator, runCompile } from "@teamagent/core";
+import type { PersistedEvent } from "@teamagent/types";
 
 export interface ReviewCandidatesOptions {
   limit?: number;
@@ -18,6 +20,7 @@ export interface ReviewCandidatesOptions {
   candidatesDbPath?: string;
   projectDbPath?: string;
   userGlobalDbPath?: string;
+  eventsDbPath?: string;
   claudeMdPath?: string;
   now?: () => Date;
 }
@@ -33,8 +36,21 @@ export async function executeReviewCandidates(
     opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db");
   const userGlobalDbPath =
     opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db");
+  const eventsDbPath =
+    opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db");
   const claudeMdPath = opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md");
   const now = opts.now ?? (() => new Date());
+
+  const emitEvent = (evt: Omit<PersistedEvent, "schema_version">): void => {
+    if (!fs.existsSync(eventsDbPath)) return;
+    try {
+      const eventLog = new SqliteEventLog(openDb(eventsDbPath));
+      eventLog.append({ ...evt, schema_version: 1 } as PersistedEvent);
+      eventLog.close();
+    } catch {
+      // non-fatal
+    }
+  };
 
   if (!fs.existsSync(candidatesDbPath)) {
     return "📭 候选队列为空（candidates.db 不存在）。先运行 teamagent scan-errors。\n";
@@ -100,6 +116,12 @@ export async function executeReviewCandidates(
         queue.updateStatus(candidate.id, "approved");
         approved++;
         process.stdout.write(`✓ 已写入知识库 (id: ${e.id})\n`);
+        emitEvent({
+          id: `ev-cand-approved-${now().getTime()}-${candidate.id.slice(-6)}`,
+          kind: "error.candidate.approved",
+          knowledge_id: e.id,
+          timestamp: now().toISOString(),
+        });
       } catch (err) {
         process.stdout.write(`⚠ 写入失败: ${String(err).slice(0, 100)}\n`);
       }
@@ -107,6 +129,11 @@ export async function executeReviewCandidates(
       queue.updateStatus(candidate.id, "rejected");
       rejected++;
       process.stdout.write("✗ 已拒绝\n");
+      emitEvent({
+        id: `ev-cand-rejected-${now().getTime()}-${candidate.id.slice(-6)}`,
+        kind: "error.candidate.rejected",
+        timestamp: now().toISOString(),
+      });
     } else {
       queue.updateStatus(candidate.id, "skipped");
       skipped++;

@@ -8,6 +8,8 @@ export interface CompositeCollectorOptions {
   since: Date;
   /** H 信号聚类的最小 session 数，默认 2 */
   minClusterSessions?: number;
+  /** 时间戳注入（Functional Core 要求），默认 new Date() */
+  now?: Date;
 }
 
 /**
@@ -135,7 +137,8 @@ export class CompositeErrorSignalCollector implements ErrorSignalCollector {
 
     // --- H: 跨 session 聚类 ---
     const minCluster = this.opts.minClusterSessions ?? 2;
-    const hSignals = clusterByTag(signals, minCluster);
+    const nowTs = this.opts.now ?? new Date();
+    const hSignals = clusterByTag(signals, minCluster, nowTs);
     signals.push(...hSignals);
 
     return signals;
