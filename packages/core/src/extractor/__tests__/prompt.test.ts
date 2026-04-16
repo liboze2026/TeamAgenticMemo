@@ -78,6 +78,17 @@ describe("buildExtractionPrompt", () => {
     expect(p).toContain("规则文本");
   });
 
+  it.each([
+    ["insights", "/insights"],
+    ["npm-audit", "npm audit"],
+    ["pr-review", "PR review"],
+    ["git-hotspot", "热点文件"],
+    ["ci-failure", "CI"],
+  ] as const)("kind=%s → header mentions '%s'", (kind, fragment) => {
+    const p = buildExtractionPrompt({ ...SAMPLE, kind });
+    expect(p).toContain(fragment);
+  });
+
   it("trims the context to avoid stray whitespace", () => {
     const p = buildExtractionPrompt({
       ...SAMPLE,

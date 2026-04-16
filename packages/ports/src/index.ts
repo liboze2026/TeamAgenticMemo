@@ -10,7 +10,11 @@ export type {
   SuccessSignal,
   SuccessSignalType,
 } from "./success-detector.js";
-export type { KnowledgeExtractor, ExtractionInput } from "./extractor.js";
+export type {
+  KnowledgeExtractor,
+  ExtractionInput,
+  ExtractionKind,
+} from "./extractor.js";
 export type { Retriever, RetrievalContext } from "./retriever.js";
 export type { Matcher, ToolCallContext } from "./matcher.js";
 export type { SessionSource } from "./session-source.js";

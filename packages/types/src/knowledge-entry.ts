@@ -76,8 +76,15 @@ export const KnowledgeEntrySchema = z.object({
   last_hit_at: z.string().default(""),
   last_validated_at: z.string().default(""),
 
-  /** 来源。preset=预置元原则 / imported=从已有规则导入 / accumulated=使用中积累 / team-shared=团队审核后共享 / internet=互联网(Phase 4) */
-  source: z.enum(["preset", "imported", "accumulated", "team-shared", "internet"]),
+  /** 来源。preset=预置元原则 / imported=从已有规则导入 / accumulated=使用中积累 / ingested=多源摄入(insights/audit/PR/git/CI) / team-shared=团队审核后共享 / internet=互联网(Phase 4) */
+  source: z.enum([
+    "preset",
+    "imported",
+    "accumulated",
+    "ingested",
+    "team-shared",
+    "internet",
+  ]),
 
   /** 与本条冲突的其他条目 id 列表 */
   conflict_with: z.array(z.string()).default([]),

@@ -1,12 +1,23 @@
 import type { KnowledgeEntry } from "@teamagent/types";
 
+/** 提取 Extractor 支持的输入来源类型。M2.3 扩至 8 类以覆盖 6 源摄入。 */
+export type ExtractionKind =
+  | "correction"
+  | "success"
+  | "rule-text"
+  | "insights"
+  | "npm-audit"
+  | "pr-review"
+  | "git-hotspot"
+  | "ci-failure";
+
 /** 提取 Extractor 的输入。 */
 export interface ExtractionInput {
-  /** 来源：correction（纠正时刻）或 success（成功信号）或 rule-text（已有规则文本） */
-  kind: "correction" | "success" | "rule-text";
-  /** 上下文说明（比如纠正文本、AI 上下文、或规则原文） */
+  /** 来源 kind，见 ExtractionKind。prompt 按 kind 分派 header。 */
+  kind: ExtractionKind;
+  /** 上下文说明（纠正文本、AI 上下文、规则原文、日志片段等） */
   context: string;
-  /** 信号的权重或原始置信度 */
+  /** 信号的权重或原始置信度（0-1） */
   weight: number;
 }
 

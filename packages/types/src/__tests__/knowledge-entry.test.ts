@@ -49,6 +49,11 @@ describe("KnowledgeEntrySchema v2 fields", () => {
     expect(parsed.status).toBe("dormant");
   });
 
+  it("source accepts 'ingested' (M2.3 multi-source)", () => {
+    const parsed = KnowledgeEntrySchema.parse({ ...baseValid, source: "ingested" });
+    expect(parsed.source).toBe("ingested");
+  });
+
   it("current_tier enum rejects invalid value", () => {
     expect(() =>
       KnowledgeEntrySchema.parse({ ...baseValid, current_tier: "super-enforced" }),

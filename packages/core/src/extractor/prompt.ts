@@ -35,12 +35,17 @@ export function buildExtractionPrompt(input: ExtractionInput): string {
 }
 
 function buildHeader(kind: ExtractionInput["kind"]): string {
-  const source =
-    kind === "correction"
-      ? "用户在 Claude Code 会话中纠正了 AI 的行为"
-      : kind === "success"
-        ? "用户的一次成功模式（AI 未被纠正且模式被重复使用）"
-        : "一段已有的规则文本";
+  const sourceMap: Record<ExtractionInput["kind"], string> = {
+    correction: "用户在 Claude Code 会话中纠正了 AI 的行为",
+    success: "用户的一次成功模式（AI 未被纠正且模式被重复使用）",
+    "rule-text": "一段已有的规则文本",
+    insights: "Claude Code /insights 报告",
+    "npm-audit": "npm audit 输出（依赖安全漏洞）",
+    "pr-review": "PR review 评论",
+    "git-hotspot": "git log 热点文件（频繁被修改的路径）",
+    "ci-failure": "CI failure 日志片段",
+  };
+  const source = sourceMap[kind];
   return `你是知识提取器。任务是把下面这段上下文（${source}）提炼成一条结构化的"知识条目"，供团队 AI 未来参考。`;
 }
 
