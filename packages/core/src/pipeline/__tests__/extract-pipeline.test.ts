@@ -10,6 +10,8 @@ import type {
   KnowledgeExtractor,
   KnowledgeStore,
   AttributionBus,
+  Validator,
+  ValidationL0Result,
 } from "@teamagent/ports";
 import type {
   AttributionEvent,
@@ -332,6 +334,7 @@ describe("runExtractPipeline", () => {
       extracted: [],
       skipped: 0,
       failed: 0,
+      rejected: [],
     });
   });
 
@@ -407,6 +410,85 @@ describe("runExtractPipeline", () => {
     const r = await runExtractPipeline(makeSession(), deps);
     const entry = r.extracted[0]!;
     expect(entry.scope.file_types).toEqual(["*.css"]);
+  });
+
+  it("L0 gate rejects entries failing mechanical checks (new in M2.3)", async () => {
+    const rejectionLog: { entry: Partial<KnowledgeEntry>; reason: string[] }[] =
+      [];
+    const bus = new RecordingBus();
+    // Validator: accept the first, reject the next two (various failures)
+    const calls: ValidationL0Result[] = [
+      { ok: true, failed_checks: [] },
+      { ok: false, failed_checks: ["wrong_pattern_not_in_source"] },
+      { ok: false, failed_checks: ["trigger_collision"] },
+    ];
+    const validator: Pick<Validator, "validateLevel0"> = {
+      validateLevel0: () => calls.shift()!,
+    };
+
+    const store = new InMemoryStoreStub();
+    const deps = makeDeps({
+      detector: new StubDetector([
+        makeMoment({ turnIndex: 1 }),
+        makeMoment({ turnIndex: 2 }),
+        makeMoment({ turnIndex: 3 }),
+      ]),
+      extractor: new QueuedExtractor([
+        {
+          kind: "ok",
+          partial: {
+            category: "E",
+            type: "avoidance",
+            nature: "subjective",
+            trigger: "t1",
+            wrong_pattern: "axios",
+            correct_pattern: "fetch",
+            reasoning: "r",
+          },
+        },
+        {
+          kind: "ok",
+          partial: {
+            category: "E",
+            type: "avoidance",
+            nature: "subjective",
+            trigger: "t2",
+            wrong_pattern: "foo",
+            correct_pattern: "c",
+            reasoning: "r",
+          },
+        },
+        {
+          kind: "ok",
+          partial: {
+            category: "E",
+            type: "avoidance",
+            nature: "subjective",
+            trigger: "t3",
+            wrong_pattern: "bar",
+            correct_pattern: "c",
+            reasoning: "r",
+          },
+        },
+      ]),
+      store,
+      bus,
+      validator: validator as Validator,
+      rejectionLog: (entry, result) => {
+        rejectionLog.push({ entry, reason: result.failed_checks });
+      },
+      projectStack: ["ts"],
+    });
+
+    const result = await runExtractPipeline(makeSession(), deps);
+    expect(result.correctionsFound).toBe(3);
+    expect(result.extracted).toHaveLength(1);
+    expect(result.rejected).toHaveLength(2);
+    expect(store.entries).toHaveLength(1);
+    expect(rejectionLog).toHaveLength(2);
+    expect(rejectionLog[0]!.reason).toContain("wrong_pattern_not_in_source");
+    const rejectedEvents = bus.events.filter((e) => e.action === "rejected_l0");
+    expect(rejectedEvents).toHaveLength(2);
   });
 
   it("respects injected scope and source", async () => {

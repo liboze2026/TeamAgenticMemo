@@ -4,6 +4,8 @@ import type {
   CorrectionMoment,
   KnowledgeExtractor,
   KnowledgeStore,
+  Validator,
+  ValidationL0Result,
 } from "@teamagent/ports";
 import type {
   KnowledgeEntry,
@@ -32,6 +34,15 @@ export interface ExtractPipelineDeps {
   now: () => Date;
   /** id 生成器——注入以便测试稳定 id。 */
   idGen: () => string;
+  /** 可选：L0 入库门闸。缺省时放行所有（向后兼容）。 */
+  validator?: Pick<Validator, "validateLevel0">;
+  /** 可选：项目 stack（file_types 一致性检查用）。缺省 []。 */
+  projectStack?: string[];
+  /** 可选：L0 拒绝时的回调。可用于 rejection log 持久化。 */
+  rejectionLog?: (
+    entry: KnowledgeEntry,
+    result: ValidationL0Result,
+  ) => void | Promise<void>;
 }
 
 /**
@@ -46,6 +57,8 @@ export interface ExtractPipelineResult {
   skipped: number;
   /** LLM 或 store 调用失败的条数 */
   failed: number;
+  /** L0 入库门拒绝的条目及原因（M2.3 新增）。 */
+  rejected: { entry: KnowledgeEntry; reasons: string[] }[];
 }
 
 /**
@@ -69,6 +82,7 @@ export async function runExtractPipeline(
     extracted: [],
     skipped: 0,
     failed: 0,
+    rejected: [],
   };
 
   for (const moment of corrections) {
@@ -92,6 +106,40 @@ export async function runExtractPipeline(
       }
 
       const entry = assembleEntry(partial, moment, deps);
+
+      // L0 入库门闸（M2.3）——拒绝的条目不入 store，只记 rejection log
+      if (deps.validator) {
+        const l0 = deps.validator.validateLevel0({
+          entry,
+          sourceText: context,
+          existingRules: deps.store.getAll().map((r) => ({
+            id: r.id,
+            trigger: r.trigger,
+            wrong_pattern: r.wrong_pattern,
+          })),
+          projectStack: deps.projectStack ?? [],
+        });
+        if (!l0.ok) {
+          result.rejected.push({ entry, reasons: l0.failed_checks });
+          if (deps.rejectionLog) {
+            try {
+              await deps.rejectionLog(entry, l0);
+            } catch {
+              // rejection log 故障不影响主流程
+            }
+          }
+          emit(deps.bus, {
+            source: "extractor",
+            action: "rejected_l0",
+            target: { id: entry.id, count: 1 },
+            severity: "info",
+            userFacingValue: `L0 拒绝：${l0.failed_checks.join(", ")}`,
+            timestamp: isoNow(deps.now),
+          });
+          continue;
+        }
+      }
+
       deps.store.add(entry);
       result.extracted.push(entry);
       emit(deps.bus, {
