@@ -9,6 +9,10 @@ import {
 } from "@teamagent/adapters";
 import { parseInsightsReport } from "@teamagent/adapters/ingest/insights";
 import {
+  parseNpmAudit,
+  getNpmAuditOutput,
+} from "@teamagent/adapters/ingest/npm-audit";
+import {
   llmBasedKnowledgeExtractor,
   runIngestPipeline,
   validateLevel0,
@@ -117,6 +121,11 @@ async function loadInputs(opts: IngestOptions): Promise<ExtractionInput[]> {
       }
       const raw = fs.readFileSync(opts.filePath, "utf-8");
       return parseInsightsReport(raw);
+    }
+    case "npm-audit": {
+      const runner = opts.cmdRunner ?? defaultRunner;
+      const raw = await getNpmAuditOutput(runner, opts.cwd);
+      return parseNpmAudit(raw);
     }
     default:
       throw new Error(`源 '${opts.source}' 尚未实现（M2.3 后续 task）`);
