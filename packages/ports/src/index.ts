@@ -36,3 +36,11 @@ export type {
   TierTransition,
   DeltaStep,
 } from "./calibrator-v2.js";
+export type {
+  Validator,
+  ValidateL0Input,
+  ValidateL1Input,
+  ValidateL2Input,
+  ValidationL0Result,
+  ValidationLLMResult,
+} from "./validator.js";
