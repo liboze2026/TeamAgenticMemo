@@ -47,6 +47,18 @@ import {
   executeReviewCandidates,
   parseReviewCandidatesArgs,
 } from "./commands/review-candidates.js";
+import {
+  executeWikiPull,
+  executeWikiAdd,
+  executeWikiList,
+  executeWikiStats,
+  executeWikiSubscriptions,
+  executeWikiSubscribe,
+  executeWikiUnsubscribe,
+  executeWikiRejected,
+  executeWikiDislike,
+  parseWikiArgs,
+} from "./commands/wiki.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -245,6 +257,55 @@ async function main(): Promise<void> {
       if (output) process.stdout.write(output);
       return;
     }
+    case "wiki:pull": {
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiPull(opts);
+      return;
+    }
+    case "wiki:add": {
+      const url = rest.find(a => !a.startsWith("--"));
+      if (!url) { process.stderr.write("Usage: teamagent wiki:add <url>\n"); process.exit(1); }
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiAdd(url, opts);
+      return;
+    }
+    case "wiki:list": {
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiList(opts);
+      return;
+    }
+    case "wiki:stats": {
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiStats(opts);
+      return;
+    }
+    case "wiki:subscriptions": {
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiSubscriptions(opts);
+      return;
+    }
+    case "wiki:subscribe": {
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiSubscribe(opts);
+      return;
+    }
+    case "wiki:unsubscribe": {
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiUnsubscribe(opts);
+      return;
+    }
+    case "wiki:rejected": {
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiRejected(opts);
+      return;
+    }
+    case "wiki:dislike": {
+      const id = rest.find(a => !a.startsWith("--"));
+      if (!id) { process.stderr.write("Usage: teamagent wiki:dislike <knowledge-id>\n"); process.exit(1); }
+      const { opts } = parseWikiArgs(rest);
+      await executeWikiDislike(id, opts);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -289,6 +350,18 @@ async function main(): Promise<void> {
           "                                   自动采集错误信号 → 提取候选规则 → 写入候选队列",
           "  teamagent review-candidates [--limit=N]",
           "                                   交互式审核候选规则：[a]批准 [r]拒绝 [s]跳过 [q]退出",
+          "  teamagent wiki:pull [--since=<duration|ISO>] [--dry-run]",
+          "                                   从5个源拉取前沿知识并存入知识库",
+          "  teamagent wiki:add <url>         手动添加单条 URL 到知识库",
+          "  teamagent wiki:list [--limit=20] [--source=github_release|npm|rss|arxiv|manual]",
+          "                                   查看已入库的 wiki 条目",
+          "  teamagent wiki:stats             显示 wiki 统计数据",
+          "  teamagent wiki:subscriptions     查看当前订阅源",
+          "  teamagent wiki:subscribe --repo <owner/repo> | --rss <url> | --arxiv <category>",
+          "                                   手动追加订阅源",
+          "  teamagent wiki:unsubscribe --id <id>  退订某个源",
+          "  teamagent wiki:rejected [--limit=20]  查看被拒绝的条目",
+          "  teamagent wiki:dislike <id>      标记条目为不喜欢（M2.7 注入时跳过）",
           "  teamagent ingest --from-insights <path> | --from-audit | --from-pr <n>",
           "                   | --from-git [--since=30d] | --from-ci [--since=30d] | --from-candidates <path>",
           "                                   多源摄入：Claude /insights / npm audit / PR review / git hotspot / CI failure",

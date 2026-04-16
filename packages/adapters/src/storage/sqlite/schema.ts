@@ -6,6 +6,15 @@ import type { DatabaseSync } from "node:sqlite";
 const require = createRequire(import.meta.url);
 const { DatabaseSync: DatabaseSyncCtor } = require("node:sqlite") as typeof import("node:sqlite");
 
+// sqlite-vec: load synchronously via require (same pattern as node:sqlite above)
+let _sqliteVecLoad: ((db: unknown) => void) | undefined;
+try {
+  const mod = require("sqlite-vec") as { load?: (db: unknown) => void };
+  _sqliteVecLoad = mod.load;
+} catch {
+  // sqlite-vec native bindings not available — vector features will be disabled
+}
+
 /** 所有 DDL 集中在这里，首次打开 DB 时幂等执行一次。 */
 export const INIT_SQL = `
 -- 知识主表
@@ -117,6 +126,10 @@ CREATE TABLE IF NOT EXISTS wiki_rejection_log (
   rejected_at TEXT NOT NULL
 );
 
+-- Vector embeddings for wiki entries (sqlite-vec, M2.6)
+-- CREATE VIRTUAL TABLE is intentionally omitted here; it's created in openDb()
+-- after sqlite-vec extension is loaded, so it's guarded properly.
+
 -- 候选规则队列（M2.5-half，review-candidates 用）
 CREATE TABLE IF NOT EXISTS rule_candidates (
   id          TEXT PRIMARY KEY,
@@ -138,7 +151,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (1, datetime('now'));
 `;
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 
 /**
@@ -149,6 +162,12 @@ export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSyncCtor(path);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
+
+  // Load sqlite-vec extension before DDL so vec0 virtual table can be created
+  if (_sqliteVecLoad) {
+    try { _sqliteVecLoad(db); } catch { /* ok if db doesn't support loadExtension */ }
+  }
+
   db.exec(INIT_SQL);
 
   // Migration: schema_version 1 → 2 (add wiki_meta columns, wiki_subscriptions, wiki_rejection_log)
@@ -159,6 +178,17 @@ export function openDb(path: string): DatabaseSync {
     try { db.exec("ALTER TABLE wiki_meta ADD COLUMN fetch_error TEXT"); } catch {}
     try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_source ON wiki_meta(source_type, source_id)"); } catch {}
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (2, datetime('now'))");
+  }
+
+  // Migration: schema_version 2 → 3 (add knowledge_vec virtual table)
+  if (!version || version.version < 3) {
+    try {
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
+        knowledge_id TEXT PRIMARY KEY,
+        embedding FLOAT[384]
+      )`);
+    } catch { /* ok if sqlite-vec not loaded */ }
+    db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (3, datetime('now'))");
   }
 
   return db;
