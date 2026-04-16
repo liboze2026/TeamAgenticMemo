@@ -90,3 +90,8 @@ export {
   detectCompliedSignals,
   type OverrideSignalEvent,
 } from "./pipeline/override-signal.js";
+export { clusterByTag } from "./error-collector/cross-session-cluster.js";
+export { filterSignals } from "./error-collector/signal-filter.js";
+export type { FilterOptions } from "./error-collector/signal-filter.js";
+export { buildErrorBatches } from "./error-collector/error-batch-builder.js";
+export type { ErrorBatch } from "./error-collector/error-batch-builder.js";
