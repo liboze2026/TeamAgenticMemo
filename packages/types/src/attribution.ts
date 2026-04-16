@@ -16,7 +16,9 @@ export interface AttributionEvent {
     | "init"
     | "calibrator"
     | "scenario-runner"
-    | "skeleton";
+    | "skeleton"
+    | "ingest"
+    | "validator";
   action: string;
   target?: { id?: string; file?: string; count?: number };
   before?: unknown;
