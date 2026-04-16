@@ -19,8 +19,10 @@ describe("tierFromConfidence", () => {
 });
 
 describe("tierFromDemerit (death chain)", () => {
-  it("demerit < 5 at stable → stable", () => {
-    expect(tierFromDemerit(4, "stable")).toBe("stable");
+  it("demerit < 5 → no constraint (returns enforced)", () => {
+    // demerit < 5 means death chain places no cap; any tier is allowed
+    expect(tierFromDemerit(4, "stable")).toBe("enforced");
+    expect(tierFromDemerit(0, "experimental")).toBe("enforced");
   });
 
   it("demerit >= 5 at stable → soft demote 1 tier (probation)", () => {

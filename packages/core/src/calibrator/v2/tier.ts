@@ -43,6 +43,7 @@ export function tierFromDemerit(demerit: number, currentTier: Tier): Tier {
   if (demerit >= 15) demote = 2;
   else if (demerit >= 5) demote = 1;
 
+  if (demote === 0) return "enforced"; // no death-chain constraint
   return TIER_ORDER[Math.max(0, idx - demote)] as Exclude<Tier, "dormant">;
 }
 

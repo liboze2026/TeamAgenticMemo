@@ -63,7 +63,8 @@ export function applyHysteresis(input: HysteresisInput): HysteresisResult {
 
   // Demotion (non-dormant)
   if (input.demerit >= 30) return { final_tier: cand }; // death chain bypass
-  const daysSince = (input.now.getTime() - new Date(input.tier_entered_at).getTime()) / DAY_MS;
+  const enteredMs = input.tier_entered_at ? new Date(input.tier_entered_at).getTime() : 0;
+  const daysSince = (input.now.getTime() - enteredMs) / DAY_MS;
   if (daysSince < MIN_DAYS_FOR_DEMOTION) {
     return {
       final_tier: cur,
