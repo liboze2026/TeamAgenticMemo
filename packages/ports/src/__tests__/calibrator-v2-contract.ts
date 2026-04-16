@@ -113,6 +113,17 @@ export function runCalibratorV2Contract(make: () => CalibratorV2): void {
       expect(r.tier_after).toBe("dormant");
     });
 
+    it("all failure observations → confidence_delta <= 0", () => {
+      const r = make().calibrate(
+        { ...baseEntry, confidence: 0.8 },
+        {
+          ...emptyInput,
+          observations: Array.from({ length: 10 }, (_, i) => obs("failure", i, `f${i}`)),
+        },
+      );
+      expect(r.confidence_delta).toBeLessThanOrEqual(0);
+    });
+
     it("pure function: same input → same output", () => {
       const input: CalibratorV2Input = {
         ...emptyInput,
