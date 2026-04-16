@@ -80,17 +80,41 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_kind ON events(kind, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_knowledge ON events(knowledge_id);
 
--- Wiki 专用元数据表（SP-3 用，M2.1 先建表，实际填充在 M2.6）
+-- Wiki 专用元数据表（SP-3 用，M2.6 完整版）
 CREATE TABLE IF NOT EXISTS wiki_meta (
-  knowledge_id TEXT PRIMARY KEY,
-  source_url TEXT,
-  source_type TEXT,
-  published_at TEXT,
-  tldr TEXT,
-  keywords TEXT,
-  user_thumbs_down INTEGER DEFAULT 0,
-  inline_injection_count INTEGER DEFAULT 0,
+  knowledge_id             TEXT PRIMARY KEY,
+  source_url               TEXT NOT NULL,
+  source_type              TEXT NOT NULL,
+  source_id                TEXT NOT NULL,
+  published_at             TEXT NOT NULL,
+  tldr                     TEXT NOT NULL,
+  keywords                 TEXT NOT NULL,
+  user_thumbs_down         INTEGER DEFAULT 0,
+  inline_injection_count   INTEGER DEFAULT 0,
+  fetch_error              TEXT,
   FOREIGN KEY(knowledge_id) REFERENCES knowledge(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_source ON wiki_meta(source_type, source_id);
+
+-- Wiki 订阅表（M2.6）
+CREATE TABLE IF NOT EXISTS wiki_subscriptions (
+  id          TEXT PRIMARY KEY,
+  source_type TEXT NOT NULL,
+  config      TEXT NOT NULL,
+  auto_added  INTEGER DEFAULT 0,
+  enabled     INTEGER DEFAULT 1,
+  created_at  TEXT NOT NULL
+);
+
+-- Wiki 拒绝日志（M2.6）
+CREATE TABLE IF NOT EXISTS wiki_rejection_log (
+  id          TEXT PRIMARY KEY,
+  source_type TEXT,
+  source_id   TEXT,
+  title       TEXT,
+  reason      TEXT,
+  rejected_at TEXT NOT NULL
 );
 
 -- 候选规则队列（M2.5-half，review-candidates 用）
@@ -114,7 +138,8 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (1, datetime('now'));
 `;
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
+
 
 /**
  * 打开/创建 SQLite DB 并确保 schema 初始化。
@@ -125,6 +150,17 @@ export function openDb(path: string): DatabaseSync {
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec(INIT_SQL);
+
+  // Migration: schema_version 1 → 2 (add wiki_meta columns, wiki_subscriptions, wiki_rejection_log)
+  const version = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
+  if (!version || version.version < 2) {
+    // Add missing wiki_meta columns (ALTER TABLE IF NOT EXISTS not supported in SQLite)
+    try { db.exec("ALTER TABLE wiki_meta ADD COLUMN source_id TEXT NOT NULL DEFAULT ''"); } catch {}
+    try { db.exec("ALTER TABLE wiki_meta ADD COLUMN fetch_error TEXT"); } catch {}
+    try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_source ON wiki_meta(source_type, source_id)"); } catch {}
+    db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (2, datetime('now'))");
+  }
+
   return db;
 }
 

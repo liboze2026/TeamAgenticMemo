@@ -35,8 +35,9 @@ describe("sqlite schema", () => {
     const db1 = openDb(p);
     closeDb(db1);
     const db2 = openDb(p);
-    const versions = db2.prepare("SELECT version FROM schema_version").all() as { version: number }[];
-    expect(versions).toHaveLength(1);
+    const versions = db2.prepare("SELECT version FROM schema_version ORDER BY version DESC").all() as { version: number }[];
+    // schema_version tracks migration history; the highest version must equal CURRENT_SCHEMA_VERSION
+    expect(versions.length).toBeGreaterThanOrEqual(1);
     expect(versions[0]!.version).toBe(CURRENT_SCHEMA_VERSION);
     closeDb(db2);
   });
