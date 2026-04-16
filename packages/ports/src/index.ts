@@ -49,3 +49,7 @@ export type {
   ValidationLLMResult,
 } from "./validator.js";
 export type { SkillCompiler, SkillArtifact } from "./skill-compiler.js";
+export type {
+  ErrorSignalCollector,
+  RawErrorSignal,
+} from "./error-signal-collector.js";
