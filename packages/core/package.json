@@ -14,8 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@teamagent/types": "workspace:*",
-    "@teamagent/ports": "workspace:*"
+    "@teamagent/ports": "workspace:*",
+    "@teamagent/types": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^2.1.0"

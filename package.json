@@ -16,7 +16,7 @@
     "dogfood-report": "tsx packages/cli/src/bin.ts dogfood-report"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
