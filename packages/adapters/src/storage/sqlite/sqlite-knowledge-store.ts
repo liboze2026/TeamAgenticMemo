@@ -67,7 +67,7 @@ function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
     demerit_last_updated: e.demerit_last_updated ?? null,
     current_tier: e.current_tier ?? "experimental",
     max_tier_ever: e.max_tier_ever ?? "experimental",
-    tier_entered_at: e.tier_entered_at ?? entry.created_at,
+    tier_entered_at: (e.tier_entered_at && e.tier_entered_at.length > 0) ? e.tier_entered_at : entry.created_at,
     enforcement: entry.enforcement,
     status: entry.status,
     hit_count: entry.hit_count,

@@ -281,4 +281,11 @@ describe("v2 tier/demerit fields round-trip", () => {
     expect(back?.demerit).toBe(3);
     expect(back?.current_tier).toBe("probation");
   });
+
+  it("add() fills tier_entered_at from created_at when empty", () => {
+    const entry = { ...baseEntry, id: "r-empty-tier", tier_entered_at: "", created_at: "2026-01-01T00:00:00Z" };
+    store.add(entry);
+    const back = store.getById("r-empty-tier");
+    expect(back?.tier_entered_at).toBe("2026-01-01T00:00:00Z");
+  });
 });
