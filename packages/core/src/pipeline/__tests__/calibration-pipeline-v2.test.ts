@@ -5,6 +5,9 @@ import type {
   AttributionBus,
   KnowledgeStore,
   Observation,
+  Validator,
+  ValidationLLMResult,
+  ValidationL0Result,
 } from "@teamagent/ports";
 import type {
   AttributionEvent,
@@ -264,5 +267,138 @@ describe("runCalibrationPipelineV2", () => {
     if (result.dormantNew.includes("rule-doom")) {
       expect(store.getById("rule-doom")!.current_tier).toBe("dormant");
     }
+  });
+
+  it("promotion to stable blocked when L1 returns ok=false (M2.3)", async () => {
+    const store = new InMemoryStore();
+    const bus = new RecordingBus();
+
+    // Entry primed to promote probation → stable: high confidence + enough hits +
+    // stayed in probation long enough (tier_entered_at old).
+    store.add(
+      makeEntry({
+        id: "rule-pmt",
+        confidence: 0.95,
+        current_tier: "probation",
+        max_tier_ever: "probation",
+        tier_entered_at: "2026-03-01T00:00:00Z",
+        hit_count: 30,
+        success_count: 28,
+        demerit: 0,
+      }),
+    );
+
+    // 10 success observations → calibrator wants to promote
+    const observations: Observation[] = Array.from({ length: 10 }, (_, i) =>
+      makeObs({ knowledge_id: "rule-pmt", id: `obs-${i}`, outcome: "success" }),
+    );
+
+    const validator: Validator = {
+      validateLevel0: (): ValidationL0Result => ({
+        ok: true,
+        failed_checks: [],
+      }),
+      validateLevel1: async (): Promise<ValidationLLMResult> => ({
+        ok: false,
+        confidence: 0.3,
+        reason: "too broad",
+      }),
+      validateLevel2: async (): Promise<ValidationLLMResult> => ({
+        ok: true,
+        confidence: 0.9,
+        reason: "fine",
+      }),
+    };
+
+    const result = await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [],
+      observations,
+      now: () => NOW,
+      bus,
+      validator,
+      callLLM: async () => "",
+    });
+
+    // Some form of calibration should still run; if it tried to promote to
+    // stable, L1 should have blocked it → tier stays at probation
+    const entryAfter = store.getById("rule-pmt")!;
+    expect(entryAfter.current_tier).toBe("probation");
+
+    // If there was a blocked promotion, bus should record it
+    const blocked = bus.events.filter(
+      (e) => e.source === "validator" && e.action === "blocked_promotion",
+    );
+    if (result.adjusted.some((a) => a.tier_before !== a.tier_after)) {
+      // Should never get here: tier_after should equal tier_before after L1 block
+      throw new Error(
+        "Expected tier_after to revert to tier_before after L1 block",
+      );
+    }
+    // When promotion attempt occurred, expect at least one blocked_promotion event
+    // OR record reverted to no-transition (check via delta_breakdown)
+    const reverted = result.adjusted.find((a) =>
+      a.delta_breakdown.some(
+        (d) => d.note?.includes("l1_blocked") || d.note?.includes("reverted"),
+      ),
+    );
+    expect(reverted || blocked.length > 0).toBeTruthy();
+  });
+
+  it("promotion to canonical requires both L1 and L2 pass (M2.3)", async () => {
+    const store = new InMemoryStore();
+
+    // Entry primed to promote stable → canonical
+    store.add(
+      makeEntry({
+        id: "rule-can",
+        confidence: 0.98,
+        current_tier: "stable",
+        max_tier_ever: "stable",
+        tier_entered_at: "2026-02-01T00:00:00Z",
+        hit_count: 100,
+        success_count: 98,
+        demerit: 0,
+      }),
+    );
+
+    const observations: Observation[] = Array.from({ length: 30 }, (_, i) =>
+      makeObs({ knowledge_id: "rule-can", id: `obs-${i}`, outcome: "success" }),
+    );
+
+    const l1Calls: number[] = [];
+    const l2Calls: number[] = [];
+
+    const validator: Validator = {
+      validateLevel0: () => ({ ok: true, failed_checks: [] }),
+      validateLevel1: async () => {
+        l1Calls.push(1);
+        return { ok: true, confidence: 0.9, reason: "fine" };
+      },
+      validateLevel2: async () => {
+        l2Calls.push(1);
+        return { ok: false, confidence: 0.6, reason: "overfit" };
+      },
+    };
+
+    await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [],
+      observations,
+      now: () => NOW,
+      validator,
+      callLLM: async () => "",
+    });
+
+    // Whenever an attempted promotion reached canonical, both L1 and L2 should run
+    // (L1 first; if passed, L2). If calibrator didn't propose a promotion, both
+    // counts may be 0 — but when any promotion occurs, L1 must be called.
+    const entryAfter = store.getById("rule-can")!;
+    // With L2 blocking, tier must not advance past stable
+    expect(["stable", "probation", "experimental"]).toContain(
+      entryAfter.current_tier,
+    );
   });
 });

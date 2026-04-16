@@ -5,6 +5,7 @@ import type {
   Observation,
   TierTransition,
   DeltaStep,
+  Validator,
 } from "@teamagent/ports";
 import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
@@ -16,6 +17,12 @@ export interface CalibrationV2Deps {
   bus?: AttributionBus;
   now: () => Date;
   dryRun?: boolean;
+  /** 可选：LLM 门闸 (M2.3)。提供则晋升 stable/canonical/enforced 时跑 L1/L2。 */
+  validator?: Validator;
+  /** 可选：LLM 客户端。validator 需要才会调用。 */
+  callLLM?: (prompt: string) => Promise<string>;
+  /** 可选：召回近邻规则给 L1。缺省时 similarRules=[]。 */
+  similarityFinder?: (entry: KnowledgeEntry) => Promise<KnowledgeEntry[]>;
 }
 
 export interface CalibrationV2Record {
@@ -56,11 +63,103 @@ export async function runCalibrationPipelineV2(
       continue; // no signal
     }
 
-    const result = deps.calibrator.calibrate(entry, {
+    const calResult = deps.calibrator.calibrate(entry, {
       events: evtForEntry as PersistedEvent[],
       observations: obsForEntry as Observation[],
       now,
     });
+
+    // ── M2.3: Validator 晋升门闸（L1 stable / L2 canonical+）────────────
+    let result = calResult;
+    if (
+      deps.validator &&
+      deps.callLLM &&
+      result.tier_transition &&
+      isPromotion(result.tier_before, result.tier_after)
+    ) {
+      const proposedTier = result.tier_after;
+      // L1 跑于 stable / canonical / enforced
+      const needsL1 = L1_GATED_TIERS.has(proposedTier);
+      if (needsL1) {
+        const similar = deps.similarityFinder
+          ? await deps.similarityFinder(entry).catch(() => [])
+          : [];
+        const l1 = await deps
+          .validator
+          .validateLevel1({ entry, similarRules: similar }, deps.callLLM)
+          .catch((e): import("@teamagent/ports").ValidationLLMResult => ({
+            ok: false,
+            confidence: 0,
+            reason: `validator_l1_error: ${String(e).slice(0, 120)}`,
+          }));
+        if (!l1.ok) {
+          result = overrideTier(
+            result,
+            entry.current_tier,
+            `l1_blocked: ${l1.reason}`,
+          );
+          deps.bus?.emit({
+            source: "validator",
+            action: "blocked_promotion",
+            target: { id: entry.id },
+            severity: "info",
+            userFacingValue: `L1 blocked ${entry.current_tier} → ${proposedTier}: ${l1.reason}`,
+            timestamp: now.toISOString(),
+          });
+        }
+      }
+      // L2 跑于 canonical / enforced，且 L1 未 block
+      const needsL2 =
+        L2_GATED_TIERS.has(proposedTier) && result.tier_transition !== null;
+      if (needsL2) {
+        const recentHits = evtForEntry
+          .filter(
+            (e) =>
+              e.kind === "hook-pre.matched" || e.kind === "hook-pre.blocked",
+          )
+          .slice(-20)
+          .map((e) => ({
+            tool_input:
+              (e as unknown as { payload?: { tool_input?: unknown } }).payload
+                ?.tool_input ?? null,
+            timestamp: e.timestamp,
+          }));
+        const seniors = deps.store
+          .getAll()
+          .filter(
+            (r) =>
+              (r.current_tier === "canonical" ||
+                r.current_tier === "enforced") &&
+              r.id !== entry.id,
+          );
+        const l2 = await deps
+          .validator
+          .validateLevel2(
+            { entry, recentHits, existingSeniorRules: seniors },
+            deps.callLLM,
+          )
+          .catch((e): import("@teamagent/ports").ValidationLLMResult => ({
+            ok: false,
+            confidence: 0,
+            reason: `validator_l2_error: ${String(e).slice(0, 120)}`,
+          }));
+        if (!l2.ok) {
+          result = overrideTier(
+            result,
+            entry.current_tier,
+            `l2_blocked: ${l2.reason}`,
+          );
+          deps.bus?.emit({
+            source: "validator",
+            action: "blocked_promotion",
+            target: { id: entry.id },
+            severity: "info",
+            userFacingValue: `L2 blocked ${entry.current_tier} → ${proposedTier}: ${l2.reason}`,
+            timestamp: now.toISOString(),
+          });
+        }
+      }
+    }
 
     const confChanged = Math.abs(result.confidence_delta) > 1e-6;
     const demChanged = Math.abs(result.demerit_delta) > 1e-6;
@@ -140,4 +239,40 @@ const TIER_RANK: Record<string, number> = {
 };
 function tierRankGt(a: string, b: string): boolean {
   return (TIER_RANK[a] ?? -1) > (TIER_RANK[b] ?? -1);
+}
+
+/** 判断 from → to 是否为（非 dormant 的）晋升。 */
+function isPromotion(from: string, to: string): boolean {
+  if (from === "dormant" || to === "dormant") return false;
+  return tierRankGt(to, from);
+}
+
+const L1_GATED_TIERS = new Set(["stable", "canonical", "enforced"]);
+const L2_GATED_TIERS = new Set(["canonical", "enforced"]);
+
+/**
+ * Validator 阻断晋升时：回退 tier 到 revertTo；清除 tier_transition；
+ * 在 delta_breakdown 里留记录以便 stats --explain 展示。
+ *
+ * 保守策略：不修改 confidence / demerit 变化（L1/L2 只把关升，不把关降）。
+ */
+function overrideTier<
+  R extends {
+    tier_after: string;
+    tier_transition: TierTransition | null;
+    delta_breakdown: DeltaStep[];
+  },
+>(result: R, revertTo: string, reason: string): R {
+  return {
+    ...result,
+    tier_after: revertTo as R["tier_after"],
+    tier_transition: null,
+    delta_breakdown: [
+      ...result.delta_breakdown,
+      {
+        type: "tier_transition",
+        note: `reverted to ${revertTo}: ${reason}`,
+      } as DeltaStep,
+    ],
+  };
 }
