@@ -8,12 +8,12 @@ INSERT INTO knowledge (
   source, created_at
 ) VALUES (
   'rule-moment-to-dayjs',
-  'global',
+  'personal',
   'tech_choice',
-  'rule',
-  'preference',
+  'avoidance',
+  'objective',
   'using moment for date formatting in TypeScript/JavaScript',
-  'from [''"]moment[''"]',
+  'moment',
   'from ''dayjs''',
   'Prefer dayjs over moment: smaller bundle (~2KB vs ~70KB), immutable API, same-style format strings.',
   'moment is in maintenance mode and bloats client bundles; dayjs is a drop-in modern replacement.',
@@ -21,7 +21,7 @@ INSERT INTO knowledge (
   'stable', 'stable', datetime('now'),
   'block', 'active',
   0, 0, 0, 0,
-  'manual-seed', datetime('now')
+  'preset', datetime('now')
 );
 
 INSERT INTO knowledge (
@@ -34,10 +34,10 @@ INSERT INTO knowledge (
   source, created_at
 ) VALUES (
   'wiki-axios-abort-signal',
-  'global',
+  'personal',
   'api_currency',
-  'wiki',
-  'fact',
+  'avoidance',
+  'objective',
   'cancelling axios requests',
   'CancelToken',
   'AbortController + signal',
@@ -47,7 +47,7 @@ INSERT INTO knowledge (
   'stable', 'stable', datetime('now'),
   'suggest', 'active',
   0, 0, 0, 0,
-  'manual-seed', datetime('now')
+  'preset', datetime('now')
 );
 
 INSERT INTO wiki_meta (

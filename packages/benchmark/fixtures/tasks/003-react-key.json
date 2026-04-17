@@ -2,7 +2,7 @@
   "id": "003-react-key",
   "name": "react list key",
   "category": "framework",
-  "prompt": "Render a React list of items. Show the JSX for the .map() call.",
+  "prompt": "Create a file called UserList.tsx — a React component that takes an array of {id, name} users and renders a <ul> with each user's name as <li>.",
   "evaluator": {
     "type": "pattern",
     "wrong_patterns": ["key=\\{index\\}", "key=\\{i\\}"],
