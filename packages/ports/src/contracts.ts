@@ -14,3 +14,4 @@ export { runErrorSignalCollectorContract } from "./__tests__/error-signal-collec
 export { runCandidateQueueContract } from "./__tests__/candidate-queue-contract.js";
 export { wikiSourceContractSuite } from "./__tests__/wiki-source-contract.js";
 export { wikiEmbedderContractSuite } from "./__tests__/wiki-embedder-contract.js";
+export { wikiRetrieverContractSuite } from "./__tests__/wiki-retriever-contract.js";
