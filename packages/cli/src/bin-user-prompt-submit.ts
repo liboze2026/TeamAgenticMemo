@@ -26,6 +26,35 @@ const DEFAULT_FREQ = {
   sessionMaxInjections: 15,
 } as const;
 
+const HOOK_TIMEOUT_MS = 5_000;
+
+async function runPipeline(db: ReturnType<typeof openDb>, prompt: string): Promise<string | null> {
+  const embedder = new XenovaEmbedder();
+  const retriever = new SqliteWikiRetriever(db);
+  const now = new Date();
+
+  const keywords = extractQueryKeywords(prompt);
+  const queryText = buildQueryText(keywords, prompt);
+  const embeddings = await embedder.embed([queryText]);
+  const embedding = embeddings[0];
+  if (!embedding) return null;
+
+  const entries = await retriever.query({
+    embedding,
+    minSimilarity: 0.75,
+    maxAgeDays: 90,
+    maxResults: 3,
+    now,
+    ...DEFAULT_FREQ,
+  });
+
+  if (entries.length > 0) {
+    retriever.recordInjection(entries.map((e) => e.knowledgeId), now);
+  }
+
+  return formatInjection(entries) || null;
+}
+
 async function main(): Promise<void> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
@@ -45,37 +74,15 @@ async function main(): Promise<void> {
   try {
     db = openDb(dbPath);
   } catch {
-    return; // no DB — silent exit
+    return;
   }
 
-  const embedder = new XenovaEmbedder();
-  const retriever = new SqliteWikiRetriever(db);
-  const now = new Date();
+  const result = await Promise.race([
+    runPipeline(db, prompt),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), HOOK_TIMEOUT_MS)),
+  ]);
 
-  const keywords = extractQueryKeywords(prompt);
-  const queryText = buildQueryText(keywords, prompt);
-  const embeddings = await embedder.embed([queryText]);
-  const embedding = embeddings[0];
-  if (!embedding) return;
-
-  const entries = await retriever.query({
-    embedding,
-    minSimilarity: 0.75,
-    maxAgeDays: 90,
-    maxResults: 3,
-    now,
-    ...DEFAULT_FREQ,
-  });
-
-  if (entries.length > 0) {
-    retriever.recordInjection(
-      entries.map((e) => e.knowledgeId),
-      now,
-    );
-  }
-
-  const output = formatInjection(entries);
-  if (output) process.stdout.write(output + "\n");
+  if (result) process.stdout.write(result + "\n");
 }
 
 main().catch(() => process.exit(0));
