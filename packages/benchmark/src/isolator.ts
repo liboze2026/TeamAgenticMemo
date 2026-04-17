@@ -14,24 +14,31 @@ export async function createGroupWorkdir(
   }
 
   const wd = mkdtempSync(path.join(tmpdir(), `teamagent-bench-${group.name}-`));
-  mkdirSync(path.join(wd, ".claude"), { recursive: true });
-  mkdirSync(path.join(wd, ".teamagent"), { recursive: true });
+  try {
+    mkdirSync(path.join(wd, ".claude"), { recursive: true });
+    mkdirSync(path.join(wd, ".teamagent"), { recursive: true });
 
-  const template = readFileSync(templatePath, "utf8");
-  const substituted = template.replaceAll("{{HOOK_DIR}}", hookDir.replaceAll("\\", "/"));
-  writeFileSync(path.join(wd, ".claude", "settings.local.json"), substituted);
+    const template = readFileSync(templatePath, "utf8");
+    const substituted = template.replaceAll("{{HOOK_DIR}}", hookDir.replaceAll("\\", "/"));
+    writeFileSync(path.join(wd, ".claude", "settings.local.json"), substituted);
 
-  const dbPath = path.join(wd, ".teamagent", "knowledge.db");
-  const db = openDb(dbPath);
+    const dbPath = path.join(wd, ".teamagent", "knowledge.db");
+    const db = openDb(dbPath);
+    try {
+      const seedPath = path.join(group.fixtureDir, "seed.sql");
+      if (existsSync(seedPath)) {
+        const sql = readFileSync(seedPath, "utf8");
+        db.exec(sql);
+      }
+    } finally {
+      db.close();
+    }
 
-  const seedPath = path.join(group.fixtureDir, "seed.sql");
-  if (existsSync(seedPath)) {
-    const sql = readFileSync(seedPath, "utf8");
-    db.exec(sql);
+    return wd;
+  } catch (e) {
+    cleanupGroupWorkdir(wd);
+    throw e;
   }
-  db.close();
-
-  return wd;
 }
 
 export function cleanupGroupWorkdir(workdir: string): void {
