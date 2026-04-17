@@ -57,3 +57,4 @@ export type { CandidateQueue, RuleCandidate } from "./candidate-queue.js";
 export type { WikiSourcePort, RawWikiItem, WikiSourceConfig } from "./wiki-source.js";
 export { WikiFetchError } from "./wiki-source.js";
 export type { WikiEmbedderPort } from "./wiki-embedder.js";
+export type { WikiRetrieverPort, WikiInjectionEntry, WikiQueryOptions } from "./wiki-retriever.js";

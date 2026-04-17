@@ -19,7 +19,10 @@
     "./ingest/candidate-md": "./src/ingest/candidate-md.ts",
     "./ingest/ci-failure": "./src/ingest/ci-failure.ts",
     "./token-counter": "./src/token-counter/index.ts",
-    "./skill-compiler": "./src/compiler/skill-compiler.ts"
+    "./skill-compiler": "./src/compiler/skill-compiler.ts",
+    "./storage/sqlite/sqlite-wiki-retriever": "./src/storage/sqlite/sqlite-wiki-retriever.ts",
+    "./wiki/xenova-embedder": "./src/wiki/xenova-embedder.ts",
+    "./util/normalize-cwd": "./src/util/normalize-cwd.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",

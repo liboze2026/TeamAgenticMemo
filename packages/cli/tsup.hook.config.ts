@@ -9,7 +9,11 @@ import { defineConfig } from "tsup";
  * - 必须是自包含 .cjs，用 `node <absolute-path>` 直接跑，毫秒级启动
  */
 export default defineConfig({
-  entry: ["src/bin-pre-tool-use.ts", "src/bin-post-tool-use.ts"],
+  entry: [
+    "src/bin-pre-tool-use.ts",
+    "src/bin-post-tool-use.ts",
+    "src/bin-user-prompt-submit.ts",
+  ],
   format: ["cjs"],
   platform: "node",
   target: "node20",
@@ -24,7 +28,12 @@ export default defineConfig({
     "@teamagent/core",
     "@teamagent/adapters",
     "zod",
+    "@xenova/transformers",
   ],
+  // jsdom: reads default-stylesheet.css at module load (path breaks when bundled)
+  // Needed by bin-pre/post-tool-use via barrel → wiki-pipeline → sources
+  // sharp, onnxruntime-node: native .node addons that cannot be bundled
+  external: ["sharp", "onnxruntime-node", "jsdom"],
   // 注入 __dirname/__filename/__esm 等 CJS shims，让 import.meta.url 在 CJS bundle 正常工作
   shims: true,
 });

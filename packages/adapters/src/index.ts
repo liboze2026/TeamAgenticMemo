@@ -46,3 +46,4 @@ export { XenovaEmbedder } from "./wiki/xenova-embedder.js";
 export { WikiPipeline, type PipelineOptions, type PipelineReport } from "./wiki/wiki-pipeline.js";
 export { WikiStore } from "./storage/sqlite/wiki-store.js";
 export { WikiSubscriptionStore } from "./wiki/wiki-subscription-store.js";
+export { SqliteWikiRetriever } from "./storage/sqlite/sqlite-wiki-retriever.js";
