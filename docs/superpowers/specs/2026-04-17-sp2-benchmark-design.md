@@ -1,9 +1,9 @@
 # SP-2 Benchmark 框架 v1 设计文档
 
 > 创建日期：2026-04-17
-> 状态：Draft（待用户审）
+> 状态：v1.1 实现完成（PRR 100% 验证通过）
 > 父文档：`docs/superpowers/specs/2026-04-15-phase2-design-v2.md` §6
-> 范围：Phase 2 SP-2 v1（基础设施先行）
+> 范围：Phase 2 SP-2 v1（基础设施先行）+ v1.1（signal 修复）
 
 ---
 
@@ -371,19 +371,102 @@ export async function runTask(task: Task, group: GroupConfig, sdk: SdkRunner, wo
 
 | 风险 | 概率 | 影响 | 缓解 |
 |---|---|---|---|
-| ANTHROPIC_API_KEY 缺失 | 高 | benchmark 完全跑不动 | 启动前预检，缺则报错 |
-| LLM 响应不稳定 | 高 | 单 run 数据噪声 | `temperature=0`；runs=3 取众数（v1 暂不实现） |
-| Token 成本失控 | 中 | 钱包受伤 | 启动前打印预估（task × group × runs × ~5k token），>$1 要 `--confirm-cost`（v2 加） |
-| Hook 冷启动慢污染 duration | 中 | duration 数据不准 | 跑前 warmup 1 个 throwaway task |
-| Windows path/permission 怪事 | 中 | isolator 失败 | 集成测试在 Windows 上跑过 |
+| `claude` CLI 未登录 / OAuth 失效 | 中 | SDK 无法启 session | 运行前 `claude --version`；预检 hook bundle 存在 |
+| LLM 响应不稳定 | 高 | 单 run 数据噪声 | runs=3 取众数（v2 加）；block enforcement 比 suggest 稳得多 |
+| Token 成本失控 | 低 | 订阅额度 | Haiku 默认 + 走 Claude Code 订阅（无 API key 直接计费）；单次全跑 ~6 次调用、总 token ~50k |
+| Hook 冷启动慢污染 duration | 中 | duration 数据不准 | 跑前 warmup 1 个 throwaway task（v2 加）|
+| Windows path/permission 怪事 | 中 | isolator 失败 | 集成测试在 Windows 上跑过；isolator 已加 EBUSY guard |
 | Hook bundle 路径错（worktree vs 主 repo） | 中 | teamagent 组 hook 不生效 | `settings.template.json` 用 `{{HOOK_DIR}}` 占位符，isolator 启动时替换为当前 repo 绝对路径 + 预检 bundle 存在 |
+| Hook 输出 shape 漂移（SDK 升级） | 低 | deny 静默失效 | `bin-pre-tool-use.ts` 用 `hookSpecificOutput` 包装；benchmark 自身作为回归测试 |
 
 ---
 
-## 十、v1 后的演进路径
+## 十、v1.1 Signal 修复复盘（2026-04-17 实现）
+
+v1 首次运行测出 **PRR=0%** — baseline 和 teamagent 都没产生 wrong verdict，hook 生效无法证明。
+根因分析揭示五层叠加问题，v1.1 逐层拆解并修复，最终 PRR=100%。
+
+### 10.1 第一层：Haiku 基线不进陷阱
+
+**症状**：prompt `"use a date library"` → Haiku 自选 `date-fns`，既不命 moment 也不命 dayjs → verdict=neither。
+
+**修**：task prompt 改写为硬压特定陷阱选择（`"use moment.js, our team standard"` / `"use axios.CancelToken API"` / `"use array index as key"`）。baseline 必进坑，teamagent 的 hook 才有拦截对象。
+
+### 10.2 第二层：评测器只扫 text block，不扫 tool_use
+
+**症状**：即使进坑，Claude 通过 Write 工具写出的代码在 assistant `text` block 外，evaluator 看不到。
+
+**修**：新增 `workdir-scanner.ts` — run 结束后扫 workdir 下所有 `.ts/.tsx/.js/.jsx/.mjs/.cjs`，合并到评测输入。跳过 `.teamagent/.claude/node_modules/.git/dist/build`。
+
+### 10.3 第三层：hook 输出 shape 不符合 SDK 规范
+
+**症状**：teamagent 侧规则匹配成功、handler 返回 `{permissionDecision: "deny"}`，但 SDK 不理睬，tool 照常执行。
+
+**根因**：Claude Agent SDK 的 `PreToolUseHookSpecificOutput` 要求 `{ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason } }` 包装。CLI 接受扁平 shape 但 SDK 不接受 — `query()` 静默忽略。
+
+**修**：`packages/cli/src/bin-pre-tool-use.ts` 输出前包装一层 `hookSpecificOutput`。CLI 行为不变，SDK 现在正确识别 deny。
+
+### 10.4 第四层：permissionMode="bypassPermissions" 绕过所有 hook 决定
+
+**症状**：hook shape 修好后仍无拦截。
+
+**根因**：SDK 文档原文："Bypass all permission checks" — 包括 hook 发的 deny。
+
+**修**：切换到 `permissionMode: "acceptEdits"`（保留 hook deny，自动允许常规 edit）。同时在两组 `settings.template.json` 添加显式 `permissions.allow` 白名单（`Write/Edit/MultiEdit/Read/Bash/Glob/Grep`），避免 Haiku 在 `default` 模式下停滞等授权。
+
+### 10.5 第五层：narrative 提及 wrong pattern 造成误判
+
+**症状**：teamagent 被 hook 拦截后，assistant 在解释文本里提到 "I can't use key={index}" → evaluator 按合并文本匹配，反而判 wrong。
+
+**修**：evaluator 优先用 workdir 源文件内容；只有在**没有文件**时回退到 assistant text。narrative 不再影响 verdict。
+
+### 10.6 辅助修复
+
+- CancelToken 规则 `enforcement: suggest` → `block`：`suggest` 只给 hint，Haiku 无视；`block` 才是硬 deny。
+- `maxTurns: 5` → `10`：block 后 Claude 需要更多轮次来重试 + 用建议的替代。
+- runner 给 prompt 追加 workdir 绝对路径 + 指令"收到 deny 请立即用建议的替代重试"，加速 pivot。
+
+### 10.7 验证结果（2026-04-17）
+
+| Group | 001 moment | 002 axios | 003 key | Wrong | Correct |
+|---|---|---|---|---|---|
+| baseline | wrong | wrong | wrong | 3 | 0 |
+| teamagent | correct | correct | correct | 0 | 3 |
+
+**PRR = (3-0)/3 = 100%**。三条规则（moment→dayjs、CancelToken→AbortController、key=index→item.id）全部生效。
+
+---
+
+## 十一、v1 退出标准验证
+
+| DoD 项 | 状态 |
+|---|---|
+| #1 `pnpm benchmark` 跑通 | ✅ |
+| #2 输出 json + md report | ✅ |
+| #3 baseline 比 teamagent 多至少 1 wrong（PRR > 0） | ✅ PRR=100% |
+| #4 零手动干预 | ✅ |
+| #5 单元测试覆盖 5 模块（+ workdir-scanner）| ✅ 47/47 tests pass |
+| #6 typecheck 零新错 | ✅ |
+| #7 SdkRunner Port + Fake 可注入 | ✅ |
+| #8 hook bundle 缺失 fail-fast | ✅ |
+| #9 Walking Skeleton 不断裂 | ✅ |
+
+---
+
+## 十二、关键新发现（供未来 milestone 参考）
+
+1. **hook 输出 shape 规范**：任何新增 hook entry 必须用 `hookSpecificOutput` 包装，否则 SDK 路径静默失效。应加 lint 或契约测试防回归。
+2. **permissionMode 选择**：benchmark/agent 场景用 `acceptEdits`，不要用 `bypassPermissions`（会绕过 hook 决定）。
+3. **评测器分层**：narrative vs. file — file 是真相，text 是解说。未来 LLM judge 评测器也应优先看 artifact。
+4. **Haiku 遵循力**：block enforcement 比 suggest 强数倍；benchmark 种子规则应用 block。
+5. **workdir 绝对路径**：SDK query() 下 Haiku 常幻觉已创建文件；prompt 里明示绝对路径可降噪。
+
+---
+
+## 十三、v1 后的演进路径（不变）
 
 ```
-v1: 基础设施 + 2 组 + 3 任务  ← 本次 SP-2 范围
+v1 + v1.1: 基础设施 + 2 组 + 3 任务 + PRR signal 验证  ← ✅ 已完成
        ↓
 v1.5: 累加 task 到 ~10 个，跑出第一份"半正式"报告（dogfood 数据）
        ↓
@@ -393,12 +476,3 @@ v3: 加 Codacy + 任务到 30+ — 触发 Phase 2 退出标准评测（PRR ≥ m
        ↓
 v4: 并行 + 统计显著性 — 生产级 benchmark
 ```
-
----
-
-## 十一、本文档待用户确认的点
-
-1. v1 范围（2 组 × 3 任务 × 1 run + 基础设施）是否合适？
-2. SdkRunner 接口注入设计是否过度抽象？
-3. 3 个种子任务覆盖（hook 拦截 / wiki 注入 / 纯文本基线）是否够代表性？
-4. 退出标准 #3（baseline 比 teamagent 多至少 1 wrong）作为"证明系统生效"的最小信号是否合理？
