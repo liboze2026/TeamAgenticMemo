@@ -9,11 +9,12 @@ import { defineConfig } from "tsup";
  * - 必须是自包含 .cjs，用 `node <absolute-path>` 直接跑，毫秒级启动
  */
 export default defineConfig({
-  entry: [
-    "src/bin-pre-tool-use.ts",
-    "src/bin-post-tool-use.ts",
-    "src/bin-user-prompt-submit.ts",
-  ],
+  entry: {
+    "bin-pre-tool-use":       "src/bin-pre-tool-use.ts",
+    "bin-post-tool-use":      "src/bin-post-tool-use.ts",
+    "bin-user-prompt-submit": "src/bin-user-prompt-submit.ts",
+    "bin-stop":               "src/bin-stop.ts",
+  },
   format: ["cjs"],
   platform: "node",
   target: "node20",
