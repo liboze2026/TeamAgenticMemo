@@ -64,3 +64,29 @@ INSERT INTO wiki_meta (
   '["axios","cancel","AbortController","AbortSignal"]',
   0, 0, NULL
 );
+
+INSERT INTO knowledge (
+  id, scope_level, category, type, nature, trigger,
+  wrong_pattern, correct_pattern, correct_pattern_tldr,
+  reasoning, confidence, demerit,
+  current_tier, max_tier_ever, tier_entered_at,
+  enforcement, status,
+  hit_count, success_count, override_count, resurrect_count,
+  source, created_at
+) VALUES (
+  'rule-react-key-stable',
+  'personal',
+  'framework',
+  'avoidance',
+  'objective',
+  'using array index as React list key',
+  'key={index}',
+  'key={item.id} or stable identifier',
+  'React keys should be stable identifiers (item.id or a unique string), never array index — index causes state desync, DOM thrash, and broken animations when the list reorders.',
+  'Array index as key breaks React reconciliation when list items are inserted, removed, or reordered; React treats same-index-different-data as mutation rather than move, losing component state and wasting DOM work.',
+  0.92, 0,
+  'stable', 'stable', datetime('now'),
+  'block', 'active',
+  0, 0, 0, 0,
+  'preset', datetime('now')
+);
