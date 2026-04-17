@@ -12,8 +12,9 @@ export interface SdkRunner {
 
 export class ClaudeSdkRunner implements SdkRunner {
   constructor(
-    private timeoutMs: number = 60_000,
+    private timeoutMs: number = 90_000,
     private model: string = "claude-haiku-4-5-20251001",
+    private maxTurns: number = 10,
   ) {}
 
   async run(prompt: string, workdir: string): Promise<SdkRunResult> {
@@ -23,8 +24,8 @@ export class ClaudeSdkRunner implements SdkRunner {
       options: {
         cwd: workdir,
         settingSources: ["local"],
-        permissionMode: "bypassPermissions",
-        maxTurns: 5,
+        permissionMode: "acceptEdits",
+        maxTurns: this.maxTurns,
         abortController,
         model: this.model,
       },

@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "allow": ["Write", "Edit", "MultiEdit", "Read", "Bash", "Glob", "Grep"]
+  },
   "hooks": {
     "PreToolUse": [
       { "matcher": "", "hooks": [{ "type": "command", "command": "node {{HOOK_DIR}}/bin-pre-tool-use.cjs" }] }
