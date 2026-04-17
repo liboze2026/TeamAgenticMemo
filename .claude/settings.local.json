@@ -20,6 +20,43 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|WebFetch",
+        "_teamagentTag": "teamagent-post-tool-use",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:/bzli/teamagent/.worktrees/feat-m2.10/packages/cli/dist/bin-post-tool-use.cjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "_teamagentTag": "teamagent-user-prompt-submit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:/bzli/teamagent/.worktrees/feat-m2.10/packages/cli/dist/bin-user-prompt-submit.cjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "_teamagentTag": "teamagent-stop",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:/bzli/teamagent/.worktrees/feat-m2.10/packages/cli/dist/bin-stop.cjs",
+            "timeout": 60
+          }
+        ]
+      }
     ]
   }
 }
