@@ -1,6 +1,7 @@
 import type { CompiledTask, GroupConfig, TaskResult } from "./types.js";
 import type { SdkRunner } from "./sdk-runner.js";
 import { evaluatePatterns } from "./evaluator.js";
+import { scanWorkdirSources } from "./workdir-scanner.js";
 
 export async function runTask(
   task: CompiledTask,
@@ -13,8 +14,10 @@ export async function runTask(
   try {
     const sdkResult = await sdk.run(task.prompt, workdir);
     const durationMs = Date.now() - start;
+    const workdirSources = await scanWorkdirSources(workdir);
+    const combined = sdkResult.output + (workdirSources ? `\n${workdirSources}` : "");
 
-    if (sdkResult.output === "") {
+    if (combined === "") {
       return {
         group: group.name,
         taskId: task.id,
@@ -28,7 +31,7 @@ export async function runTask(
       };
     }
 
-    const { verdict, reason } = evaluatePatterns(sdkResult.output, task);
+    const { verdict, reason } = evaluatePatterns(combined, task);
     return {
       group: group.name,
       taskId: task.id,
@@ -38,7 +41,7 @@ export async function runTask(
       tokensIn: sdkResult.tokensIn,
       tokensOut: sdkResult.tokensOut,
       durationMs,
-      output: sdkResult.output,
+      output: combined,
     };
   } catch (e) {
     return {

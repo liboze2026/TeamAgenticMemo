@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { runTask } from "../runner.js";
 import { FakeSdkRunner, type SdkRunner } from "../sdk-runner.js";
 import type { CompiledTask, GroupConfig } from "../types.js";
@@ -55,5 +58,47 @@ describe("runTask", () => {
     expect(result.group).toBe("g1");
     expect(result.taskId).toBe("t1");
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("runTask — workdir source scanning", () => {
+  let wd: string;
+  beforeEach(() => {
+    wd = mkdtempSync(path.join(tmpdir(), "bench-runner-"));
+  });
+  afterEach(() => {
+    rmSync(wd, { recursive: true, force: true });
+  });
+
+  it("detects wrong pattern written to workdir file even when SDK text does not contain it", async () => {
+    writeFileSync(path.join(wd, "out.ts"), "import BAD from 'somewhere';");
+    const sdk = new FakeSdkRunner();
+    sdk.setResponse("make me code", { output: "Done! Created the file.", tokensIn: 5, tokensOut: 5 });
+    const result = await runTask(task, group, sdk, wd, 1);
+    expect(result.verdict).toBe("wrong");
+  });
+
+  it("detects correct pattern written to workdir file", async () => {
+    writeFileSync(path.join(wd, "out.ts"), "import { GOOD } from 'lib';");
+    const sdk = new FakeSdkRunner();
+    sdk.setResponse("make me code", { output: "Wrote the file.", tokensIn: 5, tokensOut: 5 });
+    const result = await runTask(task, group, sdk, wd, 1);
+    expect(result.verdict).toBe("correct");
+  });
+
+  it("returns neither/empty_response when both SDK and workdir empty", async () => {
+    const sdk = new FakeSdkRunner();
+    sdk.setResponse("make me code", { output: "", tokensIn: 0, tokensOut: 0 });
+    const result = await runTask(task, group, sdk, wd, 1);
+    expect(result.verdict).toBe("neither");
+    expect(result.reason).toBe("empty_response");
+  });
+
+  it("does not flag empty_response when SDK text empty but workdir has matching file", async () => {
+    writeFileSync(path.join(wd, "out.ts"), "const GOOD_VAR = 1;");
+    const sdk = new FakeSdkRunner();
+    sdk.setResponse("make me code", { output: "", tokensIn: 0, tokensOut: 0 });
+    const result = await runTask(task, group, sdk, wd, 1);
+    expect(result.verdict).toBe("correct");
   });
 });
