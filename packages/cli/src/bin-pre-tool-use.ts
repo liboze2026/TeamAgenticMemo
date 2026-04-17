@@ -69,7 +69,22 @@ async function main(): Promise<void> {
     store.close();
     eventLog.close();
 
-    process.stdout.write(JSON.stringify(result));
+    // Wrap in hookSpecificOutput envelope so both the Claude Code CLI and
+    // the @anthropic-ai/claude-agent-sdk query() respect the decision.
+    // Without the wrapper, the SDK ignores the flat { permissionDecision }
+    // shape and tool calls execute even when the handler returned "deny".
+    const wrapped: Record<string, unknown> = {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: result.permissionDecision,
+        ...(result.permissionDecisionReason
+          ? { permissionDecisionReason: result.permissionDecisionReason }
+          : {}),
+      },
+      ...(result.systemMessage ? { systemMessage: result.systemMessage } : {}),
+    };
+
+    process.stdout.write(JSON.stringify(wrapped));
     process.exit(0);
   } catch (err) {
     process.stderr.write(`teamagent pre-hook: handler error: ${String(err)}\n`);
