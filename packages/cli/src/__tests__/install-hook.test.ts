@@ -118,3 +118,63 @@ describe("uninstallHook", () => {
     expect(r2.removed).toBe(false);
   });
 });
+
+describe("installHook — UserPromptSubmit + Stop", () => {
+  let tmp: ReturnType<typeof mkTmp>;
+  beforeEach(() => { tmp = mkTmp(); });
+  afterEach(() => { tmp.cleanup(); });
+
+  it("registers UserPromptSubmit hook when bundle provided", () => {
+    installHook({
+      cwd: tmp.cwd,
+      hookEntry: FAKE_HOOK_ENTRY,
+      userPromptEntry: FAKE_HOOK_ENTRY,
+    });
+    const content = JSON.parse(
+      fs.readFileSync(path.join(tmp.cwd, ".claude", "settings.local.json"), "utf-8")
+    );
+    expect(content.hooks.UserPromptSubmit).toBeDefined();
+    expect(content.hooks.UserPromptSubmit[0]._teamagentTag).toBe("teamagent-user-prompt-submit");
+    expect(content.hooks.UserPromptSubmit[0].hooks[0].timeout).toBe(10);
+    expect(content.hooks.UserPromptSubmit[0].matcher).toBeUndefined();
+  });
+
+  it("registers Stop hook when bundle provided", () => {
+    installHook({
+      cwd: tmp.cwd,
+      hookEntry: FAKE_HOOK_ENTRY,
+      stopEntry: FAKE_HOOK_ENTRY,
+    });
+    const content = JSON.parse(
+      fs.readFileSync(path.join(tmp.cwd, ".claude", "settings.local.json"), "utf-8")
+    );
+    expect(content.hooks.Stop).toBeDefined();
+    expect(content.hooks.Stop[0]._teamagentTag).toBe("teamagent-stop");
+    expect(content.hooks.Stop[0].hooks[0].timeout).toBe(60);
+    expect(content.hooks.Stop[0].matcher).toBeUndefined();
+  });
+
+  it("idempotent: second install of UserPromptSubmit not duplicated", () => {
+    installHook({ cwd: tmp.cwd, hookEntry: FAKE_HOOK_ENTRY, userPromptEntry: FAKE_HOOK_ENTRY });
+    installHook({ cwd: tmp.cwd, hookEntry: FAKE_HOOK_ENTRY, userPromptEntry: FAKE_HOOK_ENTRY });
+    const content = JSON.parse(
+      fs.readFileSync(path.join(tmp.cwd, ".claude", "settings.local.json"), "utf-8")
+    );
+    expect(content.hooks.UserPromptSubmit).toHaveLength(1);
+  });
+
+  it("uninstall removes UserPromptSubmit and Stop entries", () => {
+    installHook({
+      cwd: tmp.cwd,
+      hookEntry: FAKE_HOOK_ENTRY,
+      userPromptEntry: FAKE_HOOK_ENTRY,
+      stopEntry: FAKE_HOOK_ENTRY,
+    });
+    uninstallHook({ cwd: tmp.cwd });
+    const content = JSON.parse(
+      fs.readFileSync(path.join(tmp.cwd, ".claude", "settings.local.json"), "utf-8")
+    );
+    expect(content.hooks?.UserPromptSubmit).toBeUndefined();
+    expect(content.hooks?.Stop).toBeUndefined();
+  });
+});

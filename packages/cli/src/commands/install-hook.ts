@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const HOOK_TAG = "teamagent-pre-tool-use";
 const POST_HOOK_TAG = "teamagent-post-tool-use";
+const USER_PROMPT_TAG = "teamagent-user-prompt-submit";
+const STOP_HOOK_TAG   = "teamagent-stop";
 
 export interface InstallHookOptions {
   cwd?: string;
@@ -11,12 +13,18 @@ export interface InstallHookOptions {
   hookEntry?: string;
   /** 显式指定 PostToolUse hook 入口绝对路径 */
   postHookEntry?: string;
+  /** 显式指定 UserPromptSubmit hook 入口绝对路径 */
+  userPromptEntry?: string;
+  /** 显式指定 Stop hook 入口绝对路径 */
+  stopEntry?: string;
 }
 
 interface ClaudeSettings {
   hooks?: {
     PreToolUse?: HookEntry[];
     PostToolUse?: HookEntry[];
+    UserPromptSubmit?: HookEntry[];
+    Stop?: HookEntry[];
     [k: string]: unknown;
   };
   [k: string]: unknown;
@@ -149,6 +157,42 @@ export function installHook(opts: InstallHookOptions = {}): {
   if (settings.hooks.PostToolUse?.length === 0) delete settings.hooks.PostToolUse;
   if (settings.hooks.PreToolUse?.length === 0) delete settings.hooks.PreToolUse;
 
+  // UserPromptSubmit 注册
+  const userPromptEntry = opts.userPromptEntry
+    ?? path.join(cliRoot(), "dist", "bin-user-prompt-submit.cjs");
+  const hasUserPromptBundle = fs.existsSync(userPromptEntry);
+  if (!settings.hooks.UserPromptSubmit) settings.hooks.UserPromptSubmit = [];
+  if (hasUserPromptBundle) {
+    const upExisting = settings.hooks.UserPromptSubmit.find(
+      (h) => h._teamagentTag === USER_PROMPT_TAG,
+    );
+    if (!upExisting) {
+      settings.hooks.UserPromptSubmit.push({
+        _teamagentTag: USER_PROMPT_TAG,
+        hooks: [{ type: "command", command: `node ${shellQuote(toForwardSlash(userPromptEntry))}`, timeout: 10 }],
+      });
+    }
+  }
+  if (settings.hooks.UserPromptSubmit.length === 0) delete settings.hooks.UserPromptSubmit;
+
+  // Stop 注册
+  const stopEntry = opts.stopEntry
+    ?? path.join(cliRoot(), "dist", "bin-stop.cjs");
+  const hasStopBundle = fs.existsSync(stopEntry);
+  if (!settings.hooks.Stop) settings.hooks.Stop = [];
+  if (hasStopBundle) {
+    const stopExisting = settings.hooks.Stop.find(
+      (h) => h._teamagentTag === STOP_HOOK_TAG,
+    );
+    if (!stopExisting) {
+      settings.hooks.Stop.push({
+        _teamagentTag: STOP_HOOK_TAG,
+        hooks: [{ type: "command", command: `node ${shellQuote(toForwardSlash(stopEntry))}`, timeout: 60 }],
+      });
+    }
+  }
+  if (settings.hooks.Stop.length === 0) delete settings.hooks.Stop;
+
   writeSettings(settingsPath, settings);
   return {
     settingsPath,
@@ -194,6 +238,24 @@ export function uninstallHook(opts: { cwd?: string } = {}): {
     );
     if (settings.hooks.PostToolUse.length !== before) removedAny = true;
     if (settings.hooks.PostToolUse.length === 0) delete settings.hooks.PostToolUse;
+  }
+
+  if (settings.hooks.UserPromptSubmit) {
+    const before = settings.hooks.UserPromptSubmit.length;
+    settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit.filter(
+      (h) => h._teamagentTag !== USER_PROMPT_TAG,
+    );
+    if (settings.hooks.UserPromptSubmit.length !== before) removedAny = true;
+    if (settings.hooks.UserPromptSubmit.length === 0) delete settings.hooks.UserPromptSubmit;
+  }
+
+  if (settings.hooks.Stop) {
+    const before = settings.hooks.Stop.length;
+    settings.hooks.Stop = settings.hooks.Stop.filter(
+      (h) => h._teamagentTag !== STOP_HOOK_TAG,
+    );
+    if (settings.hooks.Stop.length !== before) removedAny = true;
+    if (settings.hooks.Stop.length === 0) delete settings.hooks.Stop;
   }
 
   if (settings.hooks && Object.keys(settings.hooks).length === 0) {
