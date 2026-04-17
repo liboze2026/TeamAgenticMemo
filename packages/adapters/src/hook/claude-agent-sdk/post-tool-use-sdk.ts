@@ -10,7 +10,8 @@ export interface PostToolUseDeps {
 
 export function createPostToolUseHandler(deps: PostToolUseDeps) {
   return async (input: PostToolUseHookInput): Promise<Record<string, never>> => {
-    const { tool_use_id, tool_response } = input;
+    const tool_use_id = input.tool_use_id ?? crypto.randomUUID();
+    const { tool_response } = input;
     const now = new Date().toISOString();
     const success = inferToolSuccess(tool_response);
 

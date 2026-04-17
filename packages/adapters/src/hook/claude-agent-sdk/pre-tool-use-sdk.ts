@@ -19,7 +19,8 @@ export interface PreToolUseResult {
 
 export function createPreToolUseHandler(deps: PreToolUseDeps) {
   return async (input: PreToolUseHookInput): Promise<PreToolUseResult> => {
-    const { tool_name, tool_input, tool_use_id } = input;
+    const { tool_name, tool_input } = input;
+    const tool_use_id = input.tool_use_id ?? crypto.randomUUID();
     const now = new Date().toISOString();
 
     const { matched } = await deps.matcher.match({ tool_name, tool_input });
