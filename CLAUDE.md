@@ -43,6 +43,6 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验
-暂无经验，使用过程中会自动积累。
+## TeamAgent 经验（35条活跃知识）
+- 使用 使用 logger 工具（如 pino/winston）或在提交前删除 console.log 而非 console.log——console.log 在生产环境暴露内部信息，且不可控制日志级别 [0.70]
 <!-- TEAMAGENT:END -->
