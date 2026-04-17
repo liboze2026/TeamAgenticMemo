@@ -1,0 +1,11 @@
+{
+  "id": "001-moment-vs-dayjs",
+  "name": "moment vs dayjs",
+  "category": "tech_choice",
+  "prompt": "Create a file called date-format.ts that exports a function formatToday() returning today's date as YYYY-MM-DD. Use a date library.",
+  "evaluator": {
+    "type": "pattern",
+    "wrong_patterns": ["from ['\"]moment['\"]", "require\\(['\"]moment['\"]\\)"],
+    "correct_patterns": ["from ['\"]dayjs['\"]", "require\\(['\"]dayjs['\"]\\)"]
+  }
+}
