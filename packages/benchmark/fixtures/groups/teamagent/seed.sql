@@ -45,7 +45,7 @@ INSERT INTO knowledge (
   'CancelToken was deprecated in axios 0.22.0 (Oct 2021) in favor of the standard AbortController/AbortSignal Web API.',
   0.95, 0,
   'stable', 'stable', datetime('now'),
-  'suggest', 'active',
+  'block', 'active',
   0, 0, 0, 0,
   'preset', datetime('now')
 );
