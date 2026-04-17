@@ -13,12 +13,10 @@ import {
   buildQueryText,
   formatInjection,
 } from "@teamagent/core";
-import {
-  SqliteWikiRetriever,
-  XenovaEmbedder,
-  openDb,
-  normalizeCwd,
-} from "@teamagent/adapters";
+import { SqliteWikiRetriever } from "@teamagent/adapters/storage/sqlite/sqlite-wiki-retriever";
+import { XenovaEmbedder } from "@teamagent/adapters/wiki/xenova-embedder";
+import { openDb } from "@teamagent/adapters/storage/sqlite/schema";
+import { normalizeCwd } from "@teamagent/adapters/util/normalize-cwd";
 
 const DEFAULT_FREQ = {
   cooldownMinutes: 30,
