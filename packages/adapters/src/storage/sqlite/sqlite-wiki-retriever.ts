@@ -16,11 +16,15 @@ export class SqliteWikiRetriever implements WikiRetrieverPort {
       sessionMaxInjections,
     } = opts;
 
+    const cooldownStr = String(Math.floor(Number(cooldownMinutes)));
+    const sessionWindowStr = String(Math.floor(Number(sessionWindowMinutes)));
+    const maxAgeDaysStr = String(Math.floor(Number(maxAgeDays)));
+
     // Step 1: session total check — if already injected >= limit in window, bail out
     const sessionRow = this.db.prepare(`
       SELECT COUNT(*) AS n FROM wiki_meta
       WHERE last_injected_at > datetime(?, '-' || ? || ' minutes')
-    `).get(now.toISOString(), String(sessionWindowMinutes)) as { n: number };
+    `).get(now.toISOString(), sessionWindowStr) as { n: number };
 
     if (sessionRow.n >= sessionMaxInjections) return [];
 
@@ -48,8 +52,8 @@ export class SqliteWikiRetriever implements WikiRetrieverPort {
         LIMIT ?
       `).all(
         embeddingJson,
-        now.toISOString(), String(cooldownMinutes),
-        now.toISOString(), String(maxAgeDays),
+        now.toISOString(), cooldownStr,
+        now.toISOString(), maxAgeDaysStr,
         embeddingJson, minSimilarity,
         maxResults,
       ) as Array<Record<string, unknown>>;
