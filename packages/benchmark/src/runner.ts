@@ -51,7 +51,7 @@ export async function runTask(
       tokensOut: 0,
       durationMs: Date.now() - start,
       output: "",
-      errorMsg: (e as Error).message,
+      errorMsg: e instanceof Error ? e.message : String(e),
     };
   }
 }

@@ -1,6 +1,10 @@
 import { writeFileSync } from "node:fs";
 import type { BenchmarkConfig, GroupSummary, Report, TaskResult } from "./types.js";
 
+function escapeMd(s: string): string {
+  return s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
 export function aggregate(results: TaskResult[], config: BenchmarkConfig): Report {
   const groupNames = [...new Set(results.map((r) => r.group))];
   const groups: GroupSummary[] = groupNames.map((name) => {
@@ -20,6 +24,7 @@ export function aggregate(results: TaskResult[], config: BenchmarkConfig): Repor
   let prr = 0;
   let tokenDeltaPercent = 0;
   let durationDeltaPercent = 0;
+  // PRR counts wrongs across all runs, not majority-vote per task. With runs>1 denominator scales accordingly.
   if (baseline && teamagent && baseline.wrongCount > 0) {
     prr = (baseline.wrongCount - teamagent.wrongCount) / baseline.wrongCount;
   }
@@ -58,7 +63,7 @@ export function writeMarkdown(report: Report, outputPath: string): void {
   lines.push("| Group | Wrong | Correct | Neither | Error | Tokens (in/out) | Avg Duration |");
   lines.push("|---|---|---|---|---|---|---|");
   for (const g of report.groups) {
-    lines.push(`| ${g.group} | ${g.wrongCount} | ${g.correctCount} | ${g.neitherCount} | ${g.errorCount} | ${g.totalTokensIn} / ${g.totalTokensOut} | ${g.avgDurationMs.toFixed(0)}ms |`);
+    lines.push(`| ${escapeMd(g.group)} | ${g.wrongCount} | ${g.correctCount} | ${g.neitherCount} | ${g.errorCount} | ${g.totalTokensIn} / ${g.totalTokensOut} | ${g.avgDurationMs.toFixed(0)}ms |`);
   }
   lines.push("");
   lines.push(`**PRR**: ${(report.comparison.prr * 100).toFixed(1)}%`);
@@ -68,7 +73,7 @@ export function writeMarkdown(report: Report, outputPath: string): void {
   lines.push("## Per-Task Breakdown");
   lines.push("");
   for (const r of report.rawResults) {
-    lines.push(`- [${r.group}] ${r.taskId} run=${r.run} → **${r.verdict}** (${r.durationMs}ms${r.reason ? `, ${r.reason}` : ""})`);
+    lines.push(`- [${escapeMd(r.group)}] ${escapeMd(r.taskId)} run=${r.run} → **${r.verdict}** (${r.durationMs}ms${r.reason ? `, ${escapeMd(r.reason)}` : ""})`);
   }
   writeFileSync(outputPath, lines.join("\n"));
 }
