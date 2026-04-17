@@ -1,6 +1,5 @@
 import Parser from "rss-parser";
 import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
 import type { WikiSourcePort, RawWikiItem, WikiSourceConfig } from "@teamagent/ports";
 import { WikiFetchError } from "@teamagent/ports";
 
@@ -8,6 +7,7 @@ async function fetchContent(url: string): Promise<string> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     const html = await res.text();
+    const { JSDOM } = await import("jsdom");
     const dom = new JSDOM(html, { url });
     const article = new Readability(dom.window.document).parse();
     return article?.textContent?.trim() ?? "";

@@ -43,7 +43,6 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（18条活跃知识）
-- 使用 用 5 min 时间窗 + tool_name 匹配；接受 false positive 而非 用 session_id 精确判断——hook input 不保证有 session_id—— [0.70]
-- 使用 先在 packages/types/src/persisted-event.ts 的 kind union 加类型，再 emit；DEMERIT_KIND_TO_SOURCE 已就绪，只需类型补全 而非 直接 emit 未声明 kind → TS 编译挂（M2.3 教训重演）—— [0.70]
+## TeamAgent 经验
+暂无经验，使用过程中会自动积累。
 <!-- TEAMAGENT:END -->

@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node C:/bzli/teamagent/.worktrees/feat-m2.10/packages/cli/dist/bin-post-tool-use.cjs",
+            "command": "node C:/bzli/teamagent/packages/cli/dist/bin-post-tool-use.cjs",
             "timeout": 30
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node C:/bzli/teamagent/.worktrees/feat-m2.10/packages/cli/dist/bin-user-prompt-submit.cjs",
+            "command": "node C:/bzli/teamagent/packages/cli/dist/bin-user-prompt-submit.cjs",
             "timeout": 10
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node C:/bzli/teamagent/.worktrees/feat-m2.10/packages/cli/dist/bin-stop.cjs",
+            "command": "node C:/bzli/teamagent/packages/cli/dist/bin-stop.cjs",
             "timeout": 60
           }
         ]

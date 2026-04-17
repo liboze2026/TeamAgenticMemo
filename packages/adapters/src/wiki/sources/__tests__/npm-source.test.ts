@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { wikiSourceContractSuite } from "@teamagent/ports";
+import { wikiSourceContractSuite } from "@teamagent/ports/contracts";
 import { NpmSource } from "../npm-source.js";
 
 const SAMPLE_NPM_DATA = {

@@ -1,5 +1,4 @@
 import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
 import type { WikiSourcePort, RawWikiItem, WikiSourceConfig } from "@teamagent/ports";
 import { WikiFetchError } from "@teamagent/ports";
 
@@ -17,6 +16,7 @@ export class ManualSource implements WikiSourcePort {
         throw new WikiFetchError("manual", `Failed to fetch ${url}: ${res.status}`);
       }
       const html = await res.text();
+      const { JSDOM } = await import("jsdom");
       const dom = new JSDOM(html, { url });
       const article = new Readability(dom.window.document).parse();
       content = article?.textContent?.trim() ?? "";

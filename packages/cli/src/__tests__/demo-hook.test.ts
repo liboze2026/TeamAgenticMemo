@@ -7,16 +7,26 @@ import { executePitfall } from "../commands/pitfall.js";
 import { DualLayerStore } from "@teamagent/adapters";
 import type { KnowledgeEntry } from "@teamagent/types";
 
+function rmRetry(p: string) {
+  // Windows: node:sqlite WAL mode holds shm/wal files briefly after close()
+  for (let i = 0; i < 8; i++) {
+    try { fs.rmSync(p, { recursive: true, force: true }); return; } catch (e: any) {
+      if ((e.code === "EBUSY" || e.code === "EPERM") && i < 7) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+        continue;
+      }
+      return; // ignore remaining lock errors
+    }
+  }
+}
+
 function mkTmp() {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "demo-cwd-"));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "demo-home-"));
   return {
     cwd,
     home,
-    cleanup: () => {
-      fs.rmSync(cwd, { recursive: true, force: true });
-      fs.rmSync(home, { recursive: true, force: true });
-    },
+    cleanup: () => { rmRetry(cwd); rmRetry(home); },
   };
 }
 

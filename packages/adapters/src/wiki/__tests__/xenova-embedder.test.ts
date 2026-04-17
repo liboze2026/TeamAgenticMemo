@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { wikiEmbedderContractSuite } from "@teamagent/ports";
+import { wikiEmbedderContractSuite } from "@teamagent/ports/contracts";
 
 // Mock @xenova/transformers before any imports that use it
 vi.mock("@xenova/transformers", () => ({
