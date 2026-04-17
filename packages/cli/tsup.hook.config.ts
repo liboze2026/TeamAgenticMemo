@@ -30,11 +30,9 @@ export default defineConfig({
     "zod",
     "@xenova/transformers",
   ],
-  // native .node addons and DOM-heavy libs that cannot be bundled by esbuild:
-  // - jsdom reads browser/default-stylesheet.css at module load (file asset, path breaks when bundled)
-  // - sharp/onnxruntime-node are native addons
-  // All are transitively pulled in via @teamagent/adapters → wiki-pipeline → sources → rss/manual-source
-  // but are never invoked by the hook's code path (hook only uses SqliteWikiRetriever + XenovaEmbedder)
+  // jsdom: reads default-stylesheet.css at module load (path breaks when bundled)
+  // Needed by bin-pre/post-tool-use via barrel → wiki-pipeline → sources
+  // sharp, onnxruntime-node: native .node addons that cannot be bundled
   external: ["sharp", "onnxruntime-node", "jsdom"],
   // 注入 __dirname/__filename/__esm 等 CJS shims，让 import.meta.url 在 CJS bundle 正常工作
   shims: true,
