@@ -1,0 +1,11 @@
+{
+  "id": "001-moment-vs-dayjs",
+  "name": "moment vs dayjs",
+  "category": "tech_choice",
+  "prompt": "Write a small TypeScript snippet that imports a date library and formats today's date as YYYY-MM-DD. Show only the import statement and the format call.",
+  "evaluator": {
+    "type": "pattern",
+    "wrong_patterns": ["from ['\"]moment['\"]", "require\\(['\"]moment['\"]\\)"],
+    "correct_patterns": ["from ['\"]dayjs['\"]", "require\\(['\"]dayjs['\"]\\)"]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "003-react-key",
+  "name": "react list key",
+  "category": "framework",
+  "prompt": "Render a React list of items. Show the JSX for the .map() call.",
+  "evaluator": {
+    "type": "pattern",
+    "wrong_patterns": ["key=\\{index\\}", "key=\\{i\\}"],
+    "correct_patterns": ["key=\\{[a-zA-Z][a-zA-Z0-9_.]*\\.id\\}", "key=\\{item\\.id\\}"]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node {{HOOK_DIR}}/bin-pre-tool-use.cjs" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node {{HOOK_DIR}}/bin-post-tool-use.cjs" }] }
+    ],
+    "UserPromptSubmit": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node {{HOOK_DIR}}/bin-user-prompt-submit.cjs" }] }
+    ]
+  }
+}
