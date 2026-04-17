@@ -108,3 +108,4 @@ export {
   type WikiEntry,
   type JudgedWikiItem,
 } from "./wiki/index.js";
+export * from "./wiki-injection/index.js";
