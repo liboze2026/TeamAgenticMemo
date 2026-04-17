@@ -11,13 +11,19 @@ export async function runTask(
   run: number,
 ): Promise<TaskResult> {
   const start = Date.now();
+  const prompt = `${task.prompt}\n\nIMPORTANT: Your working directory is ${workdir}. Create files directly under this directory using the Write tool. If the Write tool returns a permission denial with an alternative (dayjs, AbortController, item.id, etc.), use that alternative immediately on the next attempt — do not ask for confirmation, just write the file with the suggested approach.`;
   try {
-    const sdkResult = await sdk.run(task.prompt, workdir);
+    const sdkResult = await sdk.run(prompt, workdir);
     const durationMs = Date.now() - start;
     const workdirSources = await scanWorkdirSources(workdir);
-    const combined = sdkResult.output + (workdirSources ? `\n${workdirSources}` : "");
+    // If the task produced real source files, evaluate only those — assistant
+    // narrative often mentions the wrong pattern when describing what it
+    // declined to do, which would falsely flip the verdict to "wrong".
+    // When no files were produced, fall back to the assistant text so empty
+    // runs still surface as "neither".
+    const evalTarget = workdirSources || sdkResult.output;
 
-    if (combined === "") {
+    if (evalTarget === "") {
       return {
         group: group.name,
         taskId: task.id,
@@ -31,7 +37,8 @@ export async function runTask(
       };
     }
 
-    const { verdict, reason } = evaluatePatterns(combined, task);
+    const { verdict, reason } = evaluatePatterns(evalTarget, task);
+    const combined = sdkResult.output + (workdirSources ? `\n${workdirSources}` : "");
     return {
       group: group.name,
       taskId: task.id,
