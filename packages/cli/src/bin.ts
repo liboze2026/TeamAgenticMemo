@@ -42,6 +42,7 @@ import {
   parseCompileArgs,
   renderCompileResult,
 } from "./commands/compile.js";
+import { executeConfig } from "./commands/config.js";
 import { executeScanErrors, parseScanErrorsArgs } from "./commands/scan-errors.js";
 import {
   executeReviewCandidates,
@@ -224,6 +225,23 @@ async function main(): Promise<void> {
       process.stdout.write(renderCompileResult(result, opts.dryRun));
       return;
     }
+    case "config": {
+      const sub = rest[0];
+      const val = rest[1];
+      if (!sub || (sub !== "show" && sub !== "stop-mode")) {
+        console.error('Usage: teamagent config stop-mode <sync|async>');
+        console.error('       teamagent config show');
+        process.exit(1);
+      }
+      try {
+        const out = executeConfig({ subcommand: sub as "stop-mode" | "show", value: val });
+        console.log(out);
+      } catch (e) {
+        console.error(String(e));
+        process.exit(1);
+      }
+      break;
+    }
     case "migrate": {
       const dryRun = rest.includes("--dry-run");
       const { executeMigrate } = await import("./commands/migrate-v1-to-v2.js");
@@ -346,6 +364,8 @@ async function main(): Promise<void> {
           "                                   编译双出口：CLAUDE.md (canonical+, 3000 token 预算) + Agent Skills (stable+)",
           "                                   --dry-run: 预览将写/删哪些文件，不实际写入",
           "                                   --skills-only / --markdown-only: 只写其中一路出口",
+          "  teamagent config stop-mode <sync|async>  切换 Stop hook 运行模式（默认 sync）",
+          "  teamagent config show                    查看当前配置",
           "  teamagent scan-errors [--mode=efficient|full] [--since=<duration|ISO>] [--min-freq=N] [--dry-run] [--quiet]",
           "                                   自动采集错误信号 → 提取候选规则 → 写入候选队列",
           "  teamagent review-candidates [--limit=N]",
