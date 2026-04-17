@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS wiki_meta (
   FOREIGN KEY(knowledge_id) REFERENCES knowledge(id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_source ON wiki_meta(source_type, source_id);
+-- idx_wiki_source is created in migration v1→v2 after source_id column is guaranteed to exist
 
 -- Wiki 订阅表（M2.6）
 CREATE TABLE IF NOT EXISTS wiki_subscriptions (
