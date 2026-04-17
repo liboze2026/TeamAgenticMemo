@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS wiki_meta (
   keywords                 TEXT NOT NULL,
   user_thumbs_down         INTEGER DEFAULT 0,
   inline_injection_count   INTEGER DEFAULT 0,
+  last_injected_at         TEXT,
   fetch_error              TEXT,
   FOREIGN KEY(knowledge_id) REFERENCES knowledge(id) ON DELETE CASCADE
 );
@@ -151,7 +152,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (1, datetime('now'));
 `;
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 
 /**
@@ -189,6 +190,13 @@ export function openDb(path: string): DatabaseSync {
       )`);
     } catch { /* ok if sqlite-vec not loaded */ }
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (3, datetime('now'))");
+  }
+
+  // Migration: schema_version 3 → 4 (add last_injected_at to wiki_meta)
+  const versionNow = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
+  if (!versionNow || versionNow.version < 4) {
+    try { db.exec("ALTER TABLE wiki_meta ADD COLUMN last_injected_at TEXT"); } catch {}
+    db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (4, datetime('now'))");
   }
 
   return db;
