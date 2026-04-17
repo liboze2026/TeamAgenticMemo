@@ -1,0 +1,69 @@
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+export interface SdkRunResult {
+  output: string;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+export interface SdkRunner {
+  run(prompt: string, workdir: string): Promise<SdkRunResult>;
+}
+
+export class ClaudeSdkRunner implements SdkRunner {
+  constructor(private timeoutMs: number = 60_000) {}
+
+  async run(prompt: string, workdir: string): Promise<SdkRunResult> {
+    const session = query({
+      prompt,
+      options: {
+        cwd: workdir,
+        settingSources: ["local"],
+        permissionMode: "bypassPermissions",
+        maxTurns: 5,
+      },
+    });
+
+    let output = "";
+    let tokensIn = 0;
+    let tokensOut = 0;
+
+    const work = (async () => {
+      for await (const msg of session) {
+        if (msg.type === "assistant") {
+          for (const block of msg.message.content) {
+            if (block.type === "text") output += block.text;
+          }
+        }
+        if (msg.type === "result") {
+          tokensIn = msg.usage.input_tokens ?? 0;
+          tokensOut = msg.usage.output_tokens ?? 0;
+        }
+      }
+    })();
+
+    await Promise.race([
+      work,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("SDK timeout")), this.timeoutMs),
+      ),
+    ]);
+
+    return { output, tokensIn, tokensOut };
+  }
+}
+
+export class FakeSdkRunner implements SdkRunner {
+  constructor(private responses: Map<string, SdkRunResult> = new Map()) {}
+
+  setResponse(promptKey: string, result: SdkRunResult): void {
+    this.responses.set(promptKey, result);
+  }
+
+  async run(prompt: string, _workdir: string): Promise<SdkRunResult> {
+    for (const [key, result] of this.responses) {
+      if (prompt.includes(key)) return result;
+    }
+    return { output: "", tokensIn: 0, tokensOut: 0 };
+  }
+}
