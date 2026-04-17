@@ -14,6 +14,7 @@ export class ClaudeSdkRunner implements SdkRunner {
   constructor(private timeoutMs: number = 60_000) {}
 
   async run(prompt: string, workdir: string): Promise<SdkRunResult> {
+    const abortController = new AbortController();
     const session = query({
       prompt,
       options: {
@@ -21,34 +22,47 @@ export class ClaudeSdkRunner implements SdkRunner {
         settingSources: ["local"],
         permissionMode: "bypassPermissions",
         maxTurns: 5,
+        abortController,
       },
     });
 
     let output = "";
     let tokensIn = 0;
     let tokensOut = 0;
+    let timeoutHandle: NodeJS.Timeout | undefined;
 
     const work = (async () => {
-      for await (const msg of session) {
-        if (msg.type === "assistant") {
-          for (const block of msg.message.content) {
-            if (block.type === "text") output += block.text;
+      try {
+        for await (const msg of session) {
+          if (msg.type === "assistant") {
+            for (const block of msg.message.content) {
+              if (block.type === "text") output += block.text;
+            }
+          }
+          if (msg.type === "result") {
+            tokensIn = msg.usage.input_tokens ?? 0;
+            tokensOut = msg.usage.output_tokens ?? 0;
           }
         }
-        if (msg.type === "result") {
-          tokensIn = msg.usage.input_tokens ?? 0;
-          tokensOut = msg.usage.output_tokens ?? 0;
-        }
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
       }
     })();
 
-    await Promise.race([
-      work,
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("SDK timeout")), this.timeoutMs),
-      ),
-    ]);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        abortController.abort();
+        session.close();
+        reject(new Error("SDK timeout"));
+      }, this.timeoutMs);
+    });
 
+    try {
+      await Promise.race([work, timeoutPromise]);
+    } catch (e) {
+      work.catch(() => {}); // swallow post-abort rejection so it never surfaces unhandled
+      throw e;
+    }
     return { output, tokensIn, tokensOut };
   }
 }
