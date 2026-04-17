@@ -1,5 +1,7 @@
 # SP-2 Benchmark v1 Implementation Plan
 
+> **Status:** v1 + v1.1 COMPLETE (2026-04-17). See §Final Status below.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build benchmark infrastructure — runs baseline vs teamagent comparison with 3 seed tasks, generates JSON+Markdown report, proves hooks actually intercept.
@@ -8,7 +10,55 @@
 
 **Tech Stack:** `@anthropic-ai/claude-agent-sdk`, `@teamagent/adapters` (openDb only), `vitest`, `zod`, `tsx`/`tsup`
 
+**LLM backend:** Haiku 4.5 (`claude-haiku-4-5-20251001`) via the `claude` CLI subscription (OAuth). No `ANTHROPIC_API_KEY` required — SDK inherits the user's Claude Code auth.
+
 ---
+
+## Final Status (2026-04-17)
+
+All 9 v1 tasks + 5 v1.1 tasks complete. PRR=100% on the three-task seed suite.
+
+| Task | Status | Commit(s) |
+|------|--------|-----------|
+| v1-1 Package skeleton + types | ✅ | `f559f6c feat(sp2): packages/benchmark skeleton + types` |
+| v1-2 task-loader (TDD) | ✅ | `a100c2c feat(sp2): task-loader — zod schema + regex compile fail-fast` |
+| v1-3 evaluator (TDD) | ✅ | `88d1aaa feat(sp2): pattern evaluator — wrong > correct > neither` |
+| v1-4 isolator (TDD) | ✅ | `f01f72b` + `0b8fa82 fix(sp2): isolator finally + cleanup on partial failure — Windows EBUSY guard` |
+| v1-5 SdkRunner Port + Fake + Claude | ✅ | `a8597c2` + `e7fea69 fix(sp2): SdkRunner timeout — abortController + session.close + clearTimeout` |
+| v1-6 runner (TDD with FakeSdkRunner) | ✅ | `a0598cf feat(sp2): runTask — SDK call + evaluator + error/empty handling` |
+| v1-7 reporter (TDD) | ✅ | `c32a567` + `360de46 fix(sp2): Error cast safety + markdown cell escape + multi-run PRR note` |
+| v1-8 bin orchestrator + fixtures | ✅ | `a054b23` + `487fb3d fix(sp2): seed enums + task prompts demand Write + integration test` |
+| v1-9 Walking Skeleton + Haiku default | ✅ | `5fcfa55 feat(sp2): Haiku default model + drop API key precheck (OAuth fallback)` |
+| Merge into master | ✅ | `63df4f8 merge: feat/sp2-benchmark — SP-2 Benchmark v1 infrastructure` |
+| v1.1-1 evaluator scans workdir files | ✅ | `85fe5ba feat(sp2): evaluator scans workdir files — source-of-truth pattern match` |
+| v1.1-2 task prompts force specific trap | ✅ | `04966be feat(sp2): task prompts force specific trap — signal-validating by design` |
+| v1.1-3 hook output wrapped for SDK | ✅ | `879ea64 fix(hook): wrap PreToolUse output in hookSpecificOutput for SDK compat` |
+| v1.1-4 permission allowlist + acceptEdits + maxTurns=10 | ✅ | `3330437 feat(sp2): permission allowlist + acceptEdits + maxTurns=10` |
+| v1.1-5 runner workdir hint + file-preferred eval | ✅ | `50b0a01 feat(sp2): runner prepends workdir hint + evaluates files over narrative` |
+| v1.1-6 axios rule enforcement=block | ✅ | `797d900 feat(sp2): axios CancelToken rule enforcement=block` |
+| v1.1-7 gitignore bench-report outputs | ✅ | `82d6a7f chore(sp2): gitignore bench-report outputs` |
+| v1.1-8 design doc retrospective | ✅ | `656b791 docs(sp2): design v1.1 — PRR signal fix retrospective` |
+
+### Final PRR Validation
+
+```
+pnpm benchmark --groups=baseline,teamagent --tasks=all --runs=1
+
+[1/6] baseline/001-moment-vs-dayjs run=1 ... wrong (11979ms)
+[2/6] baseline/002-axios-cancel   run=1 ... wrong (12381ms)
+[3/6] baseline/003-react-key      run=1 ... wrong (11356ms)
+[4/6] teamagent/001-moment-vs-dayjs run=1 ... correct (23394ms)
+[5/6] teamagent/002-axios-cancel   run=1 ... correct (20391ms)
+[6/6] teamagent/003-react-key      run=1 ... correct (43533ms)
+
+PRR: 100.0%
+```
+
+47/47 benchmark unit tests green. Full `pnpm test` reports 969/969 at the merge point (one unrelated Windows pre-existing flake in `calibrate.test.ts`).
+
+---
+
+## Original Plan (historical — preserved for trace)
 
 ## File Structure
 
