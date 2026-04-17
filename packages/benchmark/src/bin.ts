@@ -32,10 +32,6 @@ async function main(): Promise<void> {
     ? path.join(fixturesDir, "tasks", "*.json")
     : path.join(fixturesDir, "tasks", `${config.tasks}*.json`);
 
-  if (!process.env["ANTHROPIC_API_KEY"]) {
-    console.error("ERROR: ANTHROPIC_API_KEY not set");
-    process.exit(1);
-  }
   if (config.groups.includes("teamagent")) {
     const required = ["bin-pre-tool-use.cjs", "bin-post-tool-use.cjs", "bin-user-prompt-submit.cjs"];
     for (const f of required) {

@@ -11,7 +11,10 @@ export interface SdkRunner {
 }
 
 export class ClaudeSdkRunner implements SdkRunner {
-  constructor(private timeoutMs: number = 60_000) {}
+  constructor(
+    private timeoutMs: number = 60_000,
+    private model: string = "claude-haiku-4-5-20251001",
+  ) {}
 
   async run(prompt: string, workdir: string): Promise<SdkRunResult> {
     const abortController = new AbortController();
@@ -23,6 +26,7 @@ export class ClaudeSdkRunner implements SdkRunner {
         permissionMode: "bypassPermissions",
         maxTurns: 5,
         abortController,
+        model: this.model,
       },
     });
 
