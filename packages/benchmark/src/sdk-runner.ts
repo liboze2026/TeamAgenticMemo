@@ -14,7 +14,7 @@ export class ClaudeSdkRunner implements SdkRunner {
   constructor(
     private timeoutMs: number = 90_000,
     private model: string = "claude-haiku-4-5-20251001",
-    private maxTurns: number = 10,
+    private maxTurns: number = 15,
   ) {}
 
   async run(prompt: string, workdir: string): Promise<SdkRunResult> {
