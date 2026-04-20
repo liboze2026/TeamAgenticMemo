@@ -210,26 +210,32 @@ export interface RecentEntry {
 
 /**
  * 查询过去 2 小时内在项目 DB 新创建的 active 条目。
- * 用 dynamic require 加载 better-sqlite3，避免 ESM/CJS 混用问题。
+ * 使用 node:sqlite（Node 22 内置），与项目其余 SQLite 代码保持一致。
+ * better-sqlite3 并未安装，不得使用。
  */
 export async function getRecentEntries(cwd: string): Promise<RecentEntry[]> {
   const dbPath = path.join(cwd, ".teamagent", "knowledge.db");
+  let db: DatabaseSync | undefined;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Database = require("better-sqlite3") as typeof import("better-sqlite3");
-    const db = new Database(dbPath, { readonly: true });
-    const rows = db
-      .prepare(
-        `SELECT tldr, confidence FROM knowledge_entries
-         WHERE status = 'active'
-           AND created_at >= datetime('now', '-2 hours')
-         ORDER BY created_at DESC
-         LIMIT 10`,
-      )
-      .all() as RecentEntry[];
-    db.close();
-    return rows;
+    const { DatabaseSync } = _require("node:sqlite") as typeof import("node:sqlite");
+    db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(correct_pattern_tldr, trigger) AS tldr, confidence
+           FROM knowledge
+           WHERE status = 'active'
+             AND created_at >= datetime('now', '-2 hours')
+           ORDER BY created_at DESC
+           LIMIT 10`,
+        )
+        .all() as RecentEntry[];
+      return rows;
+    } finally {
+      db.close();
+    }
   } catch {
+    try { db?.close(); } catch { /* already closed */ }
     return [];
   }
 }

@@ -1,4 +1,10 @@
 import path from "node:path";
+import { createRequire } from "node:module";
+import type { DatabaseSync } from "node:sqlite";
+
+// node:sqlite is a Node 22+ experimental built-in. Use createRequire to load it
+// at runtime to avoid ESM static-import resolution issues in vitest.
+const _require = createRequire(import.meta.url);
 
 export interface RecentEntry {
   tldr: string;
@@ -11,22 +17,27 @@ export interface RecentEntry {
  */
 export async function getRecentEntries(cwd: string): Promise<RecentEntry[]> {
   const dbPath = path.join(cwd, ".teamagent", "knowledge.db");
+  let db: DatabaseSync | undefined;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Database = require("better-sqlite3") as typeof import("better-sqlite3");
-    const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const rows = db
-      .prepare(
-        `SELECT tldr, confidence FROM knowledge_entries
-         WHERE status = 'active'
-           AND created_at >= datetime('now', '-2 hours')
-         ORDER BY created_at DESC
-         LIMIT 10`,
-      )
-      .all() as RecentEntry[];
-    db.close();
-    return rows;
+    const { DatabaseSync } = _require("node:sqlite") as typeof import("node:sqlite");
+    db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(correct_pattern_tldr, trigger) AS tldr, confidence
+           FROM knowledge
+           WHERE status = 'active'
+             AND created_at >= datetime('now', '-2 hours')
+           ORDER BY created_at DESC
+           LIMIT 10`,
+        )
+        .all() as RecentEntry[];
+      return rows;
+    } finally {
+      db.close();
+    }
   } catch {
+    try { db?.close(); } catch { /* already closed */ }
     return [];
   }
 }
