@@ -44,9 +44,8 @@ export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
   const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline } = await import("@teamagent/adapters");
 
   const db = openDb(resolveDbPath(opts));
-  const envTimeout = parseInt(process.env.TEAMAGENT_LLM_TIMEOUT_MS ?? "", 10);
-  const llmTimeoutMs = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 120_000;
-  const llm = new ClaudeCodeLLMClient({ timeoutMs: llmTimeoutMs });
+  // ClaudeCodeLLMClient defaults to 120s and respects TEAMAGENT_LLM_TIMEOUT_MS.
+  const llm = new ClaudeCodeLLMClient();
   const embedder = new XenovaEmbedder();
   const pipeline = new WikiPipeline(db, llm, embedder);
 

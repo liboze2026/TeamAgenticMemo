@@ -75,4 +75,35 @@ describe("runStopPipeline", () => {
     };
     await expect(runStopPipeline(input)).resolves.toBeUndefined();
   });
+
+  // Regression: Stop hook can fire before Claude flushes the transcript jsonl.
+  // Previous behavior threw on the first "Session not found" and skipped to
+  // calibrate/compile; analyze must retry instead so most sessions actually
+  // produce candidates.
+  it("retries analyze when it throws Session not found", async () => {
+    vi.mocked(executeAnalyze)
+      .mockRejectedValueOnce(new Error("Session not found: /tmp/session.jsonl"))
+      .mockRejectedValueOnce(new Error("Session not found: /tmp/session.jsonl"))
+      .mockResolvedValueOnce("analyze done");
+    const input: StopHookInput = {
+      session_id: "abc123",
+      transcript_path: "/tmp/session.jsonl",
+      cwd: process.cwd(),
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    expect(executeAnalyze).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry on non-race errors", async () => {
+    vi.mocked(executeAnalyze).mockRejectedValueOnce(new Error("permission denied"));
+    const input: StopHookInput = {
+      session_id: "abc123",
+      transcript_path: "/tmp/session.jsonl",
+      cwd: process.cwd(),
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    expect(executeAnalyze).toHaveBeenCalledTimes(1);
+  });
 });

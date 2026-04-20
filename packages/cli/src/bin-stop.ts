@@ -29,16 +29,31 @@ const PIPELINE_TIMEOUT_MS = 55_000;
 export async function runStopPipeline(input: StopHookInput): Promise<void> {
   const cwd = input.cwd;
 
-  // Step 1: analyze
+  // Step 1: analyze. Claude Code can fire Stop before the transcript jsonl
+  // finishes flushing to disk → "Session not found". Retry a few times so the
+  // pipeline survives the race.
   try {
     process.stderr.write("TeamAgent: 分析会话中...\n");
-    const result = await executeAnalyze({
-      session: input.transcript_path,
-      commit: true,
-      cwd,
-    });
-    const firstLine = result.split("\n")[0] ?? "分析完成";
-    process.stderr.write(`TeamAgent: ${firstLine}\n`);
+    let lastErr: unknown;
+    let analyzed = false;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        const result = await executeAnalyze({
+          session: input.transcript_path,
+          commit: true,
+          cwd,
+        });
+        const firstLine = result.split("\n")[0] ?? "分析完成";
+        process.stderr.write(`TeamAgent: ${firstLine}\n`);
+        analyzed = true;
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (!String(e).includes("Session not found") || attempt === 4) break;
+        await new Promise((r) => setTimeout(r, attempt * 1500));
+      }
+    }
+    if (!analyzed) throw lastErr;
   } catch (e) {
     logError(cwd, "analyze", e);
   }

@@ -47,7 +47,16 @@ export class ClaudeCodeLLMClient implements LLMClient {
 
   constructor(opts: ClaudeCodeLLMClientOptions = {}) {
     this.executable = opts.executable ?? "claude";
-    this.timeoutMs = opts.timeoutMs ?? 30000;
+    // Precedence: explicit opt > TEAMAGENT_LLM_TIMEOUT_MS env > 120s default.
+    // 30s was too tight in practice — Claude CLI cold-start alone can take ~15s
+    // before the actual prompt is processed, so wiki judge / extract pipelines
+    // routinely timed out before producing anything.
+    if (opts.timeoutMs !== undefined) {
+      this.timeoutMs = opts.timeoutMs;
+    } else {
+      const envVal = parseInt(process.env.TEAMAGENT_LLM_TIMEOUT_MS ?? "", 10);
+      this.timeoutMs = Number.isFinite(envVal) && envVal > 0 ? envVal : 120_000;
+    }
     this.spawner = opts.spawner ?? defaultSpawner;
   }
 
