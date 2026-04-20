@@ -285,33 +285,21 @@ function checkClaudeMd(claudeMdPath: string): DoctorCheckResult {
   };
 }
 
-const CHECK_LABELS: Record<string, string> = {
-  "node-version":    "Node.js     ",
-  "claude-code":     "Claude Code ",
-  "sqlite-vec":      "sqlite-vec  ",
-  "home-dir":        "~/.teamagent",
-  "knowledge-db":    "knowledge.db",
-  "hook-registered": "Hook 注册   ",
-  "hook-script":     "Hook 脚本   ",
-  "claude-md":       "CLAUDE.md   ",
-};
-
 export function renderDoctorResult(result: DoctorResult): string {
   const lines: string[] = [];
   lines.push("环境诊断 / Environment Check");
   lines.push("─".repeat(40));
 
   for (const check of result.checks) {
-    const label = CHECK_LABELS[check.name] ?? check.name.padEnd(12);
     if (check.status === "pass") {
-      lines.push(`✅ ${check.name} (${label})  ${check.detail}`);
+      lines.push(`✅ ${check.name.padEnd(16)}  ${check.detail}`);
     } else if (check.status === "fail") {
-      lines.push(`❌ ${check.name} (${label})  ${check.detail}`);
+      lines.push(`❌ ${check.name.padEnd(16)}  ${check.detail}`);
       if (check.fix) {
         lines.push(`   → 运行: ${check.fix}`);
       }
     } else {
-      lines.push(`⏭  ${check.name} (${label})  (${check.detail})`);
+      lines.push(`⏭  ${check.name.padEnd(16)}  (${check.detail})`);
     }
   }
 
