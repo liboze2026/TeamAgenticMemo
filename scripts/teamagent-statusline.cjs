@@ -8,7 +8,7 @@ let DatabaseSync;
 try {
   ({ DatabaseSync } = require("node:sqlite"));
 } catch {
-  process.stdout.write("✦ TeamAgent · (sqlite不可用)");
+  process.stdout.write("TeamAgent正在运行 · (sqlite不可用)");
   process.exit(0);
 }
 
@@ -72,7 +72,7 @@ function main() {
   const knowledgeDb = tryOpenDb(PROJECT_DB);
 
   if (!knowledgeDb) {
-    process.stdout.write("✦ TeamAgent · (未初始化)");
+    process.stdout.write("TeamAgent正在运行 · (未初始化)");
     return;
   }
 
@@ -94,10 +94,10 @@ function main() {
     }
   }
 
-  const parts = ["✦ TeamAgent"];
-  parts.push(count !== null ? `${count}条` : "-条");
-  if (todayBlocks !== null) parts.push(`拦截${todayBlocks}今日`);
-  if (lastDate) parts.push(`上次${lastDate}`);
+  const parts = ["TeamAgent正在运行"];
+  parts.push(`规则库现有：${count !== null ? count : "-"}条`);
+  parts.push(todayBlocks !== null ? `今日已拦截：${todayBlocks}` : "今日已拦截：-");
+  if (lastDate) parts.push(`系统最近解析规则时间：${lastDate}`);
 
   process.stdout.write(parts.join(" · "));
 }
