@@ -111,23 +111,39 @@ export function parseClaudeJsonOutput(stdout: string): string {
       `Claude CLI 返回不是合法 JSON: ${trimmed.slice(0, 200)}`,
     );
   }
-  if (!parsed || typeof parsed !== "object") {
-    throw new LLMClientError("unparseable-output", "响应不是 object。");
+
+  // CLI v2.1+ returns an array of streaming events; older CLI returned a single object.
+  let resultObj: Record<string, unknown>;
+  if (Array.isArray(parsed)) {
+    const found = parsed.find(
+      (e) => e && typeof e === "object" && (e as Record<string, unknown>).type === "result",
+    );
+    if (!found) {
+      throw new LLMClientError(
+        "unparseable-output",
+        `响应数组中无 type:"result" 元素: ${trimmed.slice(0, 200)}`,
+      );
+    }
+    resultObj = found as Record<string, unknown>;
+  } else if (parsed && typeof parsed === "object") {
+    resultObj = parsed as Record<string, unknown>;
+  } else {
+    throw new LLMClientError("unparseable-output", "响应不是 object 或 array。");
   }
-  const obj = parsed as Record<string, unknown>;
-  if (obj.is_error === true) {
+
+  if (resultObj.is_error === true) {
     throw new LLMClientError(
       "non-zero-exit",
-      `Claude CLI is_error=true: ${String(obj.result ?? obj.error ?? "unknown")}`,
+      `Claude CLI is_error=true: ${String(resultObj.result ?? resultObj.error ?? "unknown")}`,
     );
   }
-  if (typeof obj.result !== "string") {
+  if (typeof resultObj.result !== "string") {
     throw new LLMClientError(
       "unparseable-output",
       `响应缺 .result 字段或不是 string: ${trimmed.slice(0, 200)}`,
     );
   }
-  return obj.result;
+  return resultObj.result;
 }
 
 /** 默认的真实 spawner，基于 node:child_process。 */

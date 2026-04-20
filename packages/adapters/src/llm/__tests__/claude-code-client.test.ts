@@ -132,4 +132,38 @@ describe("parseClaudeJsonOutput", () => {
       parseClaudeJsonOutput(JSON.stringify({ result: 42 })),
     ).toThrow(LLMClientError);
   });
+
+  // Claude CLI v2.1+ returns an array of streaming events (system/assistant/result/...).
+  // Parser must locate the {type:"result"} element and return its .result field.
+  it("extracts .result from streaming-events array (CLI v2.1+ format)", () => {
+    const stdout = JSON.stringify([
+      { type: "system", subtype: "init", session_id: "abc" },
+      { type: "assistant", message: { content: [{ type: "text", text: "Hi." }] } },
+      { type: "rate_limit_event", rate_limit_info: { status: "allowed" } },
+      {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Hi.",
+        duration_ms: 1234,
+      },
+    ]);
+    expect(parseClaudeJsonOutput(stdout)).toBe("Hi.");
+  });
+
+  it("throws when array has no {type:'result'} element", () => {
+    const stdout = JSON.stringify([
+      { type: "system", subtype: "init" },
+      { type: "assistant", message: {} },
+    ]);
+    expect(() => parseClaudeJsonOutput(stdout)).toThrow(LLMClientError);
+  });
+
+  it("throws when array's result event has is_error=true", () => {
+    const stdout = JSON.stringify([
+      { type: "system" },
+      { type: "result", is_error: true, result: "rate limited" },
+    ]);
+    expect(() => parseClaudeJsonOutput(stdout)).toThrow(/is_error/);
+  });
 });
