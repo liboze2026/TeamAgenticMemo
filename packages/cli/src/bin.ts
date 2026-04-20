@@ -43,6 +43,11 @@ import {
   renderCompileResult,
 } from "./commands/compile.js";
 import { executeConfig } from "./commands/config.js";
+import {
+  executeDoctor,
+  parseDoctorArgs,
+  renderDoctorResult,
+} from "./commands/doctor.js";
 import { executeScanErrors, parseScanErrorsArgs } from "./commands/scan-errors.js";
 import {
   executeReviewCandidates,
@@ -324,6 +329,17 @@ async function main(): Promise<void> {
       await executeWikiDislike(id, opts);
       return;
     }
+    case "doctor": {
+      const opts = parseDoctorArgs(rest);
+      const result = await executeDoctor({ ...opts, cwd: process.cwd() });
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      } else if (!opts.postinstall || !result.allPassed) {
+        process.stdout.write(renderDoctorResult(result));
+      }
+      if (!result.allPassed) process.exit(1);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -350,6 +366,10 @@ async function main(): Promise<void> {
           "                                   列出最近 N 条知识（默认 10），供人工复核",
           "  teamagent init [--dry-run] [--skip-import] [--skip-hook]",
           "                                   一键安装到当前项目：建目录 + 注入元原则 + 导入已有规则 + 注册 Hook + 编译 CLAUDE.md",
+          "  teamagent doctor [--fix] [--json]",
+          "                                   诊断安装环境（Node版本/Claude Code/sqlite-vec/Hook/CLAUDE.md）",
+          "                                   --fix: 自动修复能自动修的问题",
+          "                                   --json: 输出机器可读 JSON",
           "  teamagent disable                临时禁用 Hook（保留数据）",
           "  teamagent enable                 重新启用 Hook",
           "  teamagent uninstall [--delete-data] [--dry-run]",
