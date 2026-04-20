@@ -503,7 +503,7 @@ export function renderInitResult(result: InitResult): string {
   // Group steps for display
   const stepGroups: Array<{ icon: string; label: string; stepKeys: string[] }> = [
     { icon: "🔍", label: "检测项目环境", stepKeys: ["detect-stack"] },
-    { icon: "📦", label: "初始化知识库", stepKeys: ["pre-check", "create-dirs", "load-presets", "import-rules", "import-rules-llm"] },
+    { icon: "📦", label: "初始化知识库", stepKeys: ["pre-check", "create-dirs", "load-preset", "scan-rules", "structure-rules"] },
     { icon: "🔗", label: "注册 Hook", stepKeys: ["install-hook"] },
     { icon: "📄", label: "编译 CLAUDE.md", stepKeys: ["compile-claude-md"] },
   ];
@@ -546,9 +546,9 @@ function stepLabel(step: string): string {
     "pre-check": "前置检查",
     "detect-stack": "技术栈",
     "create-dirs": "目录创建",
-    "load-presets": "预置规则",
-    "import-rules": "导入规则",
-    "import-rules-llm": "LLM导入",
+    "load-preset": "预置规则",
+    "scan-rules": "扫描规则",
+    "structure-rules": "导入规则",
     "install-hook": "Hook 注册",
     "compile-claude-md": "CLAUDE.md",
   };
