@@ -43,6 +43,7 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验
-暂无经验，使用过程中会自动积累。
+## TeamAgent 经验（40条活跃知识）
+- 先把凭据/环境持久化到项目配置（增量、不改已有内容），再让 subagent 自主完成；远程实验需先检测空闲显卡避免影响他人——反复追问凭据打断用户节奏；配置应一次记录永久复用。subagent 应自主推进而非报 BLOCKED。共享 GPU 资源需礼让他人实验 [0.95]
+- 主 agent 调用 subagent 执行远程实验，自己保留上下文处理后续任务——长耗时远程实验若占用主 agent 会阻塞后续工作；委派给 subagent 可并行推进，主 agent 保持响应 [0.80]
 <!-- TEAMAGENT:END -->
