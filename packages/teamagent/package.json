@@ -9,7 +9,8 @@
     "teamagent": "./dist/bin.js"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "postinstall.mjs"
   ],
   "engines": {
     "node": ">=22.0.0"
