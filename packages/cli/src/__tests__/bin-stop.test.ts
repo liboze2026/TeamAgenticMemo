@@ -99,8 +99,8 @@ describe("runStopPipeline", () => {
     expect(executeAnalyze).toHaveBeenCalledTimes(3);
   });
 
-  it("does not retry on non-race errors", async () => {
-    vi.mocked(executeAnalyze).mockRejectedValueOnce(new Error("permission denied"));
+  it("does not retry on unrelated errors", async () => {
+    vi.mocked(executeAnalyze).mockRejectedValueOnce(new Error("unexpected format"));
     const input: StopHookInput = {
       session_id: "abc123",
       transcript_path: "/tmp/session.jsonl",
@@ -109,6 +109,20 @@ describe("runStopPipeline", () => {
     };
     await runStopPipeline(input);
     expect(executeAnalyze).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries on permission denied (Windows file lock race)", async () => {
+    vi.mocked(executeAnalyze)
+      .mockRejectedValueOnce(new Error("EACCES: permission denied, open '/tmp/session.jsonl'"))
+      .mockResolvedValueOnce("分析完成\n");
+    const input: StopHookInput = {
+      session_id: "abc123",
+      transcript_path: "/tmp/session.jsonl",
+      cwd: process.cwd(),
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    expect(executeAnalyze).toHaveBeenCalledTimes(2);
   });
 
   it("outputs stdout learning summary when recent entries exist", async () => {

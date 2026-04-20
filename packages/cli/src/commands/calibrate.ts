@@ -19,6 +19,7 @@ import {
   type CalibrationV2Record,
 } from "@teamagent/core";
 import type { PersistedEvent } from "@teamagent/types";
+import type { Observation } from "@teamagent/adapters";
 
 export interface CalibrateOptions {
   cwd?: string;
@@ -63,6 +64,23 @@ function resolvePaths(opts: CalibrateOptions) {
       opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
   };
+}
+
+/**
+ * Convert hook-post.result events into Observation objects for the v2 calibrator.
+ * The v2 calibrator uses Wilson LB on observations — without this, confidence never moves.
+ */
+function synthesizeObservations(events: PersistedEvent[]): Observation[] {
+  return events
+    .filter((e) => e.kind === "hook-post.result" && e.knowledge_id)
+    .map((e) => ({
+      id: `obs-${e.id}`,
+      knowledge_id: e.knowledge_id!,
+      timestamp: e.timestamp,
+      outcome: ((e as any).payload?.success === false) ? "failure" : "success",
+      source_event: e.id,
+      tool_use_id: e.tool_use_id,
+    } satisfies Observation));
 }
 
 function filterEventsByDays(
@@ -239,11 +257,12 @@ export async function executeCalibrate(
         continue;
       }
 
+      const observations = synthesizeObservations(events);
       const v2Result = await runCalibrationPipelineV2({
         calibrator: v2Calibrator,
         store: store as any,
         events,
-        observations: [], // T15 will add observations adapter
+        observations,
         now,
         dryRun,
       });

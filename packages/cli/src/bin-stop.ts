@@ -26,16 +26,30 @@ export interface StopHookInput {
 
 const PIPELINE_TIMEOUT_MS = 55_000;
 
+function isRetryableAnalyzeError(e: unknown): boolean {
+  const msg = String(e);
+  return (
+    msg.includes("Session not found") ||
+    msg.includes("permission denied") ||
+    msg.includes("EACCES") ||
+    msg.includes("EPERM") ||
+    msg.includes("EBUSY")
+  );
+}
+
 export async function runStopPipeline(input: StopHookInput): Promise<void> {
   const cwd = input.cwd;
 
   // Step 1: analyze. Claude Code can fire Stop before the transcript jsonl
-  // finishes flushing to disk → "Session not found". Retry a few times so the
-  // pipeline survives the race.
+  // finishes flushing to disk, or the file may still be locked on Windows
+  // (EACCES/EPERM). Retry up to 4 times with back-off.
   try {
     process.stderr.write("TeamAgent: 分析会话中...\n");
     let lastErr: unknown;
     let analyzed = false;
+    // Small initial wait: Claude Code may still hold the transcript file lock
+    // when Stop fires on Windows.
+    await new Promise((r) => setTimeout(r, 300));
     for (let attempt = 1; attempt <= 4; attempt++) {
       try {
         const result = await executeAnalyze({
@@ -49,7 +63,7 @@ export async function runStopPipeline(input: StopHookInput): Promise<void> {
         break;
       } catch (e) {
         lastErr = e;
-        if (!String(e).includes("Session not found") || attempt === 4) break;
+        if (!isRetryableAnalyzeError(e) || attempt === 4) break;
         await new Promise((r) => setTimeout(r, attempt * 1500));
       }
     }
@@ -94,7 +108,8 @@ export async function runStopPipeline(input: StopHookInput): Promise<void> {
 function logError(cwd: string, step: string, err: unknown): void {
   try {
     const logPath = path.join(os.homedir(), ".teamagent", "stop-errors.log");
-    const msg = `[${new Date().toISOString()}] step=${step} cwd=${cwd} err=${String(err)}\n`;
+    const stack = err instanceof Error && err.stack ? `\n  stack: ${err.stack.split("\n").slice(1, 3).join(" | ")}` : "";
+    const msg = `[${new Date().toISOString()}] step=${step} cwd=${cwd} err=${String(err)}${stack}\n`;
     appendFileSync(logPath, msg, "utf-8");
   } catch {
     // log write failure must not propagate
