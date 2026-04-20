@@ -493,26 +493,79 @@ export function parseInitArgs(argv: string[]): InitOptions {
   return opts;
 }
 
-export function renderInitResult(r: InitResult): string {
+export function renderInitResult(result: InitResult): string {
   const lines: string[] = [];
-  lines.push(r.dryRun ? "🔍 TeamAgent Init (dry-run)" : "✨ TeamAgent Init");
-  lines.push("");
-  for (const s of r.steps) {
-    const sym = s.status === "ok" ? "✓" : s.status === "skipped" ? "-" : "✗";
-    lines.push(`  ${sym} ${s.step.padEnd(22)} ${s.detail}`);
+
+  if (result.dryRun) {
+    lines.push("⚠️  预览模式（--dry-run）：以下操作不会实际执行\n");
   }
-  lines.push("");
-  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  if (r.ok) {
-    lines.push(`  stack: ${r.summary.stack || "(未识别)"}`);
-    lines.push(`  知识库: +${r.summary.presetAdded} 元原则, +${r.summary.importedRules} 导入`);
-    lines.push(`  当前活跃条目: ${r.summary.totalActiveEntries} 条`);
-    if (!r.dryRun) {
-      lines.push("  下一步: 开 Claude Code，AI 已知这些经验");
+
+  // Group steps for display
+  const stepGroups: Array<{ icon: string; label: string; stepKeys: string[] }> = [
+    { icon: "🔍", label: "检测项目环境", stepKeys: ["detect-stack"] },
+    { icon: "📦", label: "初始化知识库", stepKeys: ["pre-check", "create-dirs", "load-presets", "import-rules", "import-rules-llm"] },
+    { icon: "🔗", label: "注册 Hook", stepKeys: ["install-hook"] },
+    { icon: "📄", label: "编译 CLAUDE.md", stepKeys: ["compile-claude-md"] },
+  ];
+
+  for (const group of stepGroups) {
+    const groupSteps = result.steps.filter((s) => group.stepKeys.includes(s.step));
+    if (groupSteps.length === 0) continue;
+    lines.push(`${group.icon} ${group.label}...`);
+    for (const s of groupSteps) {
+      if (s.step === "detect-stack" && s.status === "ok") {
+        lines.push(`   技术栈: ${s.detail}`);
+      } else if (s.status === "ok") {
+        lines.push(`   ✅ ${stepLabel(s.step)}: ${s.detail}`);
+      } else if (s.status === "skipped") {
+        lines.push(`   ⏭  ${stepLabel(s.step)}: ${s.detail}`);
+      } else {
+        lines.push(`   ❌ ${stepLabel(s.step)}: ${friendlyError(s.detail)}`);
+      }
     }
-  } else {
-    lines.push("  ✗ init 未完全成功。检查上面的 'failed' 步骤，可能需要手动清理。");
+    lines.push("");
   }
-  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+  lines.push("━".repeat(36));
+  if (result.ok) {
+    lines.push("✅ TeamAgent 安装成功！\n");
+    lines.push("下一步:");
+    lines.push("  1. 重新打开 Claude Code（让 hook 生效）");
+    lines.push("  2. 运行 teamagent doctor 验证安装");
+    lines.push("  3. 运行 teamagent stats 查看知识库状态");
+  } else {
+    lines.push("❌ 安装未完成，请修复以上问题后重试");
+    lines.push("   运行 teamagent doctor 获取诊断建议");
+  }
+
   return lines.join("\n") + "\n";
+}
+
+function stepLabel(step: string): string {
+  const map: Record<string, string> = {
+    "pre-check": "前置检查",
+    "detect-stack": "技术栈",
+    "create-dirs": "目录创建",
+    "load-presets": "预置规则",
+    "import-rules": "导入规则",
+    "import-rules-llm": "LLM导入",
+    "install-hook": "Hook 注册",
+    "compile-claude-md": "CLAUDE.md",
+  };
+  return map[step] ?? step;
+}
+
+function friendlyError(raw: string): string {
+  if (raw.includes("ENOENT") && raw.includes(".teamagent")) {
+    return "无法创建 ~/.teamagent 目录，请检查磁盘权限";
+  }
+  if (raw.includes("sqlite-vec") || raw.includes("extension")) {
+    return "sqlite-vec 扩展加载失败。运行 teamagent doctor 诊断";
+  }
+  if (raw.includes("CLAUDE.md") && (raw.includes("EACCES") || raw.includes("不可读写"))) {
+    return "CLAUDE.md 文件无写入权限，请运行: chmod 644 CLAUDE.md";
+  }
+  // For pre-check failures that already have friendly messages, pass through
+  if (raw.length < 120) return raw;
+  return raw.slice(0, 100) + "...";
 }

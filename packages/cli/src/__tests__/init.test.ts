@@ -249,11 +249,10 @@ describe("renderInitResult", () => {
         totalActiveEntries: 6,
       },
     });
-    expect(out).toContain("TeamAgent Init");
-    expect(out).toContain("pre-check");
-    expect(out).toContain("+4 元原则");
-    expect(out).toContain("+2 导入");
-    expect(out).toContain("活跃条目: 6");
+    expect(out).toContain("✅ TeamAgent 安装成功");
+    expect(out).toContain("前置检查");
+    expect(out).toContain("lang=typescript");
+    expect(out).toContain("重新打开 Claude Code");
   });
 
   it("failure → shows warning footer", () => {
@@ -263,7 +262,57 @@ describe("renderInitResult", () => {
       steps: [{ step: "pre-check", status: "failed", detail: "bad permissions" }],
       summary: { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 },
     });
-    expect(out).toContain("未完全成功");
-    expect(out).toContain("failed");
+    expect(out).toContain("❌ 安装未完成");
+    expect(out).toContain("前置检查");
+  });
+});
+
+describe("renderInitResult — new UX", () => {
+  it("shows success banner when all steps pass", () => {
+    const result = {
+      ok: true,
+      dryRun: false,
+      steps: [
+        { step: "pre-check", status: "ok" as const, detail: "所有前置检查通过" },
+        { step: "detect-stack", status: "ok" as const, detail: "lang=typescript" },
+        { step: "create-dirs", status: "ok" as const, detail: ".teamagent/" },
+        { step: "load-presets", status: "ok" as const, detail: "加载 12 条元原则" },
+        { step: "import-rules", status: "ok" as const, detail: "导入 5 条" },
+        { step: "install-hook", status: "ok" as const, detail: "已写入" },
+        { step: "compile-claude-md", status: "ok" as const, detail: "写入 3 条" },
+      ],
+      summary: { stack: "typescript", presetAdded: 12, importedRules: 5, totalActiveEntries: 17 },
+    };
+    const out = renderInitResult(result);
+    expect(out).toContain("✅ TeamAgent 安装成功");
+    expect(out).toContain("重新打开 Claude Code");
+    expect(out).toContain("teamagent doctor");
+  });
+
+  it("shows failure banner when a step fails", () => {
+    const result = {
+      ok: false,
+      dryRun: false,
+      steps: [
+        { step: "pre-check", status: "failed" as const, detail: "CLAUDE.md 文件无写入权限，请运行: chmod 644 CLAUDE.md" },
+      ],
+      summary: { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 },
+    };
+    const out = renderInitResult(result);
+    expect(out).toContain("❌ 安装未完成");
+    expect(out).toContain("teamagent doctor");
+    expect(out).not.toContain("ENOENT"); // no raw errors
+  });
+
+  it("shows dry-run banner when dryRun=true", () => {
+    const result = {
+      ok: true,
+      dryRun: true,
+      steps: [],
+      summary: { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 },
+    };
+    const out = renderInitResult(result);
+    expect(out).toContain("预览模式");
+    expect(out).toContain("--dry-run");
   });
 });
