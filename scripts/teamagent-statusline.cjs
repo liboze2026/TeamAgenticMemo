@@ -3,7 +3,14 @@
 
 const path = require("path");
 const os = require("os");
-const { DatabaseSync } = require("node:sqlite");
+
+let DatabaseSync;
+try {
+  ({ DatabaseSync } = require("node:sqlite"));
+} catch {
+  process.stdout.write("✦ TeamAgent · (sqlite不可用)");
+  process.exit(0);
+}
 
 const PROJECT_DB = path.resolve(__dirname, "../.teamagent/knowledge.db");
 const GLOBAL_EVENTS_DB = path.join(os.homedir(), ".teamagent", "events.db");
