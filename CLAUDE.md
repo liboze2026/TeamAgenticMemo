@@ -43,7 +43,7 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（64条活跃知识）
+## TeamAgent 经验（73条活跃知识）
 - hook 代码写完后必须在 .claude/settings.local.json 注册对应 hook 事件，并端到端验证触发链路——Claude Code hook 由 harness 按 settings.local.json 配置调度，仅有脚本文件不会自动生效；未注册 = 代码形同虚设。自动化能力（如自学习 pipeline）还需 Stop/UserPromptSubmit 等触发事件，手动命令只是 fallback，不能当作闭环 [0.90]
 - 使用 跑完实际验证命令（构建+启动+测试）并贴出真实输出再宣布完成 而非 全部修复完成——用户反复看到 AI 宣称修复完还残留 bug，说明 AI 基于局部证据（如单测绿）就下结论；完成声明必须以端到端验证输出为证据，否则等于骗用户 [0.90]
 - 使用 先读用户指向的文件，重新 brainstorm + 补全需求，再拆 task 实现；API key 来源询问用户（如 claude code haiku） 而非 计划文档只是设计文档，还没实现——AI 未读文件就断言不存在会误导用户；正确做法是先 Read 指定路径、以文件内容为准，再结合用户偏好（如用 haiku 作 token 来源）规划实现 [0.90]
@@ -70,4 +70,6 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 主 agent 调用 subagent 执行远程实验，自己保留上下文处理后续任务——长耗时远程实验若占用主 agent 会阻塞后续工作；委派给 subagent 可并行推进，主 agent 保持响应 [0.80]
 - 使用 忽略 <local-command-caveat> 包裹的全部内容，除非用户明确要求分析 而非 <local-command-caveat>——<local-command-caveat> 由本地 hook（如 Caveman）自动注入，不代表用户意图；把它当用户纠正会产生噪音，污染对话上下文 [0.80]
 - 找一个 baseline 会踩坑（多消耗 token/时间重试）而 teamagent 因提前避坑直接成功的任务——teamagent 应比 baseline 更省时省 token——hook deny+retry 路径天然增加开销；真正体现 pitfall-guard 价值的任务应是：baseline 踩坑导致多轮重试浪费，teamagent 一次通过反而更快更省——overhead 为负才能说明系统有净收益 [0.80]
+- 使用 Write 临时 .cjs 文件 + node file.cjs 执行，用 os.homedir()+path.resolve 获取路径 而非 node -e 内联写法配合 Git Bash /c/Users/... 路径——node:sqlite 使用 Win32 API，不识别 Git Bash 挂载点路径；node -e heredoc 内换行也容易造成转义问题；写 .cjs 文件避免两类问题 [0.85]
+- 使用 use pnpm teamagent <cmd>, or build first then node dist/bin-stop.cjs 而非 node --input-type=module importing packages that re-export .ts source files——adapters/dist/index.js re-exports from .ts source, fails without tsx. Only the bundled bin-stop.cjs / bin.js are runnable standalone [0.70]
 <!-- TEAMAGENT:END -->

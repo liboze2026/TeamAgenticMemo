@@ -16,7 +16,8 @@
     "dogfood-report": "tsx packages/cli/src/bin.ts dogfood-report",
     "benchmark": "pnpm --filter @teamagent/benchmark bench",
     "build:publish": "pnpm --filter teamagent build",
-    "prepublish:teamagent": "pnpm build:publish && cd packages/teamagent && npm pack --dry-run"
+    "prepublish:teamagent": "pnpm build:publish && cd packages/teamagent && npm pack --dry-run",
+    "dashboard": "node scripts/generate-dashboard.cjs"
   },
   "engines": {
     "node": ">=22.5.0"
