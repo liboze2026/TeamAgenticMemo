@@ -68,3 +68,9 @@ describe("parseDoctorArgs", () => {
     expect(opts.postinstall).toBe(true);
   });
 });
+
+describe("executeDoctor --fix", () => {
+  it("parseDoctorArgs recognizes --fix", () => {
+    expect(parseDoctorArgs(["--fix"]).fix).toBe(true);
+  });
+});

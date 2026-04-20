@@ -38,6 +38,25 @@ export function parseDoctorArgs(argv: string[]): DoctorOptions {
   };
 }
 
+async function autoFix(check: DoctorCheckResult, opts: DoctorOptions): Promise<void> {
+  if (check.status !== "fail") return;
+  const cwd = opts.cwd ?? process.cwd();
+  try {
+    if (check.name === "knowledge-db") {
+      const { executeInit } = await import("./init.js");
+      await executeInit({ cwd, skipImport: true });
+    } else if (check.name === "hook-registered" || check.name === "hook-script") {
+      const { installHook } = await import("./install-hook.js");
+      installHook({ cwd });
+    } else if (check.name === "claude-md") {
+      const { executeCompile } = await import("./compile.js");
+      await executeCompile({ cwd });
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 export async function executeDoctor(opts: DoctorOptions = {}): Promise<DoctorResult> {
   const cwd = opts.cwd ?? process.cwd();
   const home = opts.homeDir ?? os.homedir();
@@ -71,7 +90,8 @@ export async function executeDoctor(opts: DoctorOptions = {}): Promise<DoctorRes
   const dbPath = path.join(cwd, ".teamagent", "knowledge.db");
   const dbCheck = checkKnowledgeDb(dbPath);
   checks.push(dbCheck);
-  if (dbCheck.status === "fail") {
+  if (opts.fix && dbCheck.status === "fail") await autoFix(dbCheck, opts);
+  if (dbCheck.status === "fail" && !opts.fix) {
     // Skip remaining checks if DB missing
     checks.push(skip("hook-registered", "knowledge.db 先修"));
     checks.push(skip("hook-script", "knowledge.db 先修"));
@@ -83,7 +103,8 @@ export async function executeDoctor(opts: DoctorOptions = {}): Promise<DoctorRes
   const settingsPath = path.join(cwd, ".claude", "settings.local.json");
   const hookCheck = checkHookRegistered(settingsPath);
   checks.push(hookCheck);
-  if (hookCheck.status === "fail") {
+  if (opts.fix && hookCheck.status === "fail") await autoFix(hookCheck, opts);
+  if (hookCheck.status === "fail" && !opts.fix) {
     checks.push(skip("hook-script", "Hook 注册先修"));
     checks.push(skip("claude-md", "跳过"));
     return finalize(checks, false);
@@ -92,10 +113,13 @@ export async function executeDoctor(opts: DoctorOptions = {}): Promise<DoctorRes
   // Check 7: Hook script exists
   const hookScriptCheck = checkHookScript(settingsPath);
   checks.push(hookScriptCheck);
+  if (opts.fix && hookScriptCheck.status === "fail") await autoFix(hookScriptCheck, opts);
 
   // Check 8: CLAUDE.md has TeamAgent block
   const claudeMdPath = path.join(cwd, "CLAUDE.md");
-  checks.push(checkClaudeMd(claudeMdPath));
+  const claudeMdCheck = checkClaudeMd(claudeMdPath);
+  checks.push(claudeMdCheck);
+  if (opts.fix && claudeMdCheck.status === "fail") await autoFix(claudeMdCheck, opts);
 
   return finalize(checks, false);
 }
