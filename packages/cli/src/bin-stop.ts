@@ -74,6 +74,18 @@ export async function runStopPipeline(input: StopHookInput): Promise<void> {
     process.stderr.write(
       `TeamAgent: CLAUDE.md 已更新，Skills 导出 ${r.skills.written.length} 条\n`,
     );
+    try {
+      const { getRecentEntries } = await import("./commands/recent-entries.js");
+      const recent = await getRecentEntries(cwd);
+      if (recent.length > 0) {
+        process.stdout.write(`✦ TeamAgent 本会话学到 ${recent.length} 条新经验\n`);
+        for (const e of recent) {
+          process.stdout.write(`  · ${e.tldr} [${e.confidence.toFixed(2)}]\n`);
+        }
+      }
+    } catch {
+      // summary failure must not affect main flow
+    }
   } catch (e) {
     logError(cwd, "compile", e);
   }

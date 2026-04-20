@@ -13,10 +13,14 @@ vi.mock("../commands/compile.js", () => ({
     skills: { written: [], removed: [] },
   }),
 }));
+vi.mock("../commands/recent-entries.js", () => ({
+  getRecentEntries: vi.fn(),
+}));
 
 import { executeAnalyze } from "../commands/analyze.js";
 import { executeCalibrate } from "../commands/calibrate.js";
 import { executeCompile } from "../commands/compile.js";
+import { getRecentEntries } from "../commands/recent-entries.js";
 
 describe("runStopPipeline", () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -105,5 +109,48 @@ describe("runStopPipeline", () => {
     };
     await runStopPipeline(input);
     expect(executeAnalyze).toHaveBeenCalledTimes(1);
+  });
+
+  it("outputs stdout learning summary when recent entries exist", async () => {
+    vi.mocked(getRecentEntries).mockResolvedValue([
+      { tldr: "用 dayjs 代替 moment", confidence: 0.92 },
+      { tldr: "凭据持久化", confidence: 0.80 },
+    ]);
+    const stdoutWrites: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      stdoutWrites.push(typeof chunk === "string" ? chunk : chunk.toString());
+      return true;
+    });
+    const input: StopHookInput = {
+      session_id: "abc123",
+      transcript_path: "/tmp/session.jsonl",
+      cwd: process.cwd(),
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    const combined = stdoutWrites.join("");
+    expect(combined).toContain("✦ TeamAgent 本会话学到 2 条新经验");
+    expect(combined).toContain("dayjs");
+    expect(combined).toContain("0.92");
+    stdoutSpy.mockRestore();
+  });
+
+  it("stdout is silent when no recent entries", async () => {
+    vi.mocked(getRecentEntries).mockResolvedValue([]);
+    const stdoutWrites: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      stdoutWrites.push(typeof chunk === "string" ? chunk : chunk.toString());
+      return true;
+    });
+    const input: StopHookInput = {
+      session_id: "abc123",
+      transcript_path: "/tmp/session.jsonl",
+      cwd: process.cwd(),
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    const combined = stdoutWrites.join("");
+    expect(combined).not.toContain("✦ TeamAgent");
+    stdoutSpy.mockRestore();
   });
 });
