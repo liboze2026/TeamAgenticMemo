@@ -373,6 +373,7 @@ export function executeStats(opts: StatsOptions = {}): string {
   const movements = aggregateConfidenceMovements(events, windowDays, now);
 
   let personal: KnowledgeEntry[] = [];
+  let team: KnowledgeEntry[] = [];
   let global: KnowledgeEntry[] = [];
 
   try {
@@ -388,6 +389,7 @@ export function executeStats(opts: StatsOptions = {}): string {
       const all = store.getAll();
       store.close();
       personal = all.filter((e) => e.scope.level === "personal");
+      team = all.filter((e) => e.scope.level === "team");
       global = all.filter((e) => e.scope.level === "global");
     }
   } catch {
@@ -395,7 +397,7 @@ export function executeStats(opts: StatsOptions = {}): string {
   }
 
   return renderStats(
-    { personal, team: [], global },
+    { personal, team, global },
     movements,
     windowDays,
   );
