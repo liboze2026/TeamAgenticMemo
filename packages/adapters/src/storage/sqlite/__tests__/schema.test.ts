@@ -51,4 +51,18 @@ describe("sqlite schema", () => {
     }).toThrow();
     closeDb(db);
   });
+
+  // sqlite-vec was loading silently into a DB opened without allowExtension:true,
+  // so the knowledge_vec virtual table was never created and wiki injection
+  // returned 0 results forever. Verify the table now exists when sqlite-vec is
+  // installed (which it is in this workspace).
+  it("creates knowledge_vec virtual table when sqlite-vec is loaded", () => {
+    const db = openDb(tmpDbPath());
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual') ORDER BY name")
+      .all() as { name: string }[];
+    const names = tables.map((t) => t.name);
+    expect(names).toContain("knowledge_vec");
+    closeDb(db);
+  });
 });

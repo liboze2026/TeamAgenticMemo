@@ -160,7 +160,10 @@ export const CURRENT_SCHEMA_VERSION = 4;
  * 幂等——重复调用无副作用。
  */
 export function openDb(path: string): DatabaseSync {
-  const db = new DatabaseSyncCtor(path);
+  // allowExtension: true is required for sqlite-vec.load() to call db.loadExtension();
+  // node:sqlite forbids extension loading by default, which silently broke the
+  // wiki_vec virtual table creation and disabled wiki injection end-to-end.
+  const db = new DatabaseSyncCtor(path, { allowExtension: true });
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
 
@@ -170,6 +173,17 @@ export function openDb(path: string): DatabaseSync {
   }
 
   db.exec(INIT_SQL);
+
+  // Idempotent virtual-table creation. Lives outside the schema_version migration
+  // because older DBs marked v3 applied even when CREATE silently failed (sqlite-vec
+  // unloaded). IF NOT EXISTS makes re-runs cheap; outer try/catch swallows when
+  // sqlite-vec is unavailable.
+  try {
+    db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
+      knowledge_id TEXT PRIMARY KEY,
+      embedding FLOAT[384]
+    )`);
+  } catch { /* sqlite-vec not loaded — vector features disabled */ }
 
   // Migration: schema_version 1 → 2 (add wiki_meta columns, wiki_subscriptions, wiki_rejection_log)
   const version = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
