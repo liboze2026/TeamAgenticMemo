@@ -167,6 +167,15 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.17)(jsdom@29.0.2)
 
+  packages/teamagent:
+    dependencies:
+      '@teamagent/cli':
+        specifier: workspace:*
+        version: link:../cli
+      sqlite-vec:
+        specifier: '>=0.1.0'
+        version: 0.1.9
+
   packages/types:
     dependencies:
       zod:
