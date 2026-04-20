@@ -46,7 +46,6 @@ function getLastLearnedDate(db) {
 
 function getTodayBlockCount(db) {
   try {
-    // Schema: events table has 'kind' and 'timestamp' columns
     const row = db
       .prepare(
         "SELECT COUNT(*) AS n FROM events WHERE kind LIKE 'hook-pre.blocked%' AND date(timestamp) = date('now')"
@@ -55,7 +54,6 @@ function getTodayBlockCount(db) {
     return row ? row.n : 0;
   } catch {
     try {
-      // Fallback: try legacy column names
       const row2 = db
         .prepare(
           "SELECT COUNT(*) AS n FROM events WHERE event_type LIKE 'hook-pre.blocked%' AND date(created_at) = date('now')"
@@ -65,6 +63,19 @@ function getTodayBlockCount(db) {
     } catch {
       return null;
     }
+  }
+}
+
+function getTodayPassCount(db) {
+  try {
+    const row = db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM events WHERE kind = 'hook-pre.passed' AND date(timestamp) = date('now')"
+      )
+      .get();
+    return row ? row.n : 0;
+  } catch {
+    return null;
   }
 }
 
@@ -86,9 +97,11 @@ function main() {
 
   const eventsDb = tryOpenDb(GLOBAL_EVENTS_DB);
   let todayBlocks = null;
+  let todayPassed = null;
   if (eventsDb) {
     try {
       todayBlocks = getTodayBlockCount(eventsDb);
+      todayPassed = getTodayPassCount(eventsDb);
     } finally {
       eventsDb.close();
     }
@@ -97,6 +110,7 @@ function main() {
   const parts = ["TeamAgent正在运行"];
   parts.push(`规则库现有：${count !== null ? count : "-"}条`);
   parts.push(todayBlocks !== null ? `今日已拦截：${todayBlocks}` : "今日已拦截：-");
+  parts.push(todayPassed !== null ? `今日放行：${todayPassed}` : "今日放行：-");
   if (lastDate) parts.push(`系统最近解析规则时间：${lastDate}`);
 
   process.stdout.write(parts.join(" · "));
