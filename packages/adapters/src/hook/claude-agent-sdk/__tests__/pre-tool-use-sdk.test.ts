@@ -128,4 +128,84 @@ describe("createPreToolUseHandler (SDK)", () => {
     } as any);
     expect(appended.filter((e: any) => e.kind === "ai.override.complied")).toHaveLength(0);
   });
+
+  describe("relativeTime edge cases (via formatWarnMessage / formatBlockReason)", () => {
+    it("missing created_at → systemMessage contains '未知学到'", async () => {
+      const ruleMissingDate = {
+        id: "r-missing-date",
+        current_tier: "stable",
+        enforcement: "warn",
+        trigger: "use axios",
+        correct_pattern: "use fetch",
+        confidence: 0.80,
+        created_at: undefined,
+        hit_count: 1,
+      };
+      const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [ruleMissingDate] }) };
+      const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
+      const handler = createPreToolUseHandler({ matcher: mockMatcher as any, eventLog: mockEventLog as any });
+
+      const result = await handler({
+        hook_event_name: "PreToolUse",
+        tool_name: "Edit",
+        tool_input: {},
+        tool_use_id: "tu-missing-date",
+      } as any);
+
+      expect(result.permissionDecision).toBe("allow");
+      expect(result.systemMessage).toContain("未知学到");
+    });
+
+    it("invalid created_at → systemMessage contains '未知学到'", async () => {
+      const ruleInvalidDate = {
+        id: "r-invalid-date",
+        current_tier: "stable",
+        enforcement: "warn",
+        trigger: "use axios",
+        correct_pattern: "use fetch",
+        confidence: 0.80,
+        created_at: "not-a-date",
+        hit_count: 1,
+      };
+      const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [ruleInvalidDate] }) };
+      const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
+      const handler = createPreToolUseHandler({ matcher: mockMatcher as any, eventLog: mockEventLog as any });
+
+      const result = await handler({
+        hook_event_name: "PreToolUse",
+        tool_name: "Edit",
+        tool_input: {},
+        tool_use_id: "tu-invalid-date",
+      } as any);
+
+      expect(result.permissionDecision).toBe("allow");
+      expect(result.systemMessage).toContain("未知学到");
+    });
+
+    it("block message includes hit_count in '已触发 N 次'", async () => {
+      const blockRule = {
+        id: "r-block-hitcount",
+        current_tier: "enforced",
+        enforcement: "block",
+        trigger: "use axios",
+        correct_pattern: "use fetch",
+        confidence: 0.92,
+        created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+        hit_count: 7,
+      };
+      const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [blockRule] }) };
+      const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
+      const handler = createPreToolUseHandler({ matcher: mockMatcher as any, eventLog: mockEventLog as any });
+
+      const result = await handler({
+        hook_event_name: "PreToolUse",
+        tool_name: "Edit",
+        tool_input: {},
+        tool_use_id: "tu-hitcount",
+      } as any);
+
+      expect(result.permissionDecision).toBe("deny");
+      expect(result.permissionDecisionReason).toMatch(/已触发 \d+ 次/);
+    });
+  });
 });

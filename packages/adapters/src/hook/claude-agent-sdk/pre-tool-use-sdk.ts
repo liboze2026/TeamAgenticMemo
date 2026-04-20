@@ -92,6 +92,7 @@ function severityOrder(e: string): number {
 
 function relativeTime(dateStr: string, now: Date): string {
   const diffMs = now.getTime() - new Date(dateStr).getTime();
+  if (isNaN(diffMs)) return "未知";
   const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   if (days < 1) return "今天";
   if (days < 7) return `${days}天前`;
@@ -100,6 +101,7 @@ function relativeTime(dateStr: string, now: Date): string {
 }
 
 function formatWarnMessage(rule: any, now: Date): string {
+  // reasoning field intentionally omitted — new format is action-focused
   const age = rule.created_at ? relativeTime(rule.created_at as string, now) : "未知";
   const conf = typeof rule.confidence === "number" ? rule.confidence.toFixed(2) : "?";
   const content = rule.correct_pattern ?? rule.trigger ?? "";
@@ -107,6 +109,7 @@ function formatWarnMessage(rule: any, now: Date): string {
 }
 
 function formatBlockReason(rule: any, now: Date): string {
+  // reasoning field intentionally omitted — new format is action-focused
   const age = rule.created_at ? relativeTime(rule.created_at as string, now) : "未知";
   const conf = typeof rule.confidence === "number" ? rule.confidence.toFixed(2) : "?";
   const hitCount = typeof rule.hit_count === "number" ? rule.hit_count : 0;
