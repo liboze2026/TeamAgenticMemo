@@ -31,7 +31,7 @@ export async function getRecentEntries(cwd: string): Promise<RecentEntry[]> {
            ORDER BY created_at DESC
            LIMIT 10`,
         )
-        .all() as RecentEntry[];
+        .all() as unknown as RecentEntry[];
       return rows;
     } finally {
       db.close();

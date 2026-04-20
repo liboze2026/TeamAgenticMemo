@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { getRecentEntries } from "../commands/recent-entries.js";
-import { openDb, closeDb, INIT_SQL } from "@teamagent/adapters";
+import { openDb, closeDb } from "@teamagent/adapters";
 
 function rmRetry(p: string) {
   // Windows: node:sqlite WAL mode holds shm/wal files briefly after close()
@@ -82,8 +82,9 @@ describe("getRecentEntries", () => {
     const result = await getRecentEntries(tmpDir);
 
     expect(result).toHaveLength(1);
-    expect(result[0].tldr).toBe("用 dayjs 代替 moment");
-    expect(result[0].confidence).toBeCloseTo(0.85, 2);
+    const [entry] = result;
+    expect(entry!.tldr).toBe("用 dayjs 代替 moment");
+    expect(entry!.confidence).toBeCloseTo(0.85, 2);
   });
 
   it("falls back to trigger when correct_pattern_tldr is null", async () => {
@@ -116,7 +117,8 @@ describe("getRecentEntries", () => {
     const result = await getRecentEntries(tmpDir);
 
     expect(result).toHaveLength(1);
-    expect(result[0].tldr).toBe("use fetch instead of axios");
-    expect(result[0].confidence).toBeCloseTo(0.70, 2);
+    const [entry] = result;
+    expect(entry!.tldr).toBe("use fetch instead of axios");
+    expect(entry!.confidence).toBeCloseTo(0.70, 2);
   });
 });
