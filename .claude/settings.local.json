@@ -7,6 +7,10 @@
       "Read(//c/Users/tianhaoxuan/.claude/skills/**)"
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "node C:/bzli/teamagent/scripts/teamagent-statusline.cjs"
+  },
   "hooks": {
     "PreToolUse": [
       {
