@@ -17,10 +17,16 @@ export class GithubReleaseSource implements WikiSourcePort {
     const repo = config["repo"] as string;
     const url = `https://api.github.com/repos/${repo}/releases?per_page=20`;
 
+    const headers: Record<string, string> = { "User-Agent": "teamagent-wiki" };
+    const token = process.env.GITHUB_TOKEN;
+    if (token && token.length > 0) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     let releases: GithubRelease[];
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": "teamagent-wiki" },
+        headers,
         signal: AbortSignal.timeout(10000),
       });
       if (!res.ok) {

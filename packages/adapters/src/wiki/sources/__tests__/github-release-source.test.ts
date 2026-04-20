@@ -109,4 +109,26 @@ describe("GithubReleaseSource", () => {
       source.fetch({ type: "github_release", repo: "owner/repo" }, new Date(0)),
     ).rejects.toBeInstanceOf(WikiFetchError);
   });
+
+  it("sends Authorization header when GITHUB_TOKEN env var is set", async () => {
+    const fetchSpy = mockFetch();
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubEnv("GITHUB_TOKEN", "ghp_testtoken");
+    const source = new GithubReleaseSource();
+    await source.fetch({ type: "github_release", repo: "owner/repo" }, new Date(0));
+    const headers = fetchSpy.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe("Bearer ghp_testtoken");
+    vi.unstubAllEnvs();
+  });
+
+  it("omits Authorization header when GITHUB_TOKEN is unset", async () => {
+    const fetchSpy = mockFetch();
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubEnv("GITHUB_TOKEN", "");
+    const source = new GithubReleaseSource();
+    await source.fetch({ type: "github_release", repo: "owner/repo" }, new Date(0));
+    const headers = fetchSpy.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBeUndefined();
+    vi.unstubAllEnvs();
+  });
 });
