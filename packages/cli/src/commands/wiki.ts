@@ -44,7 +44,9 @@ export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
   const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline } = await import("@teamagent/adapters");
 
   const db = openDb(resolveDbPath(opts));
-  const llm = new ClaudeCodeLLMClient();
+  const envTimeout = parseInt(process.env.TEAMAGENT_LLM_TIMEOUT_MS ?? "", 10);
+  const llmTimeoutMs = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 120_000;
+  const llm = new ClaudeCodeLLMClient({ timeoutMs: llmTimeoutMs });
   const embedder = new XenovaEmbedder();
   const pipeline = new WikiPipeline(db, llm, embedder);
 
@@ -58,12 +60,12 @@ export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
     for (const item of report.dryRunItems ?? []) {
       process.stdout.write(`  [${item.source}] ${item.title} — ${item.url}\n`);
     }
-    return;
+  } else {
+    process.stdout.write(
+      `wiki:pull complete — added: ${report.added}, skipped: ${report.skipped}, rejected: ${report.rejected}\n`
+    );
   }
 
-  process.stdout.write(
-    `wiki:pull complete — added: ${report.added}, skipped: ${report.skipped}, rejected: ${report.rejected}\n`
-  );
   if (report.errors.length > 0) {
     process.stderr.write(`Errors (${report.errors.length}):\n`);
     for (const e of report.errors) {
