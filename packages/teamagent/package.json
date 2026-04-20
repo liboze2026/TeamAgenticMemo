@@ -1,0 +1,30 @@
+{
+  "name": "teamagent",
+  "version": "0.5.0",
+  "description": "自进化 AI 规则引擎 for Claude Code | Self-evolving AI rule engine",
+  "keywords": ["claude-code", "ai", "hooks", "rules", "self-evolving"],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "teamagent": "./dist/bin.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "postinstall": "node postinstall.mjs"
+  },
+  "peerDependencies": {
+    "sqlite-vec": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "sqlite-vec": { "optional": true }
+  },
+  "dependencies": {
+    "@teamagent/cli": "workspace:*"
+  }
+}
