@@ -26,7 +26,9 @@ describe("createPreToolUseHandler (SDK)", () => {
       trigger: "use axios",
       correct_pattern: "use fetch",
       reasoning: "project is fetch-only",
-      confidence: 0.9,
+      confidence: 0.92,
+      created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+      hit_count: 3,
     };
     const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [enforcedRule] }) };
     const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
@@ -41,6 +43,8 @@ describe("createPreToolUseHandler (SDK)", () => {
 
     expect(result.permissionDecision).toBe("deny");
     expect(result.permissionDecisionReason).toContain("fetch");
+    expect(result.permissionDecisionReason).toMatch(/◈ TeamAgent 阻止操作/);
+    expect(result.permissionDecisionReason).toMatch(/置信度 0\.\d+/);
     expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "hook-pre.blocked" }));
   });
 
@@ -52,7 +56,9 @@ describe("createPreToolUseHandler (SDK)", () => {
       trigger: "use axios",
       correct_pattern: "use fetch",
       reasoning: "",
-      confidence: 0.7,
+      confidence: 0.92,
+      created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+      hit_count: 3,
     };
     const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [warnRule] }) };
     const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
@@ -67,6 +73,9 @@ describe("createPreToolUseHandler (SDK)", () => {
 
     expect(result.permissionDecision).toBe("allow");
     expect(result.systemMessage).toContain("fetch");
+    expect(result.systemMessage).toMatch(/◈ TeamAgent 经验提醒/);
+    expect(result.systemMessage).toMatch(/置信度 0\.\d+/);
+    expect(result.systemMessage).toMatch(/前学到/);
     expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({
       kind: "hook-pre.warned",
       tool_name: "Edit",   // NEW: tool_name must be stored

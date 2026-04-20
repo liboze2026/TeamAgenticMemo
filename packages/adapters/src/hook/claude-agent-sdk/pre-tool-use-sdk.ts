@@ -54,7 +54,11 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
       (a, b) => severityOrder(b.enforcement) - severityOrder(a.enforcement),
     );
     const top = sorted[0];
-    const reason = formatReason(top);
+    const nowDate = new Date(now);
+    const reason =
+      top.enforcement === "block"
+        ? formatBlockReason(top, nowDate)
+        : formatWarnMessage(top, nowDate);
 
     if (top.enforcement === "block") {
       deps.eventLog.append({
@@ -86,9 +90,26 @@ function severityOrder(e: string): number {
   return ({ block: 3, warn: 2, suggest: 1, passive: 0 } as Record<string, number>)[e] ?? 0;
 }
 
-function formatReason(rule: any): string {
-  const tier = rule.current_tier ?? "unknown";
-  const correct = rule.correct_pattern ?? "";
-  const reasoning = rule.reasoning ?? "";
-  return `[${tier}] ${rule.trigger ?? ""}: ${correct}\n理由: ${reasoning}`;
+function relativeTime(dateStr: string, now: Date): string {
+  const diffMs = now.getTime() - new Date(dateStr).getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (days < 1) return "今天";
+  if (days < 7) return `${days}天前`;
+  if (days < 30) return `${Math.floor(days / 7)}周前`;
+  return `${Math.floor(days / 30)}个月前`;
+}
+
+function formatWarnMessage(rule: any, now: Date): string {
+  const age = rule.created_at ? relativeTime(rule.created_at as string, now) : "未知";
+  const conf = typeof rule.confidence === "number" ? rule.confidence.toFixed(2) : "?";
+  const content = rule.correct_pattern ?? rule.trigger ?? "";
+  return `◈ TeamAgent 经验提醒 [置信度 ${conf} · ${age}学到]\n  → ${content}`;
+}
+
+function formatBlockReason(rule: any, now: Date): string {
+  const age = rule.created_at ? relativeTime(rule.created_at as string, now) : "未知";
+  const conf = typeof rule.confidence === "number" ? rule.confidence.toFixed(2) : "?";
+  const hitCount = typeof rule.hit_count === "number" ? rule.hit_count : 0;
+  const content = rule.correct_pattern ?? rule.trigger ?? "";
+  return `◈ TeamAgent 阻止操作 [置信度 ${conf} · 已触发 ${hitCount} 次 · ${age}学到]\n  → ${content}`;
 }
