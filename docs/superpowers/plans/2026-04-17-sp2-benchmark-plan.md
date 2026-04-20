@@ -92,14 +92,33 @@ Duration Delta: +60.5%   (15317ms → 24588ms avg)
 
 baseline 6/6 wrong = trap signal perfect on all 6 tasks. teamagent 0/6 wrong = no rule miss.
 
-### Anomaly: task 005 → `neither`
+### Anomaly: task 005 → `neither` (resolved by runs=3 — variance, not systematic)
 
-teamagent neither matched `wrong_patterns` (XHR API) nor `correct_patterns` (`fetch(`/`response.json()`). Likely cause: hook blocked `XMLHttpRequest` write, model picked a third path (axios? node http?) instead of fetch. PRR formula counts this as "prevented" (no wrong = success), but signal weak — model wasn't steered to the *correct* alternative, only away from the wrong one.
+In runs=1 teamagent landed `neither` on task 005. Replayed with runs=3:
 
-Follow-up options (not done):
-- Tighten `correct_patterns` to also accept axios + alternative HTTP libs (forgive the model)
-- Add a positive-injection rule for fetch (steer, not just block)
-- Replay with `runs=3` to see if the `neither` outcome is stable or variance
+| Task | teamagent run=1 | run=2 | run=3 |
+|------|---|---|---|
+| 005-xhr-vs-fetch | correct | correct | correct |
+| 003-react-key    | **neither** | correct | correct |
+
+So 005's neither was a fluke (3/3 correct on replay), and 003 produced a new neither in 1/3 runs. Aggregate: 17 correct + 1 neither across 18 teamagent runs ≈ 5.5% noise floor.
+
+**Decision: no hook or pattern change.** Hooks are working as designed. The `neither` outcomes are model-side variance (model occasionally picks an off-spec but not-wrong implementation), not a missing rule signal.
+
+### v1.2-runs3 stability run
+
+```
+pnpm benchmark --groups=baseline,teamagent --tasks=all --runs=3
+
+baseline:  18/18 wrong   — trap signal perfect on all 6 tasks
+teamagent: 17/18 correct + 1/18 neither — 0 wrong
+
+PRR: 100.0%
+Token Delta:    +52.4%   (468/32296 → 702/49215 in/out)
+Duration Delta: +42.1%   (20311ms → 28863ms avg)
+```
+
+Token + duration deltas shrink vs runs=1 (64.5%/60.5% → 52.4%/42.1%) — averaging across more runs smooths early-call hook init cost.
 
 ---
 
