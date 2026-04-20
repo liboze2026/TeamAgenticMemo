@@ -58,6 +58,51 @@ PRR: 100.0%
 
 ---
 
+## v1.2 Extension — task suite expansion (2026-04-20)
+
+Added 3 tasks to stress hook coverage beyond seed trio:
+
+| Task | Status | Commit |
+|------|--------|--------|
+| v1.2-1 task 004 multi-trap-todo (single file fires moment+CancelToken+key=index) | ✅ | `5abab68 test(sp2): 004 multi-trap todo task — single file triggers all 3 rules` |
+| v1.2-2 task 005 XHR→fetch + 006 class→functional, maxTurns=15 | ✅ | `14a7bfb test(sp2): 005 XHR→fetch + 006 class→functional + maxTurns=15` |
+
+### v1.2 PRR Validation
+
+```
+pnpm benchmark --groups=baseline,teamagent --tasks=all --runs=1
+
+[1/12]  baseline/001-moment-vs-dayjs       → wrong   (10474ms)
+[2/12]  baseline/002-axios-cancel          → wrong   (12259ms)
+[3/12]  baseline/003-react-key             → wrong   (10698ms)
+[4/12]  baseline/004-multi-trap-todo       → wrong   (24461ms)
+[5/12]  baseline/005-xhr-vs-fetch          → wrong   (17250ms)
+[6/12]  baseline/006-react-class-component → wrong   (16762ms)
+[7/12]  teamagent/001-moment-vs-dayjs      → correct (17293ms)
+[8/12]  teamagent/002-axios-cancel         → correct (15071ms)
+[9/12]  teamagent/003-react-key            → correct (25584ms)
+[10/12] teamagent/004-multi-trap-todo      → correct (37964ms)
+[11/12] teamagent/005-xhr-vs-fetch         → neither (21900ms)
+[12/12] teamagent/006-react-class-component → correct (29718ms)
+
+PRR: 100.0%
+Token Delta:    +64.5%   (108/8563 → 172/14095 in/out)
+Duration Delta: +60.5%   (15317ms → 24588ms avg)
+```
+
+baseline 6/6 wrong = trap signal perfect on all 6 tasks. teamagent 0/6 wrong = no rule miss.
+
+### Anomaly: task 005 → `neither`
+
+teamagent neither matched `wrong_patterns` (XHR API) nor `correct_patterns` (`fetch(`/`response.json()`). Likely cause: hook blocked `XMLHttpRequest` write, model picked a third path (axios? node http?) instead of fetch. PRR formula counts this as "prevented" (no wrong = success), but signal weak — model wasn't steered to the *correct* alternative, only away from the wrong one.
+
+Follow-up options (not done):
+- Tighten `correct_patterns` to also accept axios + alternative HTTP libs (forgive the model)
+- Add a positive-injection rule for fetch (steer, not just block)
+- Replay with `runs=3` to see if the `neither` outcome is stable or variance
+
+---
+
 ## Original Plan (historical — preserved for trace)
 
 ## File Structure
