@@ -166,7 +166,7 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
 
 function runPreChecks(paths: ReturnType<typeof resolvePaths>): InitStepResult {
   if (!fs.existsSync(paths.cwd)) {
-    return failStep("pre-check", `cwd 不存在: ${paths.cwd}`);
+    return failStep("pre-check", `项目目录不存在: ${paths.cwd}`);
   }
   try {
     const tDir = path.join(paths.home, ".teamagent");
@@ -174,14 +174,14 @@ function runPreChecks(paths: ReturnType<typeof resolvePaths>): InitStepResult {
     const probe = path.join(tDir, `.probe-${process.pid}`);
     fs.writeFileSync(probe, "");
     fs.unlinkSync(probe);
-  } catch (err) {
-    return failStep("pre-check", `~/.teamagent 不可写: ${String(err).slice(0, 200)}`);
+  } catch {
+    return failStep("pre-check", "无法创建 ~/.teamagent 目录，请检查磁盘权限");
   }
   if (fs.existsSync(paths.claudeMdPath)) {
     try {
       fs.accessSync(paths.claudeMdPath, fs.constants.R_OK | fs.constants.W_OK);
     } catch {
-      return failStep("pre-check", `CLAUDE.md 不可读写: ${paths.claudeMdPath}`);
+      return failStep("pre-check", "CLAUDE.md 文件无写入权限，请运行: chmod 644 CLAUDE.md");
     }
   }
   return okStep("pre-check", "所有前置检查通过");
