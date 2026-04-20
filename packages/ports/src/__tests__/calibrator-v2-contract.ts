@@ -13,7 +13,7 @@ import type { KnowledgeEntry } from "@teamagent/types";
  * 2. demerit >= 0
  * 3. empty observations + empty events + zero demerit → no change
  * 4. only success observations → confidence_delta >= 0
- * 5. demerit >= 30 → tier_after=dormant
+ * 5. demerit >= 50 → tier_after=dormant
  * 6. pure function: same input → same output
  * 7. tier_transition exists only when tier changes
  * 8. ignores observations from other rules
@@ -105,9 +105,9 @@ export function runCalibratorV2Contract(make: () => CalibratorV2): void {
       expect(r.confidence_delta).toBeGreaterThanOrEqual(0);
     });
 
-    it("demerit >= 30 → tier_after=dormant", () => {
+    it("demerit >= 50 → tier_after=dormant", () => {
       const r = make().calibrate(
-        { ...baseEntry, demerit: 35, demerit_last_updated: now.toISOString() },
+        { ...baseEntry, demerit: 55, demerit_last_updated: now.toISOString() },
         emptyInput,
       );
       expect(r.tier_after).toBe("dormant");

@@ -69,10 +69,13 @@ export async function runCalibrationPipelineV2(
   const dormantNew: string[] = [];
 
   for (const entry of entries) {
-    if (entry.status === "archived" || entry.status === "dormant") continue;
+    if (entry.status === "archived") continue;
+    // Dormant rules: only process if demerit has decayed below threshold (resurrection check)
+    const isDormant = entry.status === "dormant" || entry.current_tier === "dormant";
+    if (isDormant && entry.demerit >= 50) continue;
     const obsForEntry = obsIdx.get(entry.id) ?? [];
     const evtForEntry = evtIdx.get(entry.id) ?? [];
-    if (obsForEntry.length === 0 && evtForEntry.length === 0 && entry.demerit === 0) {
+    if (!isDormant && obsForEntry.length === 0 && evtForEntry.length === 0 && entry.demerit === 0) {
       continue; // no signal
     }
 

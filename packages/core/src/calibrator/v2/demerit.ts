@@ -67,7 +67,10 @@ export function computeDemerit(
   // 2. Add new event penalties
   for (const e of events) {
     const base = DEMERIT_BASE_BY_TIER[tier];
-    const multiplier = input.confidence > 0.5 ? -Math.log(1 - input.confidence) : 1.0;
+    // Cap confidence at 0.99 to prevent -log(0) = Infinity when conf = 1.0.
+    // At conf=0.99 the multiplier is already ~4.6x, which is a strong signal.
+    const cappedConf = Math.min(input.confidence, 0.99);
+    const multiplier = cappedConf > 0.5 ? -Math.log(1 - cappedConf) : 1.0;
     const userOverride = e.source === "user_reject" ? 10 : 0;
     const delta = base * multiplier + userOverride;
     breakdown.push({

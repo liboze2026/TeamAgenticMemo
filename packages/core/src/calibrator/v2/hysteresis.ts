@@ -40,6 +40,8 @@ export function applyHysteresis(input: HysteresisInput): HysteresisResult {
 
   // dormant is always immediate (death chain)
   if (cand === "dormant") return { final_tier: "dormant" };
+  // resurrection from dormant is always immediate (demerit decayed below threshold)
+  if (cur === "dormant") return { final_tier: cand };
 
   const curRank = tierRank(cur);
   const candRank = tierRank(cand);

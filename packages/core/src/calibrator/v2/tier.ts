@@ -30,13 +30,17 @@ export function tierFromConfidence(conf: number): Exclude<Tier, "dormant"> {
  * Death chain: given demerit + current tier, what's the max allowed tier?
  * demerit >= 5  → soft demote 1
  * demerit >= 15 → hard demote 2
- * demerit >= 30 → dormant
+ * demerit >= 50 → dormant  (raised from 30 — rules with high compliance but occasional
+ *                            ignores should survive; 30 was too aggressive for canonical rules
+ *                            where each ignore costs ~11 demerit)
  */
 export function tierFromDemerit(demerit: number, currentTier: Tier): Tier {
-  if (demerit >= 30) return "dormant";
-  if (currentTier === "dormant") return "dormant";
+  if (demerit >= 50) return "dormant";
+  // Resurrection: dormant rule with demerit < 50 gets revived to experimental
+  const activeTier: Exclude<Tier, "dormant"> =
+    currentTier === "dormant" ? "experimental" : (currentTier as Exclude<Tier, "dormant">);
 
-  const idx = TIER_ORDER.indexOf(currentTier as Exclude<Tier, "dormant">);
+  const idx = TIER_ORDER.indexOf(activeTier);
   if (idx === -1) return currentTier;
 
   let demote = 0;
@@ -52,7 +56,7 @@ export function effectiveTier(confidence: number, demerit: number, currentTier: 
   const byConf = tierFromConfidence(confidence);
   const byDemerit = tierFromDemerit(demerit, currentTier);
 
-  if (byDemerit === "dormant" || currentTier === "dormant") return "dormant";
+  if (byDemerit === "dormant") return "dormant";
 
   const confIdx = TIER_ORDER.indexOf(byConf);
   const demIdx = TIER_ORDER.indexOf(byDemerit as Exclude<Tier, "dormant">);
