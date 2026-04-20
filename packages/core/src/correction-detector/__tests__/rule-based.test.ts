@@ -80,6 +80,18 @@ describe("ruleBasedCorrectionDetector", () => {
     });
   });
 
+  describe("error_in_context signal (Signal E)", () => {
+    it("detects when user pastes error trace after AI tool call", () => {
+      const session = loadFixture("correction-error-in-context-01.jsonl");
+      const corrections = ruleBasedCorrectionDetector.detect(session);
+      expect(corrections.length).toBeGreaterThanOrEqual(1);
+      // Uses multi_failure signal type (reused for error-in-context)
+      const hit = corrections.find((c) => c.signal === "multi_failure");
+      expect(hit).toBeDefined();
+      expect(hit!.correctionText).toContain("Error:");
+    });
+  });
+
   describe("no signal (negative cases)", () => {
     it("plain info query → no corrections", () => {
       const session = loadFixture("negative-no-signal-01.jsonl");

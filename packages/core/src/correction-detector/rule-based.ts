@@ -78,6 +78,17 @@ export const ruleBasedCorrectionDetector: CorrectionDetector = {
       if (codeEdit && !out.find((m) => m.turnIndex === i)) {
         out.push(buildMoment(turn, prevTurn, "code_edit", 0.8));
       }
+
+      // Signal E: error_in_context — user pastes an error trace/message and the
+      // previous turn had AI tool calls (i.e., AI caused the error or was involved).
+      // This catches the common pattern: AI does something → error → user pastes error.
+      if (prevTurn && !out.find((m) => m.turnIndex === i)) {
+        const hasError = detectErrorInMessage(turn.userMessage);
+        const prevHadToolUse = prevTurn.toolCalls.length > 0;
+        if (hasError && prevHadToolUse) {
+          out.push(buildMoment(turn, prevTurn, "multi_failure", 0.8));
+        }
+      }
     }
 
     // 按 turnIndex 升序排序
@@ -133,6 +144,30 @@ function detectOverride(assistantText: string, userText: string): boolean {
     if (tool.length < 3) continue;
     if (STOP.has(tool.toLowerCase())) continue;
     if (!assistantLower.includes(tool.toLowerCase())) return true;
+  }
+  return false;
+}
+
+const ERROR_PATTERNS: RegExp[] = [
+  /\bError\s*:/i,
+  /\bException\s*:/i,
+  /\bE[A-Z]{3,}\b/, // ENOENT, EACCES, EPERM, EBUSY, etc.
+  /at\s+\S+\s*\(\S+:\d+:\d+\)/, // JS stack trace frame
+  /Traceback \(most recent call last\)/,
+  /SyntaxError|TypeError|ReferenceError|RangeError/,
+  /FAILED|✗|✕/, // test failures
+  /exit code [1-9]|exit status [1-9]/i,
+  /报错|错误|异常|失败/, // Chinese error keywords
+];
+
+/**
+ * Returns true when the user message appears to contain an error message / stack trace.
+ * Conservative: requires ≥1 strong pattern match (not just any line with "Error").
+ */
+function detectErrorInMessage(text: string): boolean {
+  if (!text.trim()) return false;
+  for (const re of ERROR_PATTERNS) {
+    if (re.test(text)) return true;
   }
   return false;
 }
