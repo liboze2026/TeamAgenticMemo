@@ -7,6 +7,8 @@ const ENTRIES = {
   "bin-pre-tool-use":       "../cli/src/bin-pre-tool-use.ts",
   "bin-post-tool-use":      "../cli/src/bin-post-tool-use.ts",
   "bin-stop":               "../cli/src/bin-stop.ts",
+  "bin-session-end":        "../cli/src/bin-session-end.ts",
+  "bin-pre-compact":        "../cli/src/bin-pre-compact.ts",
   "bin-user-prompt-submit": "../cli/src/bin-user-prompt-submit.ts",
 };
 
@@ -49,6 +51,8 @@ export default defineConfig([
       "bin-pre-tool-use":       ENTRIES["bin-pre-tool-use"],
       "bin-post-tool-use":      ENTRIES["bin-post-tool-use"],
       "bin-stop":               ENTRIES["bin-stop"],
+      "bin-session-end":        ENTRIES["bin-session-end"],
+      "bin-pre-compact":        ENTRIES["bin-pre-compact"],
       "bin-user-prompt-submit": ENTRIES["bin-user-prompt-submit"],
     },
     format: ["cjs"],

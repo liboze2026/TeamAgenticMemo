@@ -1,4 +1,7 @@
 {
+  "env": {
+    "TEAMAGENT_VISIBILITY": "verbose"
+  },
   "permissions": {
     "allow": [
       "Bash(mkdir -p ~/.claude/skills/teamagent-pitfall ~/.claude/skills/teamagent-stats)",
@@ -57,7 +60,31 @@
           {
             "type": "command",
             "command": "node C:/bzli/teamagent/packages/cli/dist/bin-stop.cjs",
-            "timeout": 60
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "_teamagentTag": "teamagent-session-end",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:/bzli/teamagent/packages/cli/dist/bin-session-end.cjs",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "_teamagentTag": "teamagent-pre-compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:/bzli/teamagent/packages/cli/dist/bin-pre-compact.cjs",
+            "timeout": 300
           }
         ]
       }

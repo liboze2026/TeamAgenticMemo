@@ -16,6 +16,8 @@ export default defineConfig({
     "bin-session-start":      "src/bin-session-start.ts",
     "bin-wiki-refresh":       "src/bin-wiki-refresh.ts",
     "bin-stop":               "src/bin-stop.ts",
+    "bin-session-end":        "src/bin-session-end.ts",
+    "bin-pre-compact":        "src/bin-pre-compact.ts",
   },
   format: ["cjs"],
   platform: "node",

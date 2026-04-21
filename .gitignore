@@ -13,3 +13,6 @@ packages/*/.teamagent/
 .claude/worktrees/
 packages/benchmark/bench-report.json
 packages/benchmark/bench-report.md
+packages/benchmark/bench-*.json
+packages/benchmark/bench-*.md
+.claude/scheduled_tasks.lock
