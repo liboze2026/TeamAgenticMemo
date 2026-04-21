@@ -61,6 +61,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "_teamagentTag": "teamagent-session-start",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:/bzli/teamagent/packages/cli/dist/bin-session-start.cjs",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

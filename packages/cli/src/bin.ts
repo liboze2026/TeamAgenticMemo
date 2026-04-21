@@ -285,6 +285,19 @@ async function main(): Promise<void> {
       if (output) process.stdout.write(output);
       return;
     }
+    case "wiki:refresh": {
+      const { runWikiRefresh } = await import("./wiki-refresh.js");
+      const force = rest.includes("--force");
+      const result = await runWikiRefresh({ cwd: process.cwd(), force });
+      if (result.skipped) {
+        process.stdout.write(`wiki:refresh skipped (${result.skipReason})\n`);
+      } else {
+        process.stdout.write(
+          `wiki:refresh done — added: ${result.added}, archived: ${result.archived}\n`,
+        );
+      }
+      break;
+    }
     case "wiki:pull": {
       const { opts } = parseWikiArgs(rest);
       await executeWikiPull(opts);
@@ -407,6 +420,7 @@ async function main(): Promise<void> {
           "                                   自动采集错误信号 → 提取候选规则 → 写入候选队列",
           "  teamagent review-candidates [--limit=N]",
           "                                   交互式审核候选规则：[a]批准 [r]拒绝 [s]跳过 [q]退出",
+          "  teamagent wiki:refresh [--force]  立即拉取 + 清理（24h debounce，--force 强制）",
           "  teamagent wiki:pull [--since=<duration|ISO>] [--dry-run]",
           "                                   从5个源拉取前沿知识并存入知识库",
           "  teamagent wiki:add <url>         手动添加单条 URL 到知识库",

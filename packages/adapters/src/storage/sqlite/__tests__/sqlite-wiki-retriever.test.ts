@@ -148,6 +148,27 @@ describe("SqliteWikiRetriever.query() — seeded data", () => {
       expect(results[0]!.tldr).toBe(entry.tldr);
     }
   });
+
+  it("excludes entries with knowledge.status='archived'", async () => {
+    const entry = makeWikiEntry();
+    seedEntryWithVec(db, entry);
+
+    // Flip knowledge.status to archived (simulating ArchiveSweeper having run).
+    db.prepare("UPDATE knowledge SET status = 'archived' WHERE id = ?").run(entry.id);
+
+    const results = await retriever.query({
+      embedding: FAKE_VEC,
+      minSimilarity: 0.0,
+      maxAgeDays: 365,
+      maxResults: 5,
+      now: new Date("2026-06-01T12:00:00Z"),
+      cooldownMinutes: 30,
+      sessionWindowMinutes: 60,
+      sessionMaxInjections: 15,
+    });
+
+    expect(results.find(r => r.knowledgeId === entry.id)).toBeUndefined();
+  });
 });
 
 describe("SqliteWikiRetriever.recordInjection()", () => {

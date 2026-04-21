@@ -55,3 +55,9 @@ export { WikiPipeline, type PipelineOptions, type PipelineReport } from "./wiki/
 export { WikiStore } from "./storage/sqlite/wiki-store.js";
 export { WikiSubscriptionStore } from "./wiki/wiki-subscription-store.js";
 export { SqliteWikiRetriever } from "./storage/sqlite/sqlite-wiki-retriever.js";
+export { ArchiveSweeper } from "./wiki/archive-sweeper.js";
+export type { SweepReport, SweeperOptions } from "./wiki/archive-sweeper.js";
+export { LastPullMarker } from "./wiki/last-pull-marker.js";
+export type { LastPullRecord } from "./wiki/last-pull-marker.js";
+export { loadWikiConfig, DEFAULT_WIKI_CONFIG } from "./wiki/config-loader.js";
+export type { WikiConfig } from "./wiki/config-loader.js";

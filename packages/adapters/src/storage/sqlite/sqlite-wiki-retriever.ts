@@ -42,6 +42,7 @@ export class SqliteWikiRetriever implements WikiRetrieverPort {
           (1 - vec_distance_cosine(kv.embedding, ?)) AS similarity
         FROM knowledge_vec kv
         JOIN wiki_meta wm ON kv.knowledge_id = wm.knowledge_id
+        JOIN knowledge k ON k.id = wm.knowledge_id AND k.status = 'active'
         WHERE
           wm.user_thumbs_down = 0
           AND (wm.last_injected_at IS NULL
