@@ -12,7 +12,12 @@ try {
   process.exit(0);
 }
 
-const PROJECT_DB = path.resolve(__dirname, "../.teamagent/knowledge.db");
+// CC 运行 statusLine 时 cwd = 当前项目根，不是 script 所在目录。
+// 旧实现用 __dirname 凑巧在 dev repo 能 resolve，但 tarball 装到
+// node_modules/teamagent/dist/ 之后 ../.teamagent/knowledge.db 指向
+// 包内部（无 db），就会错报 0 条。
+const PROJECT_DB = path.resolve(process.cwd(), ".teamagent/knowledge.db");
+const GLOBAL_DB = path.join(os.homedir(), ".teamagent", "global.db");
 const GLOBAL_EVENTS_DB = path.join(os.homedir(), ".teamagent", "events.db");
 
 function tryOpenDb(dbPath) {
@@ -80,19 +85,27 @@ function getTodayPassCount(db) {
 }
 
 function main() {
-  const knowledgeDb = tryOpenDb(PROJECT_DB);
+  const projectDb = tryOpenDb(PROJECT_DB);
+  const globalDb  = tryOpenDb(GLOBAL_DB);
 
-  if (!knowledgeDb) {
+  if (!projectDb && !globalDb) {
     process.stdout.write("TeamAgent正在运行 · (未初始化)");
     return;
   }
 
-  let count, lastDate;
-  try {
-    count = getEntryCount(knowledgeDb);
-    lastDate = getLastLearnedDate(knowledgeDb);
-  } finally {
-    knowledgeDb.close();
+  // 两库分别取活跃数 + 最近更新日，聚合。
+  let count = 0;
+  let lastDate = null;
+  for (const db of [projectDb, globalDb]) {
+    if (!db) continue;
+    try {
+      const c = getEntryCount(db);
+      if (typeof c === "number") count += c;
+      const d = getLastLearnedDate(db);
+      if (d && (!lastDate || d > lastDate)) lastDate = d;
+    } finally {
+      db.close();
+    }
   }
 
   const eventsDb = tryOpenDb(GLOBAL_EVENTS_DB);
@@ -111,7 +124,7 @@ function main() {
   parts.push(`规则库现有：${count !== null ? count : "-"}条`);
   parts.push(todayBlocks !== null ? `今日已拦截：${todayBlocks}` : "今日已拦截：-");
   parts.push(todayPassed !== null ? `今日放行：${todayPassed}` : "今日放行：-");
-  if (lastDate) parts.push(`系统最近解析规则时间：${lastDate}`);
+  if (lastDate) parts.push(`最近全局解析：${lastDate}`);
 
   process.stdout.write(parts.join(" · "));
 }

@@ -413,10 +413,12 @@ function doInstallHook(
   }
   try {
     const r = installHook({ cwd, ...(hookEntry ? { hookEntry } : {}) });
-    return okStep(
-      "install-hook",
-      r.alreadyInstalled ? `已安装 (无变化): ${r.settingsPath}` : `已注册: ${r.settingsPath}`,
-    );
+    const parts: string[] = [];
+    parts.push(r.alreadyInstalled ? `已安装 (无变化): ${r.settingsPath}` : `已注册: ${r.settingsPath}`);
+    if (r.statusLineSkipped) {
+      parts.push("⚠️  检测到已有 statusLine，未覆盖；如要启用 TeamAgent 状态栏，请手动删除原有再重跑");
+    }
+    return okStep("install-hook", parts.join(" · "));
   } catch (err) {
     return failStep("install-hook", String(err).slice(0, 200));
   }

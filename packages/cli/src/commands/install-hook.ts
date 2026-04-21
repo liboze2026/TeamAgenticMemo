@@ -6,6 +6,7 @@ const HOOK_TAG = "teamagent-pre-tool-use";
 const POST_HOOK_TAG = "teamagent-post-tool-use";
 const USER_PROMPT_TAG = "teamagent-user-prompt-submit";
 const STOP_HOOK_TAG   = "teamagent-stop";
+const STATUS_LINE_TAG = "teamagent-statusline";
 
 export interface InstallHookOptions {
   cwd?: string;
@@ -17,6 +18,8 @@ export interface InstallHookOptions {
   userPromptEntry?: string;
   /** 显式指定 Stop hook 入口绝对路径 */
   stopEntry?: string;
+  /** 显式指定 statusLine 脚本入口绝对路径 */
+  statusLineEntry?: string;
 }
 
 interface ClaudeSettings {
@@ -25,6 +28,12 @@ interface ClaudeSettings {
     PostToolUse?: HookEntry[];
     UserPromptSubmit?: HookEntry[];
     Stop?: HookEntry[];
+    [k: string]: unknown;
+  };
+  statusLine?: {
+    type?: string;
+    command?: string;
+    _teamagentTag?: string;
     [k: string]: unknown;
   };
   [k: string]: unknown;
@@ -109,6 +118,8 @@ export function installHook(opts: InstallHookOptions = {}): {
   postHookEntry: string;
   alreadyInstalled: boolean;
   postAlreadyInstalled: boolean;
+  /** true = 已有非 teamagent 的 statusLine，按约定保留未覆盖 */
+  statusLineSkipped: boolean;
 } {
   const cwd = opts.cwd ?? process.cwd();
   const settingsPath = path.join(cwd, ".claude", "settings.local.json");
@@ -208,6 +219,30 @@ export function installHook(opts: InstallHookOptions = {}): {
   }
   if (settings.hooks.Stop.length === 0) delete settings.hooks.Stop;
 
+  // statusLine 注册。CC 只有一个 statusLine 槽位 — 若用户已有非 teamagent 的
+  // statusLine（例如 caveman），不覆盖，标记 skipped=true 让调用方打提示。
+  // 旧 teamagent 的（有 _teamagentTag）视作可更新。
+  const statusLineEntry = opts.statusLineEntry
+    ?? path.join(cliRoot(), "dist", "teamagent-statusline.cjs");
+  const hasStatusLineBundle = fs.existsSync(statusLineEntry);
+  let statusLineSkipped = false;
+  if (hasStatusLineBundle) {
+    const existing = settings.statusLine;
+    const isOurs =
+      !existing ||
+      Object.keys(existing).length === 0 ||
+      existing._teamagentTag === STATUS_LINE_TAG;
+    if (isOurs) {
+      settings.statusLine = {
+        type: "command",
+        command: `node ${shellQuote(toForwardSlash(statusLineEntry))}`,
+        _teamagentTag: STATUS_LINE_TAG,
+      };
+    } else {
+      statusLineSkipped = true;
+    }
+  }
+
   writeSettings(settingsPath, settings);
   return {
     settingsPath,
@@ -215,6 +250,7 @@ export function installHook(opts: InstallHookOptions = {}): {
     postHookEntry,
     alreadyInstalled,
     postAlreadyInstalled,
+    statusLineSkipped,
   };
 }
 
@@ -275,6 +311,12 @@ export function uninstallHook(opts: { cwd?: string } = {}): {
 
   if (settings.hooks && Object.keys(settings.hooks).length === 0) {
     delete settings.hooks;
+  }
+
+  // statusLine：只有在明确打了 teamagent tag 时才移除，避免误删用户的
+  if (settings.statusLine?._teamagentTag === STATUS_LINE_TAG) {
+    delete settings.statusLine;
+    removedAny = true;
   }
 
   writeSettings(settingsPath, settings);

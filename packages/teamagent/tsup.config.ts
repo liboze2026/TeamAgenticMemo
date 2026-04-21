@@ -1,4 +1,6 @@
 import { defineConfig } from "tsup";
+import fs from "node:fs";
+import path from "node:path";
 
 const ENTRIES = {
   bin:                      "../cli/src/bin.ts",
@@ -66,5 +68,12 @@ export default defineConfig([
     ],
     external: NATIVE_EXTERNAL,
     shims: true,
+    // statusline is intentionally NOT bundled — tsup CJS rewrites require("node:sqlite")
+    // to require("sqlite"), breaking the builtin. Copy raw source instead.
+    async onSuccess() {
+      const src = path.resolve(__dirname, "../../scripts/teamagent-statusline.cjs");
+      const dst = path.resolve(__dirname, "dist/teamagent-statusline.cjs");
+      fs.copyFileSync(src, dst);
+    },
   },
 ]);

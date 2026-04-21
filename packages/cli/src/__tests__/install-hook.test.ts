@@ -178,3 +178,85 @@ describe("installHook — UserPromptSubmit + Stop", () => {
     expect(content.hooks?.Stop).toBeUndefined();
   });
 });
+
+describe("installHook — statusLine", () => {
+  let tmp: ReturnType<typeof mkTmp>;
+  beforeEach(() => { tmp = mkTmp(); });
+  afterEach(() => { tmp.cleanup(); });
+
+  it("registers teamagent statusLine when none exists", () => {
+    const r = installHook({
+      cwd: tmp.cwd,
+      hookEntry: FAKE_HOOK_ENTRY,
+      statusLineEntry: FAKE_HOOK_ENTRY,
+    });
+    expect(r.statusLineSkipped).toBe(false);
+
+    const content = JSON.parse(
+      fs.readFileSync(path.join(tmp.cwd, ".claude", "settings.local.json"), "utf-8"),
+    );
+    expect(content.statusLine).toBeDefined();
+    expect(content.statusLine.type).toBe("command");
+    expect(content.statusLine._teamagentTag).toBe("teamagent-statusline");
+    expect(content.statusLine.command).toContain("node");
+    expect(content.statusLine.command).toContain(FAKE_HOOK_ENTRY.replace(/\\/g, "/"));
+  });
+
+  it("updates tagged teamagent statusLine (idempotent)", () => {
+    installHook({ cwd: tmp.cwd, hookEntry: FAKE_HOOK_ENTRY, statusLineEntry: FAKE_HOOK_ENTRY });
+    const r2 = installHook({ cwd: tmp.cwd, hookEntry: FAKE_HOOK_ENTRY, statusLineEntry: FAKE_HOOK_ENTRY });
+    expect(r2.statusLineSkipped).toBe(false);
+
+    const content = JSON.parse(
+      fs.readFileSync(path.join(tmp.cwd, ".claude", "settings.local.json"), "utf-8"),
+    );
+    expect(content.statusLine._teamagentTag).toBe("teamagent-statusline");
+  });
+
+  it("does not overwrite user's non-teamagent statusLine", () => {
+    const settingsPath = path.join(tmp.cwd, ".claude", "settings.local.json");
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    const preExisting = {
+      statusLine: {
+        type: "command",
+        command: "node /custom/user/bar.js",
+      },
+    };
+    fs.writeFileSync(settingsPath, JSON.stringify(preExisting));
+
+    const r = installHook({
+      cwd: tmp.cwd,
+      hookEntry: FAKE_HOOK_ENTRY,
+      statusLineEntry: FAKE_HOOK_ENTRY,
+    });
+    expect(r.statusLineSkipped).toBe(true);
+
+    const content = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    expect(content.statusLine.command).toBe("node /custom/user/bar.js");
+    expect(content.statusLine._teamagentTag).toBeUndefined();
+  });
+
+  it("uninstall removes only tagged teamagent statusLine", () => {
+    installHook({ cwd: tmp.cwd, hookEntry: FAKE_HOOK_ENTRY, statusLineEntry: FAKE_HOOK_ENTRY });
+    uninstallHook({ cwd: tmp.cwd });
+    const content = JSON.parse(
+      fs.readFileSync(path.join(tmp.cwd, ".claude", "settings.local.json"), "utf-8"),
+    );
+    expect(content.statusLine).toBeUndefined();
+  });
+
+  it("uninstall preserves user's non-teamagent statusLine", () => {
+    const settingsPath = path.join(tmp.cwd, ".claude", "settings.local.json");
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    fs.writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        statusLine: { type: "command", command: "user-status.sh" },
+      }),
+    );
+    installHook({ cwd: tmp.cwd, hookEntry: FAKE_HOOK_ENTRY, statusLineEntry: FAKE_HOOK_ENTRY });
+    uninstallHook({ cwd: tmp.cwd });
+    const content = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    expect(content.statusLine.command).toBe("user-status.sh");
+  });
+});
