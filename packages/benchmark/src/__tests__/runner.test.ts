@@ -21,11 +21,19 @@ const group: GroupConfig = { name: "g1", fixtureDir: "/tmp" };
 describe("runTask", () => {
   it("returns correct verdict when SDK output matches correct pattern", async () => {
     const sdk = new FakeSdkRunner();
-    sdk.setResponse("make me code", { output: "GOOD code", tokensIn: 10, tokensOut: 20 });
+    sdk.setResponse("make me code", {
+      output: "GOOD code",
+      tokensIn: 10,
+      tokensOut: 20,
+      cacheReadTokens: 500,
+      cacheCreationTokens: 30,
+    });
     const result = await runTask(task, group, sdk, "/tmp/wd", 1);
     expect(result.verdict).toBe("correct");
     expect(result.tokensIn).toBe(10);
     expect(result.tokensOut).toBe(20);
+    expect(result.cacheReadTokens).toBe(500);
+    expect(result.cacheCreationTokens).toBe(30);
     expect(result.run).toBe(1);
   });
 

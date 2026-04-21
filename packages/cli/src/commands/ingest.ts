@@ -132,6 +132,7 @@ async function defaultRunner(
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 10 * 1024 * 1024,
+    windowsHide: true,
   });
 }
 

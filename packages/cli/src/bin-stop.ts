@@ -173,6 +173,10 @@ async function main(): Promise<void> {
       stdio: "ignore",
       cwd,
       env: { ...process.env, TEAMAGENT_STOP_PIPELINE: "1" },
+      // CRITICAL on Windows: without this, every detached spawn opens a new
+      // console window. In async mode that fires on every session close, so
+      // users see a flurry of popups. Must hide.
+      windowsHide: true,
     });
     child.unref();
     return;

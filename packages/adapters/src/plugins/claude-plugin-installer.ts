@@ -75,7 +75,10 @@ export class ClaudePluginInstaller {
       new Promise<PluginCmdResult>((resolve) => {
         let child: ReturnType<typeof nodeSpawn>;
         try {
-          child = nodeSpawn(exe, args, { stdio: ["ignore", "pipe", "pipe"] });
+          child = nodeSpawn(exe, args, {
+            stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: true,
+          });
         } catch (err) {
           const msg = (err as NodeJS.ErrnoException).code === "ENOENT" ? null : String(err);
           resolve(msg ? { kind: "error", message: msg } : { kind: "enoent" });

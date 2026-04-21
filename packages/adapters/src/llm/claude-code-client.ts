@@ -163,6 +163,9 @@ const defaultSpawner: Spawner = (command, args, options) => {
       child = nodeSpawn(command, args, {
         stdio: ["pipe", "pipe", "pipe"],
         shell: false,
+        // Avoid popping up console windows on Windows. Async Stop pipeline can
+        // fire this repeatedly; without this the screen floods with terminals.
+        windowsHide: true,
       });
     } catch (err) {
       resolve({ kind: "error", message: String(err) });

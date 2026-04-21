@@ -32,6 +32,8 @@ export async function runTask(
         reason: "empty_response",
         tokensIn: sdkResult.tokensIn,
         tokensOut: sdkResult.tokensOut,
+        cacheReadTokens: sdkResult.cacheReadTokens,
+        cacheCreationTokens: sdkResult.cacheCreationTokens,
         durationMs,
         output: "",
       };
@@ -47,6 +49,8 @@ export async function runTask(
       reason,
       tokensIn: sdkResult.tokensIn,
       tokensOut: sdkResult.tokensOut,
+      cacheReadTokens: sdkResult.cacheReadTokens,
+      cacheCreationTokens: sdkResult.cacheCreationTokens,
       durationMs,
       output: combined,
     };
@@ -59,6 +63,8 @@ export async function runTask(
       reason: "sdk_error",
       tokensIn: 0,
       tokensOut: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
       durationMs: Date.now() - start,
       output: "",
       errorMsg: e instanceof Error ? e.message : String(e),

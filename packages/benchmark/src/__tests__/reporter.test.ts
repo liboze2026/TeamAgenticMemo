@@ -16,7 +16,9 @@ const config: BenchmarkConfig = {
 function makeResult(group: string, verdict: TaskResult["verdict"], tokens: number, dur: number): TaskResult {
   return {
     group, taskId: `t-${group}-${verdict}`, run: 1, verdict,
-    tokensIn: tokens, tokensOut: tokens, durationMs: dur, output: "out",
+    tokensIn: tokens, tokensOut: tokens,
+    cacheReadTokens: 0, cacheCreationTokens: 0,
+    durationMs: dur, output: "out",
   };
 }
 
@@ -71,6 +73,33 @@ describe("aggregate", () => {
   it("does not crash on empty results", () => {
     const report = aggregate([], config);
     expect(report.groups).toEqual([]);
+  });
+
+  it("aggregates cache tokens and uses them in token delta", () => {
+    const mk = (group: string, io: number, cr: number, cc: number): TaskResult => ({
+      group,
+      taskId: `t-${group}`,
+      run: 1,
+      verdict: "correct",
+      tokensIn: io,
+      tokensOut: io,
+      cacheReadTokens: cr,
+      cacheCreationTokens: cc,
+      durationMs: 100,
+      output: "ok",
+    });
+    const report = aggregate(
+      [mk("baseline", 50, 200, 100), mk("teamagent", 60, 300, 150)],
+      config,
+    );
+    const baseline = report.groups.find((g) => g.group === "baseline")!;
+    const teamagent = report.groups.find((g) => g.group === "teamagent")!;
+    expect(baseline.totalCacheReadTokens).toBe(200);
+    expect(baseline.totalCacheCreationTokens).toBe(100);
+    expect(teamagent.totalCacheReadTokens).toBe(300);
+    expect(teamagent.totalCacheCreationTokens).toBe(150);
+    // baseline total: 50+50+200+100 = 400; teamagent: 60+60+300+150 = 570
+    expect(report.comparison.tokenDeltaPercent).toBeCloseTo((570 - 400) / 400, 5);
   });
 });
 

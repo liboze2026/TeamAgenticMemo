@@ -68,10 +68,14 @@ async function main(): Promise<void> {
     for (const task of tasks) {
       for (let run = 1; run <= config.runs; run++) {
         stepIdx++;
-        process.stdout.write(`[${stepIdx}/${totalSteps}] ${groupName}/${task.id} run=${run} ... `);
+        const useColor = process.env.BENCH_NO_COLOR !== "1" && process.stdout.isTTY !== false;
+        const col = (s: string, code: string) => useColor ? `\x1b[${code}m${s}\x1b[0m` : s;
+        const badge = groupName === "teamagent" ? col(" TEAMAGENT ", "1;44") : col(" BASELINE  ", "1;47;30");
+        process.stdout.write(`\n${badge} [${stepIdx}/${totalSteps}] ${task.id} run=${run}\n`);
         const r = await runTask(task, groupCfg, sdk, workdir, run);
         allResults.push(r);
-        process.stdout.write(`${r.verdict} (${r.durationMs}ms)\n`);
+        const vColor = r.verdict === "correct" ? "1;32" : r.verdict === "wrong" ? "1;31" : "1;33";
+        process.stdout.write(`  ${col("→ " + r.verdict.toUpperCase(), vColor)} ${col(`(${r.durationMs}ms)`, "90")}\n`);
       }
     }
     cleanupGroupWorkdir(workdir);

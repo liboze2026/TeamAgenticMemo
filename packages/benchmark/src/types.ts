@@ -32,6 +32,8 @@ export interface TaskResult {
   reason?: string;
   tokensIn: number;
   tokensOut: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
   durationMs: number;
   output: string;
   errorMsg?: string;
@@ -45,6 +47,8 @@ export interface GroupSummary {
   errorCount: number;
   totalTokensIn: number;
   totalTokensOut: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
   avgDurationMs: number;
 }
 

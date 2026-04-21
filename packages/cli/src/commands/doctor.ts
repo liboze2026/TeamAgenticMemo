@@ -152,7 +152,11 @@ function checkNodeVersion(): DoctorCheckResult {
 
 function checkClaudeCode(): DoctorCheckResult {
   try {
-    const out = execSync("claude --version", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const out = execSync("claude --version", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    }).trim();
     return { name: "claude-code", status: "pass", detail: out.split("\n")[0] ?? out };
   } catch {
     return {

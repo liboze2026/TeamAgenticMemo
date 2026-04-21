@@ -47,7 +47,7 @@ function readGitTimeline(cwd: string): Array<{ hash: string; date: string; messa
   try {
     const out = execSync(
       'git log --pretty=format:"%h|%ad|%s" --date=short -100',
-      { cwd, encoding: "utf-8" },
+      { cwd, encoding: "utf-8", windowsHide: true },
     );
     return out
       .split("\n")

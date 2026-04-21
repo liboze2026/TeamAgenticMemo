@@ -101,18 +101,28 @@ function relativeTime(dateStr: string, now: Date): string {
 }
 
 function formatWarnMessage(rule: any, now: Date): string {
-  // reasoning field intentionally omitted — new format is action-focused
   const age = rule.created_at ? relativeTime(rule.created_at as string, now) : "未知";
   const conf = typeof rule.confidence === "number" ? rule.confidence.toFixed(2) : "?";
-  const content = rule.correct_pattern ?? rule.trigger ?? "";
-  return `◈ TeamAgent 经验提醒 [置信度 ${conf} · ${age}学到]\n  → ${content}`;
+  const correct = rule.correct_pattern ?? rule.trigger ?? "";
+  const wrong = rule.wrong_pattern ?? "";
+  const reasoning = rule.reasoning ?? "";
+  const lines = [`◈ TeamAgent 经验提醒 [置信度 ${conf} · ${age}学到]`];
+  if (wrong) lines.push(`  ✗ 避免: ${wrong}`);
+  if (correct) lines.push(`  ✓ 使用: ${correct}`);
+  if (reasoning) lines.push(`  · 理由: ${reasoning}`);
+  return lines.join("\n");
 }
 
 function formatBlockReason(rule: any, now: Date): string {
-  // reasoning field intentionally omitted — new format is action-focused
   const age = rule.created_at ? relativeTime(rule.created_at as string, now) : "未知";
   const conf = typeof rule.confidence === "number" ? rule.confidence.toFixed(2) : "?";
   const hitCount = typeof rule.hit_count === "number" ? rule.hit_count : 0;
-  const content = rule.correct_pattern ?? rule.trigger ?? "";
-  return `◈ TeamAgent 阻止操作 [置信度 ${conf} · 已触发 ${hitCount} 次 · ${age}学到]\n  → ${content}`;
+  const correct = rule.correct_pattern ?? rule.trigger ?? "";
+  const wrong = rule.wrong_pattern ?? "";
+  const reasoning = rule.reasoning ?? "";
+  const lines = [`◈ TeamAgent 阻止操作 [置信度 ${conf} · 已触发 ${hitCount} 次 · ${age}学到]`];
+  if (wrong) lines.push(`  ✗ 避免: ${wrong}`);
+  if (correct) lines.push(`  ✓ 使用: ${correct}`);
+  if (reasoning) lines.push(`  · 理由: ${reasoning}`);
+  return lines.join("\n");
 }

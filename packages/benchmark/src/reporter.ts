@@ -15,8 +15,21 @@ export function aggregate(results: TaskResult[], config: BenchmarkConfig): Repor
     const errorCount = rows.filter((r) => r.verdict === "error").length;
     const totalTokensIn = rows.reduce((s, r) => s + r.tokensIn, 0);
     const totalTokensOut = rows.reduce((s, r) => s + r.tokensOut, 0);
+    const totalCacheReadTokens = rows.reduce((s, r) => s + (r.cacheReadTokens ?? 0), 0);
+    const totalCacheCreationTokens = rows.reduce((s, r) => s + (r.cacheCreationTokens ?? 0), 0);
     const avgDurationMs = rows.length > 0 ? rows.reduce((s, r) => s + r.durationMs, 0) / rows.length : 0;
-    return { group: name, wrongCount, correctCount, neitherCount, errorCount, totalTokensIn, totalTokensOut, avgDurationMs };
+    return {
+      group: name,
+      wrongCount,
+      correctCount,
+      neitherCount,
+      errorCount,
+      totalTokensIn,
+      totalTokensOut,
+      totalCacheReadTokens,
+      totalCacheCreationTokens,
+      avgDurationMs,
+    };
   });
 
   const baseline = groups.find((g) => g.group === "baseline");
@@ -29,8 +42,16 @@ export function aggregate(results: TaskResult[], config: BenchmarkConfig): Repor
     prr = (baseline.wrongCount - teamagent.wrongCount) / baseline.wrongCount;
   }
   if (baseline && teamagent) {
-    const baseTotal = baseline.totalTokensIn + baseline.totalTokensOut;
-    const teamTotal = teamagent.totalTokensIn + teamagent.totalTokensOut;
+    const baseTotal =
+      baseline.totalTokensIn +
+      baseline.totalTokensOut +
+      baseline.totalCacheReadTokens +
+      baseline.totalCacheCreationTokens;
+    const teamTotal =
+      teamagent.totalTokensIn +
+      teamagent.totalTokensOut +
+      teamagent.totalCacheReadTokens +
+      teamagent.totalCacheCreationTokens;
     if (baseTotal > 0) {
       tokenDeltaPercent = (teamTotal - baseTotal) / baseTotal;
     }
@@ -60,10 +81,14 @@ export function writeMarkdown(report: Report, outputPath: string): void {
   lines.push("");
   lines.push("## Summary");
   lines.push("");
-  lines.push("| Group | Wrong | Correct | Neither | Error | Tokens (in/out) | Avg Duration |");
-  lines.push("|---|---|---|---|---|---|---|");
+  lines.push("| Group | Wrong | Correct | Neither | Error | in | out | cache_read | cache_create | total | Avg Duration |");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
   for (const g of report.groups) {
-    lines.push(`| ${escapeMd(g.group)} | ${g.wrongCount} | ${g.correctCount} | ${g.neitherCount} | ${g.errorCount} | ${g.totalTokensIn} / ${g.totalTokensOut} | ${g.avgDurationMs.toFixed(0)}ms |`);
+    const total =
+      g.totalTokensIn + g.totalTokensOut + g.totalCacheReadTokens + g.totalCacheCreationTokens;
+    lines.push(
+      `| ${escapeMd(g.group)} | ${g.wrongCount} | ${g.correctCount} | ${g.neitherCount} | ${g.errorCount} | ${g.totalTokensIn} | ${g.totalTokensOut} | ${g.totalCacheReadTokens} | ${g.totalCacheCreationTokens} | ${total} | ${g.avgDurationMs.toFixed(0)}ms |`,
+    );
   }
   lines.push("");
   lines.push(`**PRR**: ${(report.comparison.prr * 100).toFixed(1)}%`);
