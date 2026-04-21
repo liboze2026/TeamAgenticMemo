@@ -33,6 +33,14 @@ export {
   type StackFingerprint,
 } from "./detect-stack/index.js";
 export { getMetaPrinciples } from "./init/meta-principles.js";
+export {
+  DEFAULT_MARKETPLACES,
+  DEFAULT_PLUGINS,
+  parsePluginSpec,
+  formatPluginSpec,
+  type MarketplaceSpec,
+  type PluginSpec,
+} from "./init/default-plugins.js";
 export { defaultCalibrator } from "./calibrator/default.js";
 export {
   runCalibrationPipeline,
