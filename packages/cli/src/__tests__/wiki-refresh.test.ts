@@ -75,6 +75,24 @@ describe("runWikiRefresh", () => {
     expect(rewritten.archived).toBe(1);
   });
 
+  it("sweep.enabled=false → 不跑 sweep", async () => {
+    const teamagentDir = join(cwd, ".teamagent");
+    mkdirSync(teamagentDir, { recursive: true });
+    writeFileSync(join(teamagentDir, "config.json"),
+      JSON.stringify({ wiki: { sweep: { enabled: false } } }));
+    const sweepCalls: number[] = [];
+    await runWikiRefresh({
+      cwd,
+      force: true,
+      _testDeps: {
+        openDb: () => ({ close: () => {} } as any),
+        runPipeline: async () => ({ added: 0, skipped: 0, rejected: 0, errors: [] }),
+        runSweep: () => { sweepCalls.push(1); return { archived: [], byReason: { zeroHitAged: 0, sourceOverflow: 0 } }; },
+      },
+    });
+    expect(sweepCalls).toEqual([]);
+  });
+
   it("pipeline 抛异常：记录到 errors 但继续跑 sweep 并更新 marker", async () => {
     const teamagentDir = join(cwd, ".teamagent");
     mkdirSync(teamagentDir, { recursive: true });

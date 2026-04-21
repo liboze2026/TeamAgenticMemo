@@ -17,7 +17,7 @@ async function main(): Promise<void> {
     } catch { /* fallback to env/cwd */ }
   }
 
-  const action = decideAction(cwd, new Date(), DEFAULT_DEBOUNCE_HOURS);
+  const action = decideAction(cwd, new Date());
   if (action === "spawn") {
     try { spawnRefresh(cwd); } catch (e) { logError("spawn-failed", e); }
   }

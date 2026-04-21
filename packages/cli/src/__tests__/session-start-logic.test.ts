@@ -45,4 +45,12 @@ describe("decideAction", () => {
     );
     expect(decideAction(cwd, new Date(), 24)).toBe("spawn");
   });
+
+  it("autoRefresh.enabled=false → skip-disabled", () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(join(cwd, ".teamagent", "knowledge.db"), "");
+    writeFileSync(join(cwd, ".teamagent", "config.json"),
+      JSON.stringify({ wiki: { autoRefresh: { enabled: false } } }));
+    expect(decideAction(cwd, new Date())).toBe("skip-disabled");
+  });
 });

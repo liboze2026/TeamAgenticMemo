@@ -66,7 +66,18 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
     errors: [],
   };
   const teamagentDir = path.join(opts.cwd, ".teamagent");
-  const debounceHours = opts.debounceHours ?? DEFAULT_DEBOUNCE_HOURS;
+
+  // Load per-project config (defaults on missing/malformed)
+  let cfg: { autoRefresh: { enabled: boolean; debounceHours: number }; sweep: { enabled: boolean; zeroHitMinAgeDays: number; perSourceKeep: number } };
+  try {
+    const { loadWikiConfig } = await import("@teamagent/adapters");
+    cfg = loadWikiConfig(opts.cwd);
+  } catch {
+    cfg = { autoRefresh: { enabled: true, debounceHours: 24 }, sweep: { enabled: true, zeroHitMinAgeDays: 60, perSourceKeep: 3 } };
+  }
+  const debounceHours = opts.debounceHours ?? cfg.autoRefresh.debounceHours;
+  const zeroHitMinAgeDays = opts.zeroHitMinAgeDays ?? cfg.sweep.zeroHitMinAgeDays;
+  const perSourceKeep = opts.perSourceKeep ?? cfg.sweep.perSourceKeep;
 
   emit(opts.bus, "started");
 
@@ -120,23 +131,19 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
   }
 
   // 4. sweeper
-  try {
-    if (opts._testDeps?.runSweep) {
-      const sweepReport = opts._testDeps.runSweep(db!, new Date(), {
-        zeroHitMinAgeDays: opts.zeroHitMinAgeDays,
-        perSourceKeep: opts.perSourceKeep,
-      });
-      result.archived = sweepReport.archived.length;
-    } else {
-      const { ArchiveSweeper } = await import("@teamagent/adapters");
-      const sweepReport = new ArchiveSweeper(db!).sweep(new Date(), {
-        zeroHitMinAgeDays: opts.zeroHitMinAgeDays,
-        perSourceKeep: opts.perSourceKeep,
-      });
-      result.archived = sweepReport.archived.length;
+  if (cfg.sweep.enabled) {
+    try {
+      if (opts._testDeps?.runSweep) {
+        const sweepReport = opts._testDeps.runSweep(db!, new Date(), { zeroHitMinAgeDays, perSourceKeep });
+        result.archived = sweepReport.archived.length;
+      } else {
+        const { ArchiveSweeper } = await import("@teamagent/adapters");
+        const sweepReport = new ArchiveSweeper(db!).sweep(new Date(), { zeroHitMinAgeDays, perSourceKeep });
+        result.archived = sweepReport.archived.length;
+      }
+    } catch (e) {
+      result.errors.push({ stage: "sweep", error: String(e) });
     }
-  } catch (e) {
-    result.errors.push({ stage: "sweep", error: String(e) });
   }
 
   // 5. write marker
