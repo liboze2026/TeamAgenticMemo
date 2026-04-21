@@ -24,8 +24,24 @@ cd your-project
 # 3. 初始化 / Initialize
 teamagent init
 
-# 4. 重启 Claude Code，开始使用 / Restart Claude Code — hooks are now active
+# 4.（可选）一次性装团队标配插件 / (Optional) install team-standard plugins
+teamagent install-plugins
+
+# 5. 重启 Claude Code，开始使用 / Restart Claude Code — hooks + plugins are now active
 ```
+
+### 团队标配插件 / Team-Standard Plugins
+
+`teamagent install-plugins` 注册并启用 4 个团队标配插件(通过 `claude plugin` CLI):
+
+- **superpowers** — TDD / debugging / brainstorming 等工作流 skills
+- **caveman** — 超紧凑对话模式, 省 ~75% token
+- **sales** — 销售场景工作流
+- **playground** — 交互 HTML 实验场
+
+写入 `~/.claude/settings.json`(用户全局, 不是项目级), 所以从 `init` 里单独拎出, 要显式 opt-in。一次装完跨所有项目生效。
+
+*Registers 4 team-standard plugins via the `claude plugin` CLI. Opt-in because it writes to `~/.claude/settings.json` (user-global, not project-local) — a separate scope from the rest of init.*
 
 ## 验证安装 / Verify Installation
 
@@ -52,6 +68,8 @@ All 8 checks should show ✅. If any fail, follow the fix hint shown.
 | 命令 | 说明 |
 |------|------|
 | `teamagent init` | 初始化到当前项目 |
+| `teamagent init --install-plugins` | 初始化 + 同时装团队标配插件 |
+| `teamagent install-plugins` | 独立装/重装团队标配插件 |
 | `teamagent doctor` | 诊断安装环境 |
 | `teamagent stats` | 查看知识库统计 |
 | `teamagent analyze --commit` | 分析最新会话并提取规则 |
@@ -87,10 +105,20 @@ teamagent doctor --fix
 需要 Git Bash。PowerShell / CMD 不支持。
 *Requires Git Bash. PowerShell and CMD are not supported.*
 
+**插件没装上 / Plugins not installed**
+
+`teamagent install-plugins` 会 shell out 到 `claude plugin marketplace add` + `claude plugin install`。如果失败:
+- 确认 `claude` 命令在 PATH 中(`claude --version`)
+- 有些 marketplace 是 GitHub 仓库, 需要你机器能访问 GitHub(SSH 或 HTTPS)
+- 失败行会打印原始 `claude` CLI 输出, 看那里排查
+
+*`install-plugins` shells out to `claude plugin` CLI. Ensure `claude` is in PATH and your machine can reach GitHub. Failure lines print raw CLI output for debugging.*
+
 **如何卸载 / How to uninstall**
 ```bash
 teamagent uninstall --delete-data
 npm uninstall -g teamagent
+# Plugins installed via install-plugins stay put — use `claude plugin uninstall <name>` to remove them.
 ```
 
 ---
