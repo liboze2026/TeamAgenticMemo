@@ -6,6 +6,8 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { DatabaseSync } from "node:sqlite";
+import type { AttributionBus } from "@teamagent/ports";
+import type { AttributionEvent } from "@teamagent/types";
 
 export interface TestDeps {
   openDb?: (p: string) => DatabaseSync;
@@ -31,7 +33,19 @@ export interface RefreshOptions {
   debounceHours?: number;
   zeroHitMinAgeDays?: number;
   perSourceKeep?: number;
+  bus?: AttributionBus;
   _testDeps?: TestDeps;
+}
+
+function emit(bus: AttributionBus | undefined, action: string, detail: Partial<AttributionEvent> = {}): void {
+  if (!bus) return;
+  bus.emit({
+    source: "wiki-refresh",
+    action,
+    severity: detail.severity ?? "info",
+    timestamp: new Date().toISOString(),
+    ...detail,
+  });
 }
 
 export interface RefreshResult {
@@ -54,11 +68,14 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
   const teamagentDir = path.join(opts.cwd, ".teamagent");
   const debounceHours = opts.debounceHours ?? DEFAULT_DEBOUNCE_HOURS;
 
+  emit(opts.bus, "started");
+
   // 1. debounce
   try {
     const { LastPullMarker } = await import("@teamagent/adapters");
     const marker = new LastPullMarker(teamagentDir);
     if (!opts.force && marker.shouldSkip(new Date(), debounceHours)) {
+      emit(opts.bus, "skipped", { userFacingValue: "wiki 24h 内刚刷过，跳过" });
       return { ...result, skipped: true, skipReason: "debounced" };
     }
   } catch (e) {
@@ -75,6 +92,7 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
     db = openDb(dbPath);
   } catch (e) {
     result.errors.push({ stage: "open-db", error: String(e) });
+    emit(opts.bus, "skipped", { userFacingValue: "没有 knowledge.db，跳过" });
     return { ...result, skipped: true, skipReason: "db-missing" };
   }
 
@@ -131,6 +149,17 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
     });
   } catch (e) {
     result.errors.push({ stage: "marker-write", error: String(e) });
+  }
+
+  emit(opts.bus, "completed", {
+    target: { count: result.added },
+    userFacingValue: `新增 ${result.added} 条 wiki`,
+  });
+  if (result.archived > 0) {
+    emit(opts.bus, "archived", {
+      target: { count: result.archived },
+      userFacingValue: `归档 ${result.archived} 条过时 wiki`,
+    });
   }
 
   return result;

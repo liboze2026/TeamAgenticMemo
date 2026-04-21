@@ -19,7 +19,8 @@ export interface AttributionEvent {
     | "skeleton"
     | "ingest"
     | "validator"
-    | "compile";
+    | "compile"
+    | "wiki-refresh";
   action: string;
   target?: { id?: string; file?: string; count?: number };
   before?: unknown;
