@@ -48,6 +48,11 @@ import {
   parseDoctorArgs,
   renderDoctorResult,
 } from "./commands/doctor.js";
+import {
+  executeInstallPlugins,
+  parseInstallPluginsArgs,
+  renderInstallPluginsResult,
+} from "./commands/install-plugins.js";
 import { executeScanErrors, parseScanErrorsArgs } from "./commands/scan-errors.js";
 import {
   executeReviewCandidates,
@@ -340,6 +345,13 @@ async function main(): Promise<void> {
       if (!result.allPassed) process.exit(1);
       return;
     }
+    case "install-plugins": {
+      const opts = parseInstallPluginsArgs(rest);
+      const result = await executeInstallPlugins(opts);
+      process.stdout.write(renderInstallPluginsResult(result));
+      if (!result.ok) process.exit(1);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
@@ -370,6 +382,10 @@ async function main(): Promise<void> {
           "                                   诊断安装环境（Node版本/Claude Code/sqlite-vec/Hook/CLAUDE.md）",
           "                                   --fix: 自动修复能自动修的问题",
           "                                   --json: 输出机器可读 JSON",
+          "  teamagent install-plugins [--dry-run] [--only=a,b] [--scope=user|project|local]",
+          "                                   注册团队标配 plugins（superpowers/caveman/sales/playground）",
+          "                                   通过 'claude plugin marketplace add' + 'claude plugin install' 调 CC CLI",
+          "                                   默认装全部；--only 限定子集；--dry-run 只预览",
           "  teamagent disable                临时禁用 Hook（保留数据）",
           "  teamagent enable                 重新启用 Hook",
           "  teamagent uninstall [--delete-data] [--dry-run]",
