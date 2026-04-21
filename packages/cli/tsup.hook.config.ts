@@ -13,6 +13,8 @@ export default defineConfig({
     "bin-pre-tool-use":       "src/bin-pre-tool-use.ts",
     "bin-post-tool-use":      "src/bin-post-tool-use.ts",
     "bin-user-prompt-submit": "src/bin-user-prompt-submit.ts",
+    "bin-session-start":      "src/bin-session-start.ts",
+    "bin-wiki-refresh":       "src/bin-wiki-refresh.ts",
     "bin-stop":               "src/bin-stop.ts",
   },
   format: ["cjs"],
