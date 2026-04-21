@@ -8,7 +8,18 @@ const ENTRIES = {
   "bin-user-prompt-submit": "../cli/src/bin-user-prompt-submit.ts",
 };
 
-const NATIVE_EXTERNAL = ["sharp", "onnxruntime-node", "jsdom", "sqlite-vec", "better-sqlite3"];
+const NATIVE_EXTERNAL = [
+  "sharp",
+  "onnxruntime-node",
+  "jsdom",
+  "sqlite-vec",
+  "better-sqlite3",
+  // Wiki-only deps — externalize so the ESM bundle doesn't pull them in.
+  // Required only when `teamagent wiki:*` commands actually run.
+  "@xenova/transformers",
+  "rss-parser",
+  "@mozilla/readability",
+];
 
 export default defineConfig([
   {
@@ -29,7 +40,7 @@ export default defineConfig([
     ],
     external: NATIVE_EXTERNAL,
     shims: true,
-    banner: { js: "#!/usr/bin/env node" },
+    // src/bin.ts already has #!/usr/bin/env node; do not add a second banner.
   },
   {
     entry: {
