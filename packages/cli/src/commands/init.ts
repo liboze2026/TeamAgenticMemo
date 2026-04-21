@@ -7,7 +7,12 @@ import {
   MarkdownCompiler,
   ClaudeCodeLLMClient,
   openDb,
+  ClaudePluginInstaller,
 } from "@teamagent/adapters";
+import {
+  executeInstallPlugins,
+  type InstallPluginsResult,
+} from "./install-plugins.js";
 import {
   detectStack,
   getMetaPrinciples,
@@ -33,6 +38,14 @@ export interface InitOptions {
   skipImport?: boolean;
   /** 跳过 hook 安装（测试环境下 dist bundle 可能不存在）。 */
   skipHook?: boolean;
+  /**
+   * Opt-in：装团队标配 plugins（superpowers/caveman/sales/playground）。
+   * 默认 false——插件装在用户全局（~/.claude/settings.json），跨所有项目生效，
+   * 与"初始化本项目"不是同一个心智模型，不能默认打开。
+   */
+  installPlugins?: boolean;
+  /** 注入 plugin installer（测试用）。 */
+  pluginInstaller?: ClaudePluginInstaller;
   projectDbPath?: string;
   userGlobalDbPath?: string;
   claudeMdPath?: string;
@@ -121,6 +134,10 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
     steps.push(doInstallHook(paths.cwd, opts.hookEntry, dryRun));
   } else {
     steps.push({ step: "install-hook", status: "skipped", detail: "skipHook=true" });
+  }
+
+  if (opts.installPlugins) {
+    steps.push(await doInstallPlugins(dryRun, opts.pluginInstaller));
   }
 
   const compileStep = doCompileClaudeMd(paths, dryRun, now);
@@ -353,6 +370,36 @@ async function doImportRules(
   }
 }
 
+async function doInstallPlugins(
+  dryRun: boolean,
+  injected?: ClaudePluginInstaller,
+): Promise<InitStepResult> {
+  if (dryRun) {
+    return okStep(
+      "install-plugins",
+      "(dry-run) 会注册团队标配 marketplaces + plugins",
+    );
+  }
+  try {
+    const opts: Parameters<typeof executeInstallPlugins>[0] = {};
+    if (injected) opts.installer = injected;
+    const result: InstallPluginsResult = await executeInstallPlugins(opts);
+    const s = result.summary;
+    const detail = [
+      s.added ? `${s.added} 新装` : "",
+      s.alreadyPresent ? `${s.alreadyPresent} 已存在` : "",
+      s.failed ? `${s.failed} 失败` : "",
+    ]
+      .filter(Boolean)
+      .join("，") || "无事可做";
+    return result.ok
+      ? okStep("install-plugins", detail)
+      : failStep("install-plugins", detail);
+  } catch (err) {
+    return failStep("install-plugins", String(err).slice(0, 200));
+  }
+}
+
 function doInstallHook(
   cwd: string,
   hookEntry: string | undefined,
@@ -489,6 +536,7 @@ export function parseInitArgs(argv: string[]): InitOptions {
     if (a === "--dry-run") opts.dryRun = true;
     else if (a === "--skip-import") opts.skipImport = true;
     else if (a === "--skip-hook") opts.skipHook = true;
+    else if (a === "--install-plugins") opts.installPlugins = true;
   }
   return opts;
 }
@@ -505,6 +553,7 @@ export function renderInitResult(result: InitResult): string {
     { icon: "🔍", label: "检测项目环境", stepKeys: ["detect-stack"] },
     { icon: "📦", label: "初始化知识库", stepKeys: ["pre-check", "create-dirs", "load-preset", "scan-rules", "structure-rules"] },
     { icon: "🔗", label: "注册 Hook", stepKeys: ["install-hook"] },
+    { icon: "🔌", label: "安装团队标配插件", stepKeys: ["install-plugins"] },
     { icon: "📄", label: "编译 CLAUDE.md", stepKeys: ["compile-claude-md"] },
   ];
 
@@ -533,6 +582,14 @@ export function renderInitResult(result: InitResult): string {
     lines.push("  1. 重新打开 Claude Code（让 hook 生效）");
     lines.push("  2. 运行 teamagent doctor 验证安装");
     lines.push("  3. 运行 teamagent stats 查看知识库状态");
+    const pluginsInstalled = result.steps.some(
+      (s) => s.step === "install-plugins",
+    );
+    if (!pluginsInstalled) {
+      lines.push("");
+      lines.push("💡 团队标配插件（superpowers/caveman/sales/playground）默认不装");
+      lines.push("   需要时运行: teamagent install-plugins");
+    }
   } else {
     lines.push("❌ 安装未完成，请修复以上问题后重试");
     lines.push("   运行 teamagent doctor 获取诊断建议");
@@ -550,6 +607,7 @@ function stepLabel(step: string): string {
     "scan-rules": "扫描规则",
     "structure-rules": "导入规则",
     "install-hook": "Hook 注册",
+    "install-plugins": "Plugin 安装",
     "compile-claude-md": "CLAUDE.md",
   };
   return map[step] ?? step;

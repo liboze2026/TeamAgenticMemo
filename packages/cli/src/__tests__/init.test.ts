@@ -231,6 +231,72 @@ describe("parseInitArgs", () => {
       skipHook: true,
     });
   });
+  it("--install-plugins opt-in flag", () => {
+    expect(parseInitArgs(["--install-plugins"])).toEqual({
+      installPlugins: true,
+    });
+  });
+});
+
+describe("executeInit --install-plugins (opt-in plugin install)", () => {
+  let tmp2: ReturnType<typeof mkTmp>;
+  beforeEach(() => (tmp2 = mkTmp()));
+  afterEach(() => tmp2.cleanup());
+
+  const fakeInstaller = (calls: string[]) =>
+    ({
+      addMarketplace: async (m: { name: string }) => {
+        calls.push(`mp:${m.name}`);
+        return { status: "already" as const, detail: "already" };
+      },
+      installPlugin: async (p: { plugin: string; marketplace: string }) => {
+        calls.push(`pl:${p.plugin}@${p.marketplace}`);
+        return { status: "added" as const, detail: "ok" };
+      },
+    }) as unknown as import("@teamagent/adapters").ClaudePluginInstaller;
+
+  it("runs plugin install step only when --install-plugins is set", async () => {
+    const calls: string[] = [];
+    const base = {
+      cwd: tmp2.cwd,
+      homeDir: tmp2.home,
+      skipHook: true,
+      skipImport: true,
+      projectDbPath: tmp2.projectDbPath,
+      userGlobalDbPath: tmp2.userGlobalDbPath,
+      pluginInstaller: fakeInstaller(calls),
+    };
+
+    const off = await executeInit(base);
+    expect(off.steps.find((s) => s.step === "install-plugins")).toBeUndefined();
+    expect(calls).toEqual([]);
+
+    const on = await executeInit({ ...base, installPlugins: true });
+    const step = on.steps.find((s) => s.step === "install-plugins");
+    expect(step?.status).toBe("ok");
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it("reports failed when plugin install has any failure", async () => {
+    const failingInstaller = {
+      addMarketplace: async () => ({ status: "added" as const, detail: "" }),
+      installPlugin: async () => ({ status: "failed" as const, detail: "boom" }),
+    } as unknown as import("@teamagent/adapters").ClaudePluginInstaller;
+
+    const result = await executeInit({
+      cwd: tmp2.cwd,
+      homeDir: tmp2.home,
+      skipHook: true,
+      skipImport: true,
+      projectDbPath: tmp2.projectDbPath,
+      userGlobalDbPath: tmp2.userGlobalDbPath,
+      installPlugins: true,
+      pluginInstaller: failingInstaller,
+    });
+    const step = result.steps.find((s) => s.step === "install-plugins");
+    expect(step?.status).toBe("failed");
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe("renderInitResult", () => {
@@ -264,6 +330,39 @@ describe("renderInitResult", () => {
     });
     expect(out).toContain("❌ 安装未完成");
     expect(out).toContain("前置检查");
+  });
+
+  it("success without --install-plugins shows hint about team plugins", () => {
+    const out = renderInitResult({
+      ok: true,
+      dryRun: false,
+      steps: [{ step: "pre-check", status: "ok", detail: "ok" }],
+      summary: {
+        stack: "lang=typescript",
+        presetAdded: 4,
+        importedRules: 0,
+        totalActiveEntries: 4,
+      },
+    });
+    expect(out).toMatch(/install-plugins/);
+  });
+
+  it("success with install-plugins step present does NOT show the hint", () => {
+    const out = renderInitResult({
+      ok: true,
+      dryRun: false,
+      steps: [
+        { step: "pre-check", status: "ok", detail: "ok" },
+        { step: "install-plugins", status: "ok", detail: "all ok" },
+      ],
+      summary: {
+        stack: "lang=typescript",
+        presetAdded: 4,
+        importedRules: 0,
+        totalActiveEntries: 4,
+      },
+    });
+    expect(out).not.toMatch(/teamagent install-plugins.*\n.*运行/);
   });
 });
 
