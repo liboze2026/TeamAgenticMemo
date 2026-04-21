@@ -19,23 +19,6 @@ try {
 const PROJECT_DB = path.resolve(process.cwd(), ".teamagent/knowledge.db");
 const GLOBAL_DB = path.join(os.homedir(), ".teamagent", "global.db");
 const GLOBAL_EVENTS_DB = path.join(os.homedir(), ".teamagent", "events.db");
-const STOP_LOCK_PATH = path.resolve(process.cwd(), ".teamagent/.stop-running.lock");
-const fs = require("fs");
-
-// 若 lock 文件存在且年龄 < 5 分钟，返回"Stop 运行中"段；否则返回 null。
-// 5 分钟 cap 防止 pipeline 崩溃后死锁在状态栏。
-function getStopLockIndicator() {
-  try {
-    if (!fs.existsSync(STOP_LOCK_PATH)) return null;
-    const st = fs.statSync(STOP_LOCK_PATH);
-    const ageMs = Date.now() - st.mtimeMs;
-    if (ageMs > 5 * 60 * 1000) return null;
-    const elapsed = Math.floor(ageMs / 1000);
-    return `🔄 Stop 运行中 (${elapsed}s)`;
-  } catch {
-    return null;
-  }
-}
 
 function tryOpenDb(dbPath) {
   try {
@@ -138,8 +121,6 @@ function main() {
   }
 
   const parts = ["TeamAgent正在运行"];
-  const stopIndicator = getStopLockIndicator();
-  if (stopIndicator) parts.push(stopIndicator);
   parts.push(`规则库现有：${count !== null ? count : "-"}条`);
   parts.push(todayBlocks !== null ? `今日已拦截：${todayBlocks}` : "今日已拦截：-");
   parts.push(todayPassed !== null ? `今日放行：${todayPassed}` : "今日放行：-");
