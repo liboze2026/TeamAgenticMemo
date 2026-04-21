@@ -18,9 +18,9 @@ describe("readTeamAgentConfig", () => {
   beforeEach(() => { tmp = mkTmp(); });
   afterEach(() => { tmp.cleanup(); });
 
-  it("returns default sync when config file missing", () => {
+  it("returns default async when config file missing", () => {
     const cfg = readTeamAgentConfig(tmp.cwd);
-    expect(cfg.stop_mode).toBe("sync");
+    expect(cfg.stop_mode).toBe("async");
   });
 
   it("reads stop_mode from file", () => {

@@ -90,6 +90,69 @@ describe("ClaudeCodeLLMClient", () => {
       expect(capturedArgs).toContain("json");
       expect(capturedArgs).toContain("--no-session-persistence");
     });
+
+    it("passes --model when model option provided", async () => {
+      let capturedArgs: string[] = [];
+      const spawner: Spawner = async (_cmd, args, _opts) => {
+        capturedArgs = args;
+        return {
+          kind: "exit",
+          code: 0,
+          stdout: JSON.stringify({ result: "ok" }),
+          stderr: "",
+        };
+      };
+      const client = new ClaudeCodeLLMClient({ spawner, model: "haiku" });
+      await client.complete("x");
+      const idx = capturedArgs.indexOf("--model");
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(capturedArgs[idx + 1]).toBe("haiku");
+    });
+
+    it("omits --model when model option not provided (no env set)", async () => {
+      const origEnv = process.env.TEAMAGENT_LLM_MODEL;
+      delete process.env.TEAMAGENT_LLM_MODEL;
+      try {
+        let capturedArgs: string[] = [];
+        const spawner: Spawner = async (_cmd, args, _opts) => {
+          capturedArgs = args;
+          return {
+            kind: "exit",
+            code: 0,
+            stdout: JSON.stringify({ result: "ok" }),
+            stderr: "",
+          };
+        };
+        const client = new ClaudeCodeLLMClient({ spawner });
+        await client.complete("x");
+        expect(capturedArgs).not.toContain("--model");
+      } finally {
+        if (origEnv !== undefined) process.env.TEAMAGENT_LLM_MODEL = origEnv;
+      }
+    });
+
+    it("reads TEAMAGENT_LLM_MODEL env as default model", async () => {
+      process.env.TEAMAGENT_LLM_MODEL = "sonnet";
+      try {
+        let capturedArgs: string[] = [];
+        const spawner: Spawner = async (_cmd, args, _opts) => {
+          capturedArgs = args;
+          return {
+            kind: "exit",
+            code: 0,
+            stdout: JSON.stringify({ result: "ok" }),
+            stderr: "",
+          };
+        };
+        const client = new ClaudeCodeLLMClient({ spawner });
+        await client.complete("x");
+        const idx = capturedArgs.indexOf("--model");
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(capturedArgs[idx + 1]).toBe("sonnet");
+      } finally {
+        delete process.env.TEAMAGENT_LLM_MODEL;
+      }
+    });
   });
 });
 

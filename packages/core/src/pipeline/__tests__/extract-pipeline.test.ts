@@ -335,6 +335,7 @@ describe("runExtractPipeline", () => {
       skipped: 0,
       failed: 0,
       rejected: [],
+      deduped: 0,
     });
   });
 

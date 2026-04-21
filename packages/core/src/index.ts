@@ -68,6 +68,7 @@ export {
 export {
   runExtractPipeline,
   formatCorrectionContext,
+  momentSignature,
   DEFAULT_CODE_FILE_TYPES,
   type ExtractPipelineDeps,
   type ExtractPipelineResult,

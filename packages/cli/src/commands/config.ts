@@ -6,7 +6,7 @@ export interface TeamAgentConfig {
 }
 
 const DEFAULTS: TeamAgentConfig = {
-  stop_mode: "sync",
+  stop_mode: "async",
 };
 
 export function readTeamAgentConfig(cwd: string): TeamAgentConfig {

@@ -19,6 +19,19 @@ vi.mock("../commands/compile.js", () => ({
 vi.mock("../commands/recent-entries.js", () => ({
   getRecentEntries: vi.fn(),
 }));
+// Prevent tests from writing to the real project's .teamagent/last-harvest.md
+vi.mock("../harvest-writer.js", () => ({
+  appendHarvest: vi.fn(),
+  getHarvestPath: vi.fn((cwd: string) => `${cwd}/.teamagent/last-harvest.md`),
+}));
+// Prevent tests from touching real scan-cursor.json
+vi.mock("../scan-cursor.js", () => ({
+  readCursor: vi.fn(() => -1),
+  writeCursor: vi.fn(),
+  clearCursor: vi.fn(),
+  readSeen: vi.fn(() => new Set<string>()),
+  writeSeen: vi.fn(),
+}));
 
 import { executeAnalyze } from "../commands/analyze.js";
 import { executeCalibrate } from "../commands/calibrate.js";

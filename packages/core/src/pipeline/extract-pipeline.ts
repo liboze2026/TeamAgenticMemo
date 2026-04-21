@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   AttributionBus,
   CorrectionDetector,
@@ -13,6 +14,21 @@ import type {
   Scope,
 } from "@teamagent/types";
 import { computeEnforcement } from "@teamagent/types";
+
+/**
+ * Stable signature for a CorrectionMoment — used for cross-run dedup so the
+ * same moment does not get re-sent to the LLM on every Stop hook rescan.
+ * Truncates text fields to first 200 chars to absorb minor transcript drift.
+ */
+export function momentSignature(moment: CorrectionMoment): string {
+  const parts = [
+    String(moment.turnIndex),
+    moment.signal,
+    (moment.correctionText ?? "").slice(0, 200),
+    (moment.previousAssistantText ?? "").slice(0, 200),
+  ];
+  return createHash("sha256").update(parts.join("|")).digest("hex");
+}
 
 /**
  * 提取 Pipeline 的依赖。所有 IO（LLM/Store/Bus）通过注入传入，保持 core 纯。
@@ -43,6 +59,16 @@ export interface ExtractPipelineDeps {
     entry: KnowledgeEntry,
     result: ValidationL0Result,
   ) => void | Promise<void>;
+  /**
+   * 可选：判断一个 moment 的签名是否已在之前的 run 里处理过。
+   * 返回 true 则跳过 LLM 调用,deduped++。
+   */
+  isMomentSeen?: (signature: string) => boolean;
+  /**
+   * 可选：记录 moment 签名。extracted / skipped (null) / rejected (L0) 时调用;
+   * failed (LLM 抛异常) 时不调用,留待下次 run 重试。
+   */
+  markMomentSeen?: (signature: string) => void;
 }
 
 /**
@@ -59,6 +85,8 @@ export interface ExtractPipelineResult {
   failed: number;
   /** L0 入库门拒绝的条目及原因（M2.3 新增）。 */
   rejected: { entry: KnowledgeEntry; reasons: string[] }[];
+  /** 因签名已见而跳过 LLM 调用的条数（M2.11 新增）。 */
+  deduped: number;
 }
 
 /**
@@ -83,9 +111,23 @@ export async function runExtractPipeline(
     skipped: 0,
     failed: 0,
     rejected: [],
+    deduped: 0,
   };
 
   for (const moment of corrections) {
+    const signature = momentSignature(moment);
+    if (deps.isMomentSeen && deps.isMomentSeen(signature)) {
+      result.deduped++;
+      emit(deps.bus, {
+        source: "extractor",
+        action: "deduped",
+        target: { count: 1 },
+        severity: "info",
+        userFacingValue: `已在历史 run 中处理过（turn ${moment.turnIndex}）`,
+        timestamp: isoNow(deps.now),
+      });
+      continue;
+    }
     const context = formatCorrectionContext(moment);
     try {
       const partial = await deps.extractor.extract(
@@ -94,6 +136,7 @@ export async function runExtractPipeline(
       );
       if (partial === null) {
         result.skipped++;
+        deps.markMomentSeen?.(signature);
         emit(deps.bus, {
           source: "extractor",
           action: "skipped",
@@ -121,6 +164,7 @@ export async function runExtractPipeline(
         });
         if (!l0.ok) {
           result.rejected.push({ entry, reasons: l0.failed_checks });
+          deps.markMomentSeen?.(signature);
           if (deps.rejectionLog) {
             try {
               await deps.rejectionLog(entry, l0);
@@ -142,6 +186,7 @@ export async function runExtractPipeline(
 
       deps.store.add(entry);
       result.extracted.push(entry);
+      deps.markMomentSeen?.(signature);
       emit(deps.bus, {
         source: "extractor",
         action: "extracted",

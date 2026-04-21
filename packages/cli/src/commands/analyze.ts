@@ -48,6 +48,34 @@ export interface AnalyzeOptions {
   now?: () => Date;
   /** 校准前是否运行 calibrator（默认 true）；测试时可关掉 */
   skipCalibrate?: boolean;
+  /**
+   * 增量扫描游标：只处理 turnIndex 严格大于此值的 correction moments。
+   * 未提供则处理全部（全量扫）。
+   */
+  fromTurnIndex?: number;
+  /** 增量去重：pipeline 调用前先查签名是否见过。 */
+  isMomentSeen?: (signature: string) => boolean;
+  /** 增量去重：pipeline 处理后记录签名。 */
+  markMomentSeen?: (signature: string) => void;
+  /**
+   * 回调：把本次 analyze 的结构化结果传回。在返回 string 之外提供便捷访问。
+   */
+  onMeta?: (meta: AnalyzeMeta) => void;
+}
+
+export interface AnalyzeMeta {
+  sessionId: string;
+  /** 扫到的最大 turnIndex（本次 session 总回合数 - 1）。session 空 → -1 */
+  lastTurnIndex: number;
+  /** runExtractPipeline 统计（dry-run 模式下全部为 0） */
+  correctionsFound: number;
+  extracted: number;
+  skipped: number;
+  failed: number;
+  rejected: number;
+  deduped: number;
+  /** 本次新写入的条目摘要（trigger / correct_pattern / confidence） */
+  newEntries: Array<{ trigger: string; correct_pattern: string; confidence: number }>;
 }
 
 export async function executeAnalyze(opts: AnalyzeOptions = {}): Promise<string> {
@@ -92,16 +120,40 @@ export async function executeAnalyze(opts: AnalyzeOptions = {}): Promise<string>
     opts.commit === true,
   );
 
-  if (!opts.commit) return dryRun;
+  const lastTurnIndex = session.turns.length > 0
+    ? session.turns[session.turns.length - 1]!.turnIndex
+    : -1;
 
-  const commitOutput = await runCommit(session, opts);
+  if (!opts.commit) {
+    opts.onMeta?.({
+      sessionId: session.sessionId,
+      lastTurnIndex,
+      correctionsFound: corrections.length,
+      extracted: 0,
+      skipped: 0,
+      failed: 0,
+      rejected: 0,
+      deduped: 0,
+      newEntries: [],
+    });
+    return dryRun;
+  }
+
+  const { output: commitOutput, meta } = await runCommit(session, opts);
+  opts.onMeta?.({
+    sessionId: session.sessionId,
+    lastTurnIndex,
+    ...meta,
+  });
   return dryRun + "\n" + commitOutput;
 }
+
+type RunCommitMeta = Omit<AnalyzeMeta, "sessionId" | "lastTurnIndex">;
 
 async function runCommit(
   session: ParsedSession,
   opts: AnalyzeOptions,
-): Promise<string> {
+): Promise<{ output: string; meta: RunCommitMeta }> {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
   const projectDbPath =
@@ -139,8 +191,18 @@ async function runCommit(
   };
 
   const before = projectStore.count();
+  const fromTurnIndex = opts.fromTurnIndex;
+  const filteredDetector =
+    fromTurnIndex !== undefined
+      ? {
+          detect: (s: ParsedSession) =>
+            ruleBasedCorrectionDetector
+              .detect(s)
+              .filter((m) => m.turnIndex > fromTurnIndex),
+        }
+      : ruleBasedCorrectionDetector;
   const result = await runExtractPipeline(session, {
-    detector: ruleBasedCorrectionDetector,
+    detector: filteredDetector,
     extractor: llmBasedKnowledgeExtractor,
     callLLM: (prompt) => llm.complete(prompt),
     store: projectStore as any,
@@ -149,6 +211,8 @@ async function runCommit(
     source: "accumulated",
     now,
     idGen,
+    isMomentSeen: opts.isMomentSeen,
+    markMomentSeen: opts.markMomentSeen,
   });
 
   const after = projectStore.count();
@@ -230,7 +294,22 @@ async function runCommit(
     lines.push(calibrationSummary.trimEnd());
   }
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  return lines.join("\n") + "\n";
+  return {
+    output: lines.join("\n") + "\n",
+    meta: {
+      correctionsFound: result.correctionsFound,
+      extracted: result.extracted.length,
+      skipped: result.skipped,
+      failed: result.failed,
+      rejected: result.rejected.length,
+      deduped: result.deduped,
+      newEntries: result.extracted.map((e) => ({
+        trigger: e.trigger,
+        correct_pattern: e.correct_pattern,
+        confidence: e.confidence,
+      })),
+    },
+  };
 }
 
 function renderReport(

@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 /**
- * Stop Hook entry point (M2.10)
+ * Stop Hook entry point (M2.10+ with incremental scanning + dedup).
  *
  * stdin: StopHookInput { session_id, transcript_path, cwd, hook_event_name }
- * sync mode (default): run analyze→calibrate→compile, write progress to stderr
- * async mode: spawn detached subprocess and return immediately
+ *
+ * Mode selection:
+ *   - sync (legacy default): run analyze→calibrate→compile, write progress to stderr
+ *   - async (recommended): spawn detached subprocess and return immediately
+ *
+ * Incremental vs full:
+ *   - Stop hook: incremental (uses .teamagent/scan-cursor.json)
+ *   - SessionEnd / PreCompact (via runStopPipeline({fullRescan:true})): full
  *
  * NEVER exits non-zero — must not block session close.
  */
@@ -12,10 +18,16 @@ import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { executeAnalyze } from "./commands/analyze.js";
+import { ClaudeCodeLLMClient } from "@teamagent/adapters";
+import type { LLMClient } from "@teamagent/ports";
+import { momentSignature } from "@teamagent/core";
+import { executeAnalyze, type AnalyzeMeta } from "./commands/analyze.js";
 import { executeCalibrate } from "./commands/calibrate.js";
 import { executeCompile } from "./commands/compile.js";
 import { readTeamAgentConfig } from "./commands/config.js";
+import { readCursor, writeCursor, clearCursor, readSeen, writeSeen } from "./scan-cursor.js";
+import { appendHarvest } from "./harvest-writer.js";
+import { makeFallbackLLMClient } from "./llm-with-fallback.js";
 
 export interface StopHookInput {
   session_id: string;
@@ -24,7 +36,18 @@ export interface StopHookInput {
   hook_event_name: string;
 }
 
-const PIPELINE_TIMEOUT_MS = 55_000;
+export interface RunStopPipelineOptions {
+  /** true → 忽略 cursor,扫整个 session (SessionEnd/PreCompact 用) */
+  fullRescan?: boolean;
+  /** 模式标签,仅用于 harvest md 记录 */
+  modeTag?: "incremental" | "full";
+}
+
+/** Pipeline hard timeout. Harness kills us at its own timeout (~300s); we guard below. */
+const PIPELINE_TIMEOUT_MS = (() => {
+  const envVal = parseInt(process.env.TEAMAGENT_STOP_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(envVal) && envVal > 0 ? envVal : 240_000;
+})();
 
 function isRetryableAnalyzeError(e: unknown): boolean {
   const msg = String(e);
@@ -63,27 +86,56 @@ function removeStopLock(lockPath: string): void {
   }
 }
 
-export async function runStopPipeline(input: StopHookInput): Promise<void> {
+/** Build the Haiku-primary Sonnet-fallback LLM client. Overridable by env. */
+function buildLLMClient(): LLMClient {
+  const primaryModel = process.env.TEAMAGENT_LLM_MODEL ?? "haiku";
+  const fallbackModel = process.env.TEAMAGENT_LLM_FALLBACK_MODEL ?? "sonnet";
+  const primary = new ClaudeCodeLLMClient({ model: primaryModel });
+  if (primaryModel === fallbackModel) return primary;
+  const fallback = new ClaudeCodeLLMClient({ model: fallbackModel });
+  return makeFallbackLLMClient(primary, fallback);
+}
+
+export async function runStopPipeline(
+  input: StopHookInput,
+  opts: RunStopPipelineOptions = {},
+): Promise<void> {
   const cwd = input.cwd;
+  const fullRescan = opts.fullRescan === true;
+  const modeTag = opts.modeTag ?? (fullRescan ? "full" : "incremental");
   const lockPath = writeStopLock(cwd);
   try {
+
+  // Load incremental state
+  const sessionId = input.session_id;
+  const fromTurnIndex = fullRescan ? undefined : (readCursor(cwd, sessionId) >= 0 ? readCursor(cwd, sessionId) : undefined);
+  const seen = fullRescan ? new Set<string>() : readSeen(cwd, sessionId);
+  const newlySeen = new Set<string>();
+
+  let analyzeMeta: AnalyzeMeta | undefined;
 
   // Step 1: analyze. Claude Code can fire Stop before the transcript jsonl
   // finishes flushing to disk, or the file may still be locked on Windows
   // (EACCES/EPERM). Retry up to 4 times with back-off.
   try {
-    process.stderr.write("TeamAgent: 分析会话中...\n");
+    process.stderr.write(`TeamAgent: 分析会话中 (${modeTag})...\n`);
     let lastErr: unknown;
     let analyzed = false;
     // Small initial wait: Claude Code may still hold the transcript file lock
     // when Stop fires on Windows.
     await new Promise((r) => setTimeout(r, 300));
+    const llmClient = buildLLMClient();
     for (let attempt = 1; attempt <= 4; attempt++) {
       try {
         const result = await executeAnalyze({
           session: input.transcript_path,
           commit: true,
           cwd,
+          fromTurnIndex,
+          llmClient,
+          isMomentSeen: (sig) => seen.has(sig),
+          markMomentSeen: (sig) => { newlySeen.add(sig); seen.add(sig); },
+          onMeta: (m) => { analyzeMeta = m; },
         });
         const firstLine = result.split("\n")[0] ?? "分析完成";
         process.stderr.write(`TeamAgent: ${firstLine}\n`);
@@ -98,6 +150,20 @@ export async function runStopPipeline(input: StopHookInput): Promise<void> {
     if (!analyzed) throw lastErr;
   } catch (e) {
     logError(cwd, "analyze", e);
+  }
+
+  // Persist cursor + seen so next incremental Stop can skip
+  if (analyzeMeta) {
+    try {
+      if (analyzeMeta.lastTurnIndex >= 0) {
+        writeCursor(cwd, sessionId, analyzeMeta.lastTurnIndex);
+      }
+      if (newlySeen.size > 0 || seen.size > 0) {
+        writeSeen(cwd, sessionId, seen);
+      }
+    } catch (e) {
+      logError(cwd, "persist-cursor", e);
+    }
   }
 
   // Step 2: calibrate
@@ -132,8 +198,36 @@ export async function runStopPipeline(input: StopHookInput): Promise<void> {
     logError(cwd, "compile", e);
   }
 
+  // Step 4: persist harvest markdown (always — even if meta missing, record that a run happened)
+  try {
+    appendHarvest(cwd, {
+      sessionId,
+      mode: modeTag,
+      lastTurnIndex: analyzeMeta?.lastTurnIndex ?? -1,
+      correctionsFound: analyzeMeta?.correctionsFound ?? 0,
+      extracted: analyzeMeta?.extracted ?? 0,
+      skipped: analyzeMeta?.skipped ?? 0,
+      failed: analyzeMeta?.failed ?? 0,
+      rejected: analyzeMeta?.rejected ?? 0,
+      deduped: analyzeMeta?.deduped ?? 0,
+      newEntries: analyzeMeta?.newEntries ?? [],
+    });
+  } catch (e) {
+    logError(cwd, "harvest", e);
+  }
+
   } finally {
     removeStopLock(lockPath);
+  }
+}
+
+/** Public helper used by bin-session-end / bin-pre-compact to force full scan + clear cursor. */
+export async function runFullRescanPipeline(input: StopHookInput): Promise<void> {
+  await runStopPipeline(input, { fullRescan: true, modeTag: "full" });
+  try {
+    clearCursor(input.cwd, input.session_id);
+  } catch (e) {
+    logError(input.cwd, "clear-cursor", e);
   }
 }
 
@@ -182,7 +276,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  // sync mode (default): wait with timeout
+  // sync mode: wait with timeout
   await Promise.race([
     runStopPipeline(input),
     new Promise<void>((resolve) => setTimeout(resolve, PIPELINE_TIMEOUT_MS)),

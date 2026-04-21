@@ -23,10 +23,15 @@ export type SpawnResult =
 export interface ClaudeCodeLLMClientOptions {
   /** 可执行文件名或绝对路径，默认 'claude'。 */
   executable?: string;
-  /** 超时毫秒，默认 30000。 */
+  /** 超时毫秒，默认 120000。 */
   timeoutMs?: number;
   /** 注入 spawner，默认用真实 node:child_process spawn。 */
   spawner?: Spawner;
+  /**
+   * Claude CLI --model 参数。可以是 alias (haiku/sonnet/opus) 或完整 id。
+   * 未指定时回退到 env TEAMAGENT_LLM_MODEL；都没有则不传 --model，走 CLI 默认。
+   */
+  model?: string;
 }
 
 /**
@@ -44,13 +49,10 @@ export class ClaudeCodeLLMClient implements LLMClient {
   private readonly executable: string;
   private readonly timeoutMs: number;
   private readonly spawner: Spawner;
+  private readonly model: string | undefined;
 
   constructor(opts: ClaudeCodeLLMClientOptions = {}) {
     this.executable = opts.executable ?? "claude";
-    // Precedence: explicit opt > TEAMAGENT_LLM_TIMEOUT_MS env > 120s default.
-    // 30s was too tight in practice — Claude CLI cold-start alone can take ~15s
-    // before the actual prompt is processed, so wiki judge / extract pipelines
-    // routinely timed out before producing anything.
     if (opts.timeoutMs !== undefined) {
       this.timeoutMs = opts.timeoutMs;
     } else {
@@ -58,6 +60,9 @@ export class ClaudeCodeLLMClient implements LLMClient {
       this.timeoutMs = Number.isFinite(envVal) && envVal > 0 ? envVal : 120_000;
     }
     this.spawner = opts.spawner ?? defaultSpawner;
+    // Precedence: explicit opt > TEAMAGENT_LLM_MODEL env > undefined (CLI default)
+    const envModel = process.env.TEAMAGENT_LLM_MODEL;
+    this.model = opts.model ?? (envModel && envModel.trim() ? envModel.trim() : undefined);
   }
 
   async complete(prompt: string): Promise<string> {
@@ -68,6 +73,9 @@ export class ClaudeCodeLLMClient implements LLMClient {
       "json",
       "--no-session-persistence",
     ];
+    if (this.model) {
+      args.push("--model", this.model);
+    }
     const result = await this.spawner(this.executable, args, {
       timeoutMs: this.timeoutMs,
       input: prompt,
