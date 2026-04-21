@@ -112,8 +112,13 @@ export {
   mergeStack,
   autoSubscribe,
   STACK_TO_SOURCES,
+  computeArchivals,
   type ValidationResult,
   type WikiEntry,
   type JudgedWikiItem,
+  type WikiEntrySnapshot,
+  type SweepPolicy,
+  type ArchiveReason,
+  type ArchiveDecision,
 } from "./wiki/index.js";
 export * from "./wiki-injection/index.js";
