@@ -21,10 +21,12 @@
 - `packages/adapters/src/wiki/__tests__/archive-sweeper.test.ts`
 - `packages/adapters/src/wiki/last-pull-marker.ts` — 标记文件读写
 - `packages/adapters/src/wiki/__tests__/last-pull-marker.test.ts`
-- `packages/cli/src/bin-wiki-refresh.ts` — 刷新入口（可 spawn 可手动）
-- `packages/cli/src/__tests__/bin-wiki-refresh.test.ts`
-- `packages/cli/src/bin-session-start.ts` — SessionStart hook
-- `packages/cli/src/__tests__/bin-session-start.test.ts`
+- `packages/cli/src/wiki-refresh.ts` — 纯逻辑 `runWikiRefresh`（被测试 import）
+- `packages/cli/src/bin-wiki-refresh.ts` — entry 薄壳（不被 import，只 spawn 跑）
+- `packages/cli/src/__tests__/wiki-refresh.test.ts`
+- `packages/cli/src/session-start-logic.ts` — 纯函数 `decideAction` + `spawnRefresh`（被测试 import）
+- `packages/cli/src/bin-session-start.ts` — entry 薄壳
+- `packages/cli/src/__tests__/session-start-logic.test.ts`
 
 **修改：**
 - `packages/core/src/index.ts` — 导出 sweeper
@@ -784,10 +786,13 @@ wiki_meta.published_at is the entry's publish date, not our fetch time."
 ## Task 5：`bin-wiki-refresh.ts` — pull + sweep 入口
 
 **Files:**
-- Create: `packages/cli/src/bin-wiki-refresh.ts`
-- Create: `packages/cli/src/__tests__/bin-wiki-refresh.test.ts`
+- Create: `packages/cli/src/wiki-refresh.ts` — 纯逻辑
+- Create: `packages/cli/src/bin-wiki-refresh.ts` — entry（2 行 + main 调用）
+- Create: `packages/cli/src/__tests__/wiki-refresh.test.ts`
 
-**接口决定**：此 entry 既是 subprocess 目标，也能手动 `pnpm teamagent wiki:refresh` 跑。导出一个 async `runWikiRefresh(opts)` 纯逻辑函数，`main()` 只做 stdin 读取 + 调用 + exit。测试只测 `runWikiRefresh`。
+**接口决定**：拆两文件避开 `require.main === module` 陷阱（vitest ESM 里 require 不存在；裸 `main()` 会在 test import 时自动触发）。
+- `wiki-refresh.ts`：纯逻辑模块，只 export `runWikiRefresh`，**没有任何顶层副作用**
+- `bin-wiki-refresh.ts`：薄 entry，不被任何测试 import，直接 `await runWikiRefresh(...)` + exit
 
 - [ ] **Step 1: 写测试**
 
@@ -796,7 +801,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWikiRefresh } from "../bin-wiki-refresh.js";
+import { runWikiRefresh } from "../wiki-refresh.js";
 
 describe("runWikiRefresh", () => {
   let cwd: string;
@@ -825,18 +830,57 @@ describe("runWikiRefresh", () => {
     expect(result.skipReason).toBe("debounced");
   });
 
-  it("force=true 时忽略 debounce", async () => {
-    // 同上 seed 一个 fresh 标记
+  it("force=true 时忽略 debounce（只验证 debounce gate 被跳过）", async () => {
+    // 单独测 debounce gate。runWikiRefresh 暴露一个测试 seam：
+    // 通过 dependency injection 注入一个 fake pipeline factory。
+    // 避免实跑 LLM/network/embedder。
     const teamagentDir = join(cwd, ".teamagent");
     require("node:fs").mkdirSync(teamagentDir, { recursive: true });
     require("node:fs").writeFileSync(
       join(teamagentDir, "wiki-last-pull.json"),
       JSON.stringify({ attemptedAt: new Date().toISOString(), added: 0, archived: 0 }),
     );
-    // 这里 force=true，因此不 skip。但缺少 knowledge.db 会走到 pull 步骤，
-    // 预期 runWikiRefresh 能处理（openDb 失败 → 捕获 → skipped=false but errors non-empty）
-    const result = await runWikiRefresh({ cwd, force: true });
+
+    const pipelineCalls: number[] = [];
+    const result = await runWikiRefresh({
+      cwd,
+      force: true,
+      _testDeps: {
+        openDb: () => ({ close: () => {} } as any),
+        runPipeline: async () => { pipelineCalls.push(1); return { added: 0, skipped: 0, rejected: 0, errors: [] }; },
+        runSweep: () => ({ archived: [], byReason: { zeroHitAged: 0, sourceOverflow: 0 } }),
+      },
+    });
+
     expect(result.skipped).toBe(false);
+    expect(pipelineCalls).toEqual([1]);   // force bypassed debounce
+    // marker 被重写
+    const raw = require("node:fs").readFileSync(join(teamagentDir, "wiki-last-pull.json"), "utf-8");
+    const rewritten = JSON.parse(raw);
+    expect(rewritten.attemptedAt).toBeTruthy();
+  });
+
+  it("debounce 生效时不调 pipeline（force=false）", async () => {
+    const teamagentDir = join(cwd, ".teamagent");
+    require("node:fs").mkdirSync(teamagentDir, { recursive: true });
+    require("node:fs").writeFileSync(
+      join(teamagentDir, "wiki-last-pull.json"),
+      JSON.stringify({ attemptedAt: new Date().toISOString(), added: 0, archived: 0 }),
+    );
+
+    const pipelineCalls: number[] = [];
+    const result = await runWikiRefresh({
+      cwd,
+      force: false,
+      _testDeps: {
+        openDb: () => ({ close: () => {} } as any),
+        runPipeline: async () => { pipelineCalls.push(1); return { added: 0, skipped: 0, rejected: 0, errors: [] }; },
+        runSweep: () => ({ archived: [], byReason: { zeroHitAged: 0, sourceOverflow: 0 } }),
+      },
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(pipelineCalls).toEqual([]);   // debounced, no pipeline call
   });
 });
 ```
@@ -844,25 +888,29 @@ describe("runWikiRefresh", () => {
 - [ ] **Step 2: 运行测试确认红**
 
 ```
-pnpm --filter @teamagent/cli test -- bin-wiki-refresh
+pnpm --filter @teamagent/cli test -- wiki-refresh
 ```
+预期：`Cannot find module '../wiki-refresh.js'`。
 
 - [ ] **Step 3: 写实现**
 
+**文件 1**：`packages/cli/src/wiki-refresh.ts`（纯逻辑，可 import）
+
 ```ts
-#!/usr/bin/env node
 /**
- * wiki:refresh entry point.
- *
- * Two modes:
- *   1. Spawned subprocess by bin-session-start (SessionStart hook).
- *   2. Manual: `pnpm teamagent wiki:refresh [--force]`.
- *
- * Always exit 0 — refresh is best-effort. Errors logged, not propagated.
+ * wiki:refresh core logic. Exported for testing and CLI reuse.
+ * NO top-level side effects — safe to import from tests.
  */
 import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import type { DatabaseSync } from "node:sqlite";
+
+export interface TestDeps {
+  openDb?: (p: string) => DatabaseSync;
+  runPipeline?: (db: DatabaseSync) => Promise<{ added: number; skipped: number; rejected: number; errors: Array<{ source: string; error: string }> }>;
+  runSweep?: (db: DatabaseSync, now: Date, opts: { zeroHitMinAgeDays?: number; perSourceKeep?: number }) => { archived: unknown[]; byReason: { zeroHitAged: number; sourceOverflow: number } };
+}
 
 export interface RefreshOptions {
   cwd: string;
@@ -870,6 +918,7 @@ export interface RefreshOptions {
   debounceHours?: number;
   zeroHitMinAgeDays?: number;
   perSourceKeep?: number;
+  _testDeps?: TestDeps;
 }
 
 export interface RefreshResult {
@@ -904,10 +953,11 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
   }
 
   // 2. open db (silent fail → skip)
-  let db: Awaited<ReturnType<typeof import("@teamagent/adapters/storage/sqlite/schema").openDb>> | null = null;
+  let db: DatabaseSync;
   const dbPath = path.join(teamagentDir, "knowledge.db");
   try {
-    const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
+    const openDb = opts._testDeps?.openDb
+      ?? (await import("@teamagent/adapters/storage/sqlite/schema")).openDb;
     db = openDb(dbPath);
   } catch (e) {
     result.errors.push({ stage: "open-db", error: String(e) });
@@ -916,14 +966,22 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
 
   // 3. pipeline.run()
   try {
-    const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline } = await import("@teamagent/adapters");
-    const llm = new ClaudeCodeLLMClient();
-    const embedder = new XenovaEmbedder();
-    const pipeline = new WikiPipeline(db, llm, embedder);
-    const report = await pipeline.run({});
-    result.added = report.added;
-    for (const e of report.errors) {
-      result.errors.push({ stage: `pipeline:${e.source}`, error: e.error });
+    if (opts._testDeps?.runPipeline) {
+      const report = await opts._testDeps.runPipeline(db);
+      result.added = report.added;
+      for (const e of report.errors) {
+        result.errors.push({ stage: `pipeline:${e.source}`, error: e.error });
+      }
+    } else {
+      const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline } = await import("@teamagent/adapters");
+      const llm = new ClaudeCodeLLMClient();
+      const embedder = new XenovaEmbedder();
+      const pipeline = new WikiPipeline(db, llm, embedder);
+      const report = await pipeline.run({});
+      result.added = report.added;
+      for (const e of report.errors) {
+        result.errors.push({ stage: `pipeline:${e.source}`, error: e.error });
+      }
     }
   } catch (e) {
     result.errors.push({ stage: "pipeline-run", error: String(e) });
@@ -931,12 +989,16 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
 
   // 4. sweeper
   try {
-    const { ArchiveSweeper } = await import("@teamagent/adapters");
-    const sweeper = new ArchiveSweeper(db);
-    const sweepReport = sweeper.sweep(new Date(), {
-      zeroHitMinAgeDays: opts.zeroHitMinAgeDays,
-      perSourceKeep: opts.perSourceKeep,
+    const sweepFn = opts._testDeps?.runSweep ?? (async () => {
+      const { ArchiveSweeper } = await import("@teamagent/adapters");
+      return new ArchiveSweeper(db).sweep(new Date(), {
+        zeroHitMinAgeDays: opts.zeroHitMinAgeDays,
+        perSourceKeep: opts.perSourceKeep,
+      });
     });
+    const sweepReport = typeof sweepFn === "function" && sweepFn.length >= 2
+      ? sweepFn(db, new Date(), { zeroHitMinAgeDays: opts.zeroHitMinAgeDays, perSourceKeep: opts.perSourceKeep })
+      : await (sweepFn as () => Promise<any>)();
     result.archived = sweepReport.archived.length;
   } catch (e) {
     result.errors.push({ stage: "sweep", error: String(e) });
@@ -957,6 +1019,23 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
   return result;
 }
 
+export async function logErrors(errors: Array<{ stage: string; error: string }>): Promise<void> {
+  if (errors.length === 0) return;
+  try {
+    const logPath = path.join(os.homedir(), ".teamagent", "wiki-refresh-errors.log");
+    mkdirSync(path.dirname(logPath), { recursive: true });
+    const line = `[${new Date().toISOString()}] ${JSON.stringify(errors)}\n`;
+    appendFileSync(logPath, line, "utf-8");
+  } catch { /* silent */ }
+}
+```
+
+**文件 2**：`packages/cli/src/bin-wiki-refresh.ts`（entry 薄壳，不被 import）
+
+```ts
+#!/usr/bin/env node
+import { runWikiRefresh, logErrors } from "./wiki-refresh.js";
+
 async function main(): Promise<void> {
   const force = process.argv.includes("--force");
   const cwd = process.env["CLAUDE_PROJECT_DIR"] ?? process.cwd();
@@ -969,26 +1048,16 @@ async function main(): Promise<void> {
       `wiki:refresh done — added: ${result.added}, archived: ${result.archived}, errors: ${result.errors.length}\n`,
     );
   }
-
-  if (result.errors.length > 0) {
-    try {
-      const logPath = path.join(os.homedir(), ".teamagent", "wiki-refresh-errors.log");
-      mkdirSync(path.dirname(logPath), { recursive: true });
-      const line = `[${new Date().toISOString()}] ${JSON.stringify(result.errors)}\n`;
-      appendFileSync(logPath, line, "utf-8");
-    } catch { /* silent */ }
-  }
+  await logErrors(result.errors);
 }
 
-if (require.main === module) {
-  main().catch(() => process.exit(0));
-}
+main().catch(() => process.exit(0));
 ```
 
 - [ ] **Step 4: 确认绿**
 
 ```
-pnpm --filter @teamagent/cli test -- bin-wiki-refresh
+pnpm --filter @teamagent/cli test -- wiki-refresh
 ```
 
 - [ ] **Step 5: 把 `wiki:refresh` 接进 bin.ts**
@@ -997,7 +1066,7 @@ pnpm --filter @teamagent/cli test -- bin-wiki-refresh
 
 ```ts
 case "wiki:refresh": {
-  const { runWikiRefresh } = await import("./bin-wiki-refresh.js");
+  const { runWikiRefresh } = await import("./wiki-refresh.js");
   const force = args.includes("--force");
   const result = await runWikiRefresh({ cwd: process.cwd(), force });
   if (result.skipped) {
@@ -1022,11 +1091,12 @@ case "wiki:refresh": {
 
 ```bash
 pnpm typecheck
-git add packages/cli/src/bin-wiki-refresh.ts packages/cli/src/__tests__/bin-wiki-refresh.test.ts packages/cli/src/bin.ts
-git commit -m "feat(wiki): bin-wiki-refresh entry (pull + sweep + marker)
+git add packages/cli/src/wiki-refresh.ts packages/cli/src/bin-wiki-refresh.ts packages/cli/src/__tests__/wiki-refresh.test.ts packages/cli/src/bin.ts
+git commit -m "feat(wiki): wiki-refresh logic + bin entry
 
-Exports runWikiRefresh for programmatic use (hook subprocess, CLI command).
-Always exit 0; errors logged to ~/.teamagent/wiki-refresh-errors.log."
+Split to avoid require.main trap: wiki-refresh.ts (pure logic, imported
+by tests) + bin-wiki-refresh.ts (thin entry, never imported).
+TestDeps seam for unit tests bypasses LLM/network."
 ```
 
 ---
@@ -1034,8 +1104,9 @@ Always exit 0; errors logged to ~/.teamagent/wiki-refresh-errors.log."
 ## Task 6：`bin-session-start.ts` — SessionStart hook，detached spawn
 
 **Files:**
-- Create: `packages/cli/src/bin-session-start.ts`
-- Create: `packages/cli/src/__tests__/bin-session-start.test.ts`
+- Create: `packages/cli/src/session-start-logic.ts` — 纯逻辑
+- Create: `packages/cli/src/bin-session-start.ts` — entry 薄壳
+- Create: `packages/cli/src/__tests__/session-start-logic.test.ts`
 
 - [ ] **Step 1: 写测试**
 
@@ -1051,7 +1122,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decideAction } from "../bin-session-start.js";
+import { decideAction } from "../session-start-logic.js";
 
 describe("decideAction", () => {
   let cwd: string;
@@ -1100,21 +1171,16 @@ describe("decideAction", () => {
 - [ ] **Step 2: 运行确认红**
 
 ```
-pnpm --filter @teamagent/cli test -- bin-session-start
+pnpm --filter @teamagent/cli test -- session-start-logic
 ```
 
-- [ ] **Step 3: 写实现**
+- [ ] **Step 3: 写实现（逻辑文件，可被测试 import）**
+
+`packages/cli/src/session-start-logic.ts`：
 
 ```ts
-#!/usr/bin/env node
 /**
- * SessionStart Hook entry point.
- *
- * Fires when user starts / resumes a Claude Code session. Checks wiki-refresh
- * debounce marker; if > 24h since last pull, spawns bin-wiki-refresh as a
- * detached, silent subprocess and returns immediately.
- *
- * NEVER blocks the UI. NEVER exits non-zero.
+ * SessionStart logic. No top-level side effects — safe to import from tests.
  */
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
@@ -1122,7 +1188,7 @@ import { join } from "node:path";
 import os from "node:os";
 import { LastPullMarker } from "@teamagent/adapters";
 
-const DEFAULT_DEBOUNCE_HOURS = 24;
+export const DEFAULT_DEBOUNCE_HOURS = 24;
 
 export type Action = "spawn" | "skip-debounced" | "skip-no-db";
 
@@ -1133,12 +1199,12 @@ export function decideAction(cwd: string, now: Date, debounceHours: number): Act
   return marker.shouldSkip(now, debounceHours) ? "skip-debounced" : "spawn";
 }
 
-function findRefreshBin(): string {
+export function findRefreshBin(): string {
   // Hook runs from %TEMP%; sibling bin-wiki-refresh.cjs lives next to this file.
   return join(__dirname, "bin-wiki-refresh.cjs");
 }
 
-function spawnRefresh(cwd: string): void {
+export function spawnRefresh(cwd: string): void {
   const child = spawn(process.execPath, [findRefreshBin()], {
     detached: true,
     stdio: "ignore",
@@ -1149,8 +1215,24 @@ function spawnRefresh(cwd: string): void {
   child.unref();
 }
 
+export function logError(kind: string, err: unknown): void {
+  try {
+    const logPath = join(os.homedir(), ".teamagent", "wiki-refresh-errors.log");
+    appendFileSync(logPath, `[${new Date().toISOString()}] session-start:${kind} ${String(err)}\n`, "utf-8");
+  } catch { /* silent */ }
+}
+```
+
+- [ ] **Step 3b: 写 entry（bin-session-start.ts，不被 import）**
+
+```ts
+#!/usr/bin/env node
+/**
+ * SessionStart Hook entry. NEVER blocks UI. NEVER exits non-zero.
+ */
+import { decideAction, spawnRefresh, logError, DEFAULT_DEBOUNCE_HOURS } from "./session-start-logic.js";
+
 async function main(): Promise<void> {
-  // Read stdin (hook payload) — we only need cwd from it, or env
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
   const raw = Buffer.concat(chunks).toString("utf-8").trim();
@@ -1160,43 +1242,33 @@ async function main(): Promise<void> {
     try {
       const input = JSON.parse(raw) as { cwd?: string };
       if (input.cwd) cwd = input.cwd;
-    } catch { /* use env/cwd fallback */ }
+    } catch { /* fallback */ }
   }
 
   const action = decideAction(cwd, new Date(), DEFAULT_DEBOUNCE_HOURS);
   if (action === "spawn") {
-    try { spawnRefresh(cwd); } catch (e) {
-      logError("spawn-failed", e);
-    }
+    try { spawnRefresh(cwd); } catch (e) { logError("spawn-failed", e); }
   }
-  // silent for skip-* actions
 }
 
-function logError(kind: string, err: unknown): void {
-  try {
-    const logPath = join(os.homedir(), ".teamagent", "wiki-refresh-errors.log");
-    appendFileSync(logPath, `[${new Date().toISOString()}] session-start:${kind} ${String(err)}\n`, "utf-8");
-  } catch { /* silent */ }
-}
-
-if (require.main === module) {
-  main().catch((e) => { logError("main-crash", e); process.exit(0); });
-}
+main().catch((e) => { logError("main-crash", e); process.exit(0); });
+```
 ```
 
 - [ ] **Step 4: 确认绿**
 
 ```
-pnpm --filter @teamagent/cli test -- bin-session-start
+pnpm --filter @teamagent/cli test -- session-start-logic
 ```
 
 - [ ] **Step 5: commit**
 
 ```bash
 pnpm typecheck
-git add packages/cli/src/bin-session-start.ts packages/cli/src/__tests__/bin-session-start.test.ts
+git add packages/cli/src/session-start-logic.ts packages/cli/src/bin-session-start.ts packages/cli/src/__tests__/session-start-logic.test.ts
 git commit -m "feat(wiki): SessionStart hook — fire-and-forget refresh spawn
 
+Split session-start-logic.ts (testable) + bin-session-start.ts (entry).
 24h debounce on .teamagent/wiki-last-pull.json; detached subprocess with
 windowsHide + stdio:ignore (Windows black-window pitfall). Never blocks UI."
 ```
@@ -1283,7 +1355,7 @@ existing hook bins."
 
 ---
 
-## Task 8：Walking skeleton 验证
+## Task 11：Walking skeleton 验证
 
 - [ ] **Step 1: 全量测试**
 
@@ -1347,6 +1419,407 @@ rm .teamagent/wiki-last-pull.json
 
 ---
 
+## Task 9：AttributionBus 事件接入（spec §6.5）
+
+**Files:**
+- Modify: `packages/types/src/attribution.ts` — 扩 `source` union
+- Modify: `packages/cli/src/wiki-refresh.ts` — 接受 `bus` 参数并 emit
+- Modify: `packages/cli/src/bin-wiki-refresh.ts` — 实例化 bus + renderer
+- Create: `packages/cli/src/__tests__/wiki-refresh-events.test.ts`
+
+**背景**：
+- `AttributionEvent.source` 当前是闭合 union，不含 wiki。CLAUDE.md 强制所有"系统帮你做了什么"通过 bus emit。
+- 跨进程 bus 还不存在（spec 说 M2 才有 jsonl adapter）。spawned subprocess 自用 in-memory bus 就好，stdout 被 spawner ignore 但事件 emit 了；未来 JsonlBus 来接手。
+
+- [ ] **Step 1: 扩 AttributionEvent.source union**
+
+`packages/types/src/attribution.ts:7-22` 的 `source` union 尾部加 `"wiki-refresh"`：
+
+```ts
+  source:
+    | "pitfall"
+    | "compiler"
+    | "hook-pre"
+    | "hook-post"
+    | "detector"
+    | "extractor"
+    | "importer"
+    | "init"
+    | "calibrator"
+    | "scenario-runner"
+    | "skeleton"
+    | "ingest"
+    | "validator"
+    | "compile"
+    | "wiki-refresh";
+```
+
+运行 `pnpm typecheck`，确认无回归。
+
+- [ ] **Step 2: 写事件 emit 测试**
+
+`packages/cli/src/__tests__/wiki-refresh-events.test.ts`：
+
+```ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { InMemoryAttributionBus } from "@teamagent/adapters";
+import { runWikiRefresh } from "../wiki-refresh.js";
+
+describe("runWikiRefresh — AttributionBus events", () => {
+  let cwd: string;
+  let bus: InMemoryAttributionBus;
+
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), "wiki-ev-"));
+    bus = new InMemoryAttributionBus();
+  });
+  afterEach(() => rmSync(cwd, { recursive: true, force: true }));
+
+  it("debounced 时 emit wiki-refresh/skipped", async () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(
+      join(cwd, ".teamagent", "wiki-last-pull.json"),
+      JSON.stringify({ attemptedAt: new Date().toISOString(), added: 0, archived: 0 }),
+    );
+    await runWikiRefresh({ cwd, force: false, bus });
+    const events = bus.drain();
+    const actions = events.map((e) => `${e.source}/${e.action}`);
+    expect(actions).toContain("wiki-refresh/skipped");
+  });
+
+  it("成功跑 pipeline+sweep 时 emit started + completed + archived", async () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    await runWikiRefresh({
+      cwd,
+      force: true,
+      bus,
+      _testDeps: {
+        openDb: () => ({ close: () => {} } as any),
+        runPipeline: async () => ({ added: 2, skipped: 0, rejected: 0, errors: [] }),
+        runSweep: () => ({ archived: [{ knowledgeId: "x", reason: "zero-hit-aged" as const }], byReason: { zeroHitAged: 1, sourceOverflow: 0 } }),
+      },
+    });
+    const actions = bus.drain().map((e) => `${e.source}/${e.action}`);
+    expect(actions).toContain("wiki-refresh/started");
+    expect(actions).toContain("wiki-refresh/completed");
+    expect(actions).toContain("wiki-refresh/archived");
+  });
+});
+```
+
+- [ ] **Step 3: 运行确认红**
+
+```
+pnpm --filter @teamagent/cli test -- wiki-refresh-events
+```
+
+- [ ] **Step 4: 改 wiki-refresh.ts 接 bus**
+
+在 `RefreshOptions` 加 `bus?: AttributionBus`。import：
+```ts
+import type { AttributionBus } from "@teamagent/ports";
+import type { AttributionEvent } from "@teamagent/types";
+```
+
+新增 helper：
+```ts
+function emit(bus: AttributionBus | undefined, action: string, detail: Partial<AttributionEvent> = {}): void {
+  if (!bus) return;
+  bus.emit({
+    source: "wiki-refresh",
+    action,
+    severity: detail.severity ?? "info",
+    timestamp: new Date().toISOString(),
+    ...detail,
+  });
+}
+```
+
+在 runWikiRefresh 的 5 个关键点调 emit：
+- 开始处（debounce 检查前）：`emit(bus, "started")`
+- debounce 命中：`emit(bus, "skipped", { target: { count: 1 }, userFacingValue: "wiki 24h 内刚刷过，跳过" })` + `return`
+- db-missing：`emit(bus, "skipped", { userFacingValue: "没有 knowledge.db，跳过" })`
+- pipeline+sweep 完成后：`emit(bus, "completed", { target: { count: result.added }, userFacingValue: \`新增 ${result.added} 条 wiki\` })`
+- 归档 > 0 时：`emit(bus, "archived", { target: { count: result.archived }, userFacingValue: \`归档 ${result.archived} 条过时 wiki\` })`
+
+- [ ] **Step 5: 运行确认绿**
+
+```
+pnpm --filter @teamagent/cli test -- wiki-refresh
+```
+
+- [ ] **Step 6: bin-wiki-refresh.ts 实例化 bus + renderer**
+
+```ts
+#!/usr/bin/env node
+import { runWikiRefresh, logErrors } from "./wiki-refresh.js";
+import { InMemoryAttributionBus } from "@teamagent/adapters";
+import { renderEventsToStdout } from "@teamagent/adapters"; // 若导出了；否则查阅当前 renderer API
+
+async function main(): Promise<void> {
+  const force = process.argv.includes("--force");
+  const cwd = process.env["CLAUDE_PROJECT_DIR"] ?? process.cwd();
+  const bus = new InMemoryAttributionBus();
+
+  const result = await runWikiRefresh({ cwd, force, bus });
+  await logErrors(result.errors);
+
+  // 渲染事件到 stdout；spawner 若 ignore 了 stdio 也无妨，bus 已经 emit 过了。
+  const events = bus.drain();
+  renderEventsToStdout(events); // 按现有 renderer API；若 API 不同，按实际调用
+}
+main().catch(() => process.exit(0));
+```
+
+> **实施要点**：`renderEventsToStdout` 若不存在，查 `packages/adapters/src/attribution/stdout-renderer.ts` 的导出 API，按实际名字调用。子任务：先 Read 该文件，匹配它的函数签名（可能是 `new StdoutRenderer().render(events)` 或类似）。
+
+- [ ] **Step 7: commit**
+
+```bash
+pnpm typecheck && pnpm test -- wiki-refresh
+git add packages/types/src/attribution.ts packages/cli/src/wiki-refresh.ts packages/cli/src/bin-wiki-refresh.ts packages/cli/src/__tests__/wiki-refresh-events.test.ts
+git commit -m "feat(wiki): emit AttributionBus events from wiki-refresh
+
+Extends AttributionEvent.source union to include 'wiki-refresh'. Threads
+optional bus through runWikiRefresh; bin-wiki-refresh instantiates
+InMemoryAttributionBus + renders to stdout. Cross-process jsonl bus
+(spec M2) not yet available — subprocess events stay in-process for now."
+```
+
+---
+
+## Task 10：`.teamagent/config.json` 读取（spec §7）
+
+**Files:**
+- Create: `packages/adapters/src/wiki/config-loader.ts`
+- Create: `packages/adapters/src/wiki/__tests__/config-loader.test.ts`
+- Modify: `packages/adapters/src/index.ts`
+- Modify: `packages/cli/src/wiki-refresh.ts` — 优先用 config 值
+- Modify: `packages/cli/src/session-start-logic.ts` — decideAction 取 debounceHours from config
+
+**Config schema**（和 spec §7 一致）：
+
+```json
+{
+  "wiki": {
+    "autoRefresh": { "enabled": true, "debounceHours": 24 },
+    "sweep":       { "enabled": true, "zeroHitMinAgeDays": 60, "perSourceKeep": 3 }
+  }
+}
+```
+
+缺失字段走默认。`autoRefresh.enabled = false` → SessionStart 不 spawn；`sweep.enabled = false` → refresh 跑 pipeline 但不跑 sweep。
+
+- [ ] **Step 1: 写测试**
+
+`packages/adapters/src/wiki/__tests__/config-loader.test.ts`：
+
+```ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadWikiConfig, DEFAULT_WIKI_CONFIG } from "../config-loader.js";
+
+describe("loadWikiConfig", () => {
+  let cwd: string;
+  beforeEach(() => { cwd = mkdtempSync(join(tmpdir(), "wiki-conf-")); });
+  afterEach(() => rmSync(cwd, { recursive: true, force: true }));
+
+  it("缺 .teamagent/config.json → 默认", () => {
+    expect(loadWikiConfig(cwd)).toEqual(DEFAULT_WIKI_CONFIG);
+  });
+
+  it("缺 wiki 节 → 默认", () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(join(cwd, ".teamagent", "config.json"), JSON.stringify({ other: "x" }));
+    expect(loadWikiConfig(cwd)).toEqual(DEFAULT_WIKI_CONFIG);
+  });
+
+  it("部分覆盖 debounceHours", () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(join(cwd, ".teamagent", "config.json"),
+      JSON.stringify({ wiki: { autoRefresh: { debounceHours: 6 } } }));
+    const c = loadWikiConfig(cwd);
+    expect(c.autoRefresh.debounceHours).toBe(6);
+    expect(c.autoRefresh.enabled).toBe(true);           // 缺省保留
+    expect(c.sweep).toEqual(DEFAULT_WIKI_CONFIG.sweep); // 整节缺省保留
+  });
+
+  it("autoRefresh.enabled=false", () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(join(cwd, ".teamagent", "config.json"),
+      JSON.stringify({ wiki: { autoRefresh: { enabled: false } } }));
+    expect(loadWikiConfig(cwd).autoRefresh.enabled).toBe(false);
+  });
+
+  it("损坏 JSON → 默认，不抛", () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(join(cwd, ".teamagent", "config.json"), "not json");
+    expect(loadWikiConfig(cwd)).toEqual(DEFAULT_WIKI_CONFIG);
+  });
+
+  it("非法类型字段 → 落回该字段默认", () => {
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(join(cwd, ".teamagent", "config.json"),
+      JSON.stringify({ wiki: { autoRefresh: { debounceHours: "bad" } } }));
+    expect(loadWikiConfig(cwd).autoRefresh.debounceHours).toBe(24);
+  });
+});
+```
+
+- [ ] **Step 2: 运行确认红**
+
+```
+pnpm --filter @teamagent/adapters test -- config-loader
+```
+
+- [ ] **Step 3: 写实现**
+
+`packages/adapters/src/wiki/config-loader.ts`：
+
+```ts
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+export interface WikiConfig {
+  autoRefresh: { enabled: boolean; debounceHours: number };
+  sweep: { enabled: boolean; zeroHitMinAgeDays: number; perSourceKeep: number };
+}
+
+export const DEFAULT_WIKI_CONFIG: WikiConfig = {
+  autoRefresh: { enabled: true, debounceHours: 24 },
+  sweep: { enabled: true, zeroHitMinAgeDays: 60, perSourceKeep: 3 },
+};
+
+function num(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function bool(v: unknown, fallback: boolean): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+
+export function loadWikiConfig(cwd: string): WikiConfig {
+  try {
+    const raw = readFileSync(join(cwd, ".teamagent", "config.json"), "utf-8");
+    const obj = JSON.parse(raw) as { wiki?: { autoRefresh?: Record<string, unknown>; sweep?: Record<string, unknown> } };
+    const ar = obj.wiki?.autoRefresh ?? {};
+    const sw = obj.wiki?.sweep ?? {};
+    return {
+      autoRefresh: {
+        enabled: bool(ar.enabled, DEFAULT_WIKI_CONFIG.autoRefresh.enabled),
+        debounceHours: num(ar.debounceHours, DEFAULT_WIKI_CONFIG.autoRefresh.debounceHours),
+      },
+      sweep: {
+        enabled: bool(sw.enabled, DEFAULT_WIKI_CONFIG.sweep.enabled),
+        zeroHitMinAgeDays: num(sw.zeroHitMinAgeDays, DEFAULT_WIKI_CONFIG.sweep.zeroHitMinAgeDays),
+        perSourceKeep: num(sw.perSourceKeep, DEFAULT_WIKI_CONFIG.sweep.perSourceKeep),
+      },
+    };
+  } catch {
+    return DEFAULT_WIKI_CONFIG;
+  }
+}
+```
+
+- [ ] **Step 4: 确认绿 + 加导出**
+
+```
+pnpm --filter @teamagent/adapters test -- config-loader
+```
+
+`packages/adapters/src/index.ts` 加：
+```ts
+export { loadWikiConfig, DEFAULT_WIKI_CONFIG } from "./wiki/config-loader.js";
+export type { WikiConfig } from "./wiki/config-loader.js";
+```
+
+- [ ] **Step 5: 让 `runWikiRefresh` 使用 config**
+
+在 `wiki-refresh.ts` 里：
+1. 顶部 import `loadWikiConfig` 从 `@teamagent/adapters`
+2. 函数开头加载：`const cfg = loadWikiConfig(opts.cwd);`
+3. debounce 阈值：`const debounceHours = opts.debounceHours ?? cfg.autoRefresh.debounceHours;`
+4. sweeper 参数：优先 `opts.zeroHitMinAgeDays ?? cfg.sweep.zeroHitMinAgeDays`、`opts.perSourceKeep ?? cfg.sweep.perSourceKeep`
+5. 若 `cfg.sweep.enabled === false`：跳 sweep 步骤（记一行 info 事件：`emit(bus, "sweep-disabled")`）
+
+补一个测试：`wiki-refresh.test.ts` 追加：
+
+```ts
+it("sweep.enabled=false → 不跑 sweep", async () => {
+  const teamagentDir = join(cwd, ".teamagent");
+  mkdirSync(teamagentDir, { recursive: true });
+  writeFileSync(join(teamagentDir, "config.json"),
+    JSON.stringify({ wiki: { sweep: { enabled: false } } }));
+  const sweepCalls: number[] = [];
+  await runWikiRefresh({
+    cwd,
+    force: true,
+    _testDeps: {
+      openDb: () => ({ close: () => {} } as any),
+      runPipeline: async () => ({ added: 0, skipped: 0, rejected: 0, errors: [] }),
+      runSweep: () => { sweepCalls.push(1); return { archived: [], byReason: { zeroHitAged: 0, sourceOverflow: 0 } }; },
+    },
+  });
+  expect(sweepCalls).toEqual([]);
+});
+```
+
+- [ ] **Step 6: 让 `decideAction` 也读 config**
+
+改 `session-start-logic.ts`：
+
+```ts
+export function decideAction(cwd: string, now: Date, debounceHours?: number): Action {
+  const dbPath = join(cwd, ".teamagent", "knowledge.db");
+  if (!existsSync(dbPath)) return "skip-no-db";
+  const cfg = loadWikiConfig(cwd);
+  if (!cfg.autoRefresh.enabled) return "skip-debounced"; // 用同一个 skip 值；也可新增 "skip-disabled"
+  const hours = debounceHours ?? cfg.autoRefresh.debounceHours;
+  const marker = new LastPullMarker(join(cwd, ".teamagent"));
+  return marker.shouldSkip(now, hours) ? "skip-debounced" : "spawn";
+}
+```
+
+同时把 Action 扩展到 `"spawn" | "skip-debounced" | "skip-no-db" | "skip-disabled"`，给 hook 一个明确语义；然后更新 `session-start-logic.test.ts` 加一个测试：
+
+```ts
+it("autoRefresh.enabled=false → skip-disabled", () => {
+  mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+  writeFileSync(join(cwd, ".teamagent", "knowledge.db"), "");
+  writeFileSync(join(cwd, ".teamagent", "config.json"),
+    JSON.stringify({ wiki: { autoRefresh: { enabled: false } } }));
+  expect(decideAction(cwd, new Date())).toBe("skip-disabled");
+});
+```
+
+- [ ] **Step 7: 跑全部相关测试**
+
+```
+pnpm --filter @teamagent/adapters test -- config-loader
+pnpm --filter @teamagent/cli test -- wiki-refresh session-start-logic
+```
+
+- [ ] **Step 8: commit**
+
+```bash
+pnpm typecheck
+git add packages/adapters/src/wiki/config-loader.ts packages/adapters/src/wiki/__tests__/config-loader.test.ts packages/adapters/src/index.ts packages/cli/src/wiki-refresh.ts packages/cli/src/session-start-logic.ts packages/cli/src/__tests__/wiki-refresh.test.ts packages/cli/src/__tests__/session-start-logic.test.ts
+git commit -m "feat(wiki): read .teamagent/config.json for wiki settings
+
+Per-project override of debounceHours, zeroHitMinAgeDays, perSourceKeep,
+and enabled flags. Missing/malformed config falls back to defaults.
+autoRefresh.enabled=false surfaces skip-disabled action at SessionStart."
+```
+
+---
+
+---
+
 ## Self-Review 清单
 
 **Spec 覆盖（逐条）**：
@@ -1355,15 +1828,17 @@ rm .teamagent/wiki-last-pull.json
 - [x] §6.2 bin-wiki-refresh：Task 5
 - [x] §6.3 ArchiveSweeper pure fn + adapter：Task 1 + 2
 - [x] §6.4 Retriever 补丁：Task 3
-- [x] §6.5 归因事件：**部分** — Task 5 实现里未调用 AttributionBus。如需严格 M0 合规，需补。已在 Task 5 后备注留个 TODO，但不在当前 plan 范围（因为 AttributionBus 在主进程里发事件；子进程如何中继属另一话题，后续工作。）
-- [x] §7 配置面：**未做** — 目前 `perSourceKeep / zeroHitMinAgeDays` 用默认值硬编码，`.teamagent/config.json` 读取逻辑后续 polish。当前 plan 选项参数已打通（可编程传），只是没读 config.json。在 Task 5 注释留扩展点。
+- [x] §6.5 归因事件：Task 9 — 扩 `source` union + threaded bus + stdout renderer
+- [x] §7 配置面：Task 10 — `loadWikiConfig` 读 .teamagent/config.json，贯通到 refresh/session-start
 - [x] §8 错误处理：Task 5 try-catch 覆盖每阶段；Task 6 spawn 失败记日志
-- [x] §9 测试策略：Task 1/2/3/4/5/6 都有 unit test；E2E 放 Task 8 手动
+- [x] §9 测试策略：Task 1-10 都有 unit test；E2E 放 Task 11 手动
 - [x] §10 迁移：0 schema migration（Task 7 只改 tsup + settings）
-- [x] §11 Walking skeleton 清单：Task 8
+- [x] §11 Walking skeleton 清单：Task 11
 
-**Gap 总结**：
-- 归因事件接线 + config.json 读取是 spec 里的"有就好"，当前 plan 走完后可当独立小 PR 补。若用户坚持一次做完，追加 Task 9 覆盖。
+**Gap 总结**（2026-04-21 更新 rev2）：
+- §6.5 归因事件：Task 9 覆盖（扩 union + bus 接入 + renderer）
+- §7 config.json：Task 10 覆盖（loadWikiConfig + 贯通）
+- 已知悬而未决：跨进程 bus（spec 承诺 M2 的 JsonlAttributionBus）不在本批 scope；spawned subprocess 事件留在 subprocess 内，未来 M2 补齐
 
 **Placeholder 扫描**：通过（所有 step 都有完整代码/命令/预期）。
 
