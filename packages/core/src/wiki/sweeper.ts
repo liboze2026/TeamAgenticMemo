@@ -39,7 +39,7 @@ export function computeArchivals(
   // rule 2: per-source keep top N by publishedAt desc
   const bySource = new Map<string, WikiEntrySnapshot[]>();
   for (const e of entries) {
-    const key = `${e.sourceType}::${e.sourceId}`;
+    const key = e.sourceId;
     const bucket = bySource.get(key) ?? [];
     bucket.push(e);
     bySource.set(key, bucket);

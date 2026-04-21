@@ -110,4 +110,16 @@ describe("computeArchivals", () => {
     const oldEntry = result.find(r => r.knowledgeId === "old");
     expect(oldEntry?.reason).toBe("zero-hit-aged");
   });
+
+  it("同 sourceId 跨 sourceType 共享 bucket（dedup by sourceId only per spec §4）", () => {
+    const entries = [
+      mk({ knowledgeId: "gh", sourceType: "github_release", sourceId: "same-repo", publishedAt: new Date("2026-04-10"), inlineInjectionCount: 1 }),
+      mk({ knowledgeId: "npm", sourceType: "npm",           sourceId: "same-repo", publishedAt: new Date("2026-03-10"), inlineInjectionCount: 1 }),
+    ];
+    const result = computeArchivals(entries, { zeroHitMinAgeDays: 60, perSourceKeep: 1, now });
+    // Should archive exactly 1 (the older one), not 0
+    expect(result).toHaveLength(1);
+    expect(result[0]!.knowledgeId).toBe("npm"); // older publishedAt
+    expect(result[0]!.reason).toBe("source-overflow");
+  });
 });
