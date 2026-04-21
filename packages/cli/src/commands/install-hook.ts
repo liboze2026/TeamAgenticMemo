@@ -44,10 +44,25 @@ interface HookCommand {
 }
 
 function cliRoot(): string {
-  // 通过 import.meta.url 找到 install-hook.ts 自身位置
-  // → 退到 packages/cli/
+  // 从当前文件位置向上走，找到包含 dist/bin-pre-tool-use.cjs 的目录。
+  // - Dev (source, tsx):  .../packages/cli/src/commands/install-hook.ts
+  //                       → .../packages/cli/
+  // - Bundled (npm):      .../node_modules/teamagent/dist/bin.js
+  //                       → .../node_modules/teamagent/
+  // 旧实现硬编码"退 3 层"，在 bundle 模式退到 node_modules/，
+  // 再拼 "dist/bin-stop.cjs" 得到 node_modules/dist/bin-stop.cjs（不存在）。
   const here = fileURLToPath(import.meta.url);
-  return path.dirname(path.dirname(path.dirname(here)));
+  let dir = path.dirname(here);
+  for (let i = 0; i < 6; i++) {
+    if (fs.existsSync(path.join(dir, "dist", "bin-pre-tool-use.cjs"))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // 兜底：bundle 时总是 dist/bin.js → 上一级就是包根
+  return path.dirname(path.dirname(here));
 }
 
 function defaultHookEntry(): string {

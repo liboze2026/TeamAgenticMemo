@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { openDb } from "@teamagent/adapters";
 
 const _require = createRequire(import.meta.url);
 
@@ -205,16 +206,14 @@ function checkKnowledgeDb(dbPath: string): DoctorCheckResult {
     };
   }
   try {
-    // Try opening it — will throw if corrupted
-    const { openDb } = _require("@teamagent/adapters") as { openDb: (p: string) => { close(): void } };
     const db = openDb(dbPath);
     db.close();
     return { name: "knowledge-db", status: "pass", detail: dbPath };
-  } catch {
+  } catch (e) {
     return {
       name: "knowledge-db",
       status: "fail",
-      detail: "knowledge.db 无法打开（可能已损坏）",
+      detail: `knowledge.db 无法打开：${String(e).slice(0, 120)}`,
       fix: "teamagent init  （将重建数据库）",
     };
   }
