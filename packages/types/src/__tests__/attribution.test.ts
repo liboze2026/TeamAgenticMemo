@@ -14,7 +14,7 @@ describe("parseVisibilityMode", () => {
     expect(parseVisibilityMode("")).toBe(DEFAULT_VISIBILITY);
   });
 
-  it("default is smart", () => {
-    expect(DEFAULT_VISIBILITY).toBe("smart");
+  it("default is verbose", () => {
+    expect(DEFAULT_VISIBILITY).toBe("verbose");
   });
 });

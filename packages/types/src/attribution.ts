@@ -42,7 +42,10 @@ export interface AttributionEvent {
  */
 export type VisibilityMode = "silent" | "smart" | "verbose";
 
-export const DEFAULT_VISIBILITY: VisibilityMode = "smart";
+// Default changed from "smart" → "verbose" (2026-04-21): users want all
+// attribution events visible by default so they can see what TeamAgent did.
+// Opt out: TEAMAGENT_VISIBILITY=smart 或 =silent
+export const DEFAULT_VISIBILITY: VisibilityMode = "verbose";
 
 /** 从环境变量解析 visibility mode。无效值回退到默认。 */
 export function parseVisibilityMode(raw: string | undefined): VisibilityMode {

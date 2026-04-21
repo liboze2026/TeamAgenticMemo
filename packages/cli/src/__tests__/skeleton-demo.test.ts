@@ -12,7 +12,10 @@ describe("runSkeletonDemo", () => {
   });
 
   it("smart mode does NOT include counterfactual line", async () => {
-    const out = await runSkeletonDemo({ env: {}, now: fixedNow });
+    const out = await runSkeletonDemo({
+      env: { TEAMAGENT_VISIBILITY: "smart" },
+      now: fixedNow,
+    });
     expect(out).not.toContain("如果没有 TeamAgent");
   });
 
@@ -34,12 +37,12 @@ describe("runSkeletonDemo", () => {
     expect(out).toContain('"source"');
   });
 
-  it("unknown mode falls back to smart", async () => {
+  it("unknown mode falls back to default (verbose)", async () => {
     const out = await runSkeletonDemo({
       env: { TEAMAGENT_VISIBILITY: "dev" },
       now: fixedNow,
     });
     expect(out).toContain("✨ TeamAgent");
-    expect(out).not.toContain("如果没有 TeamAgent");
+    expect(out).toContain("如果没有 TeamAgent");
   });
 });

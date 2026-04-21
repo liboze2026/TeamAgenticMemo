@@ -425,7 +425,7 @@ async function main(): Promise<void> {
           "                                   半自动源加 --dry-run 只产出候选 md 供人工勾选",
           "",
           "环境变量:",
-          "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 smart）",
+          "  TEAMAGENT_VISIBILITY=silent|smart|verbose    归因渲染模式（默认 verbose）",
           "",
         ].join("\n"),
       );
