@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { runStopPipeline, type StopHookInput } from "../bin-stop.js";
 
 vi.mock("../commands/analyze.js", () => ({
@@ -166,5 +169,67 @@ describe("runStopPipeline", () => {
     const combined = stdoutWrites.join("");
     expect(combined).not.toContain("✦ TeamAgent");
     stdoutSpy.mockRestore();
+  });
+});
+
+describe("runStopPipeline lock file", () => {
+  let tmpCwd: string;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Restore baseline resolving mocks (earlier describe's mockRejectedValueOnce
+    // queue may have drained already, but reset to be safe).
+    vi.mocked(executeAnalyze).mockResolvedValue("analyze done");
+    vi.mocked(executeCalibrate).mockResolvedValue({ dryRun: false } as never);
+    vi.mocked(executeCompile).mockResolvedValue({
+      markdown: { path: "CLAUDE.md", blockLineCount: 5 },
+      skills: { written: [], removed: [] },
+    } as never);
+    tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "stop-lock-"));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  });
+
+  it("writes and deletes lock file during pipeline run", async () => {
+    const lockPath = path.join(tmpCwd, ".teamagent", ".stop-running.lock");
+    let lockSeenDuringAnalyze = false;
+    let lockPayload: { pid?: number; started_at?: string } | null = null;
+
+    vi.mocked(executeAnalyze).mockImplementationOnce(async () => {
+      lockSeenDuringAnalyze = fs.existsSync(lockPath);
+      if (lockSeenDuringAnalyze) {
+        lockPayload = JSON.parse(fs.readFileSync(lockPath, "utf-8"));
+      }
+      return "analyze done";
+    });
+
+    const input: StopHookInput = {
+      session_id: "x",
+      transcript_path: "/tmp/t.jsonl",
+      cwd: tmpCwd,
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    expect(lockSeenDuringAnalyze).toBe(true);
+    const payload = lockPayload as { pid?: number; started_at?: string } | null;
+    expect(payload?.pid).toBe(process.pid);
+    expect(typeof payload?.started_at).toBe("string");
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it("removes lock even if pipeline throws", async () => {
+    const lockPath = path.join(tmpCwd, ".teamagent", ".stop-running.lock");
+    vi.mocked(executeAnalyze).mockRejectedValueOnce(new Error("boom"));
+    vi.mocked(executeCalibrate).mockRejectedValueOnce(new Error("boom2"));
+    vi.mocked(executeCompile).mockRejectedValueOnce(new Error("boom3"));
+
+    const input: StopHookInput = {
+      session_id: "x",
+      transcript_path: "/tmp/t.jsonl",
+      cwd: tmpCwd,
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    expect(fs.existsSync(lockPath)).toBe(false);
   });
 });

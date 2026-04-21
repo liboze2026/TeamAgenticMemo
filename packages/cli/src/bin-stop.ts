@@ -9,7 +9,7 @@
  * NEVER exits non-zero — must not block session close.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { executeAnalyze } from "./commands/analyze.js";
@@ -37,8 +37,36 @@ function isRetryableAnalyzeError(e: unknown): boolean {
   );
 }
 
+/** Lock file used by the statusline to show "Stop 运行中" indicator. */
+const STOP_LOCK_RELATIVE = path.join(".teamagent", ".stop-running.lock");
+
+function writeStopLock(cwd: string): string {
+  const lockPath = path.join(cwd, STOP_LOCK_RELATIVE);
+  try {
+    mkdirSync(path.dirname(lockPath), { recursive: true });
+    writeFileSync(
+      lockPath,
+      JSON.stringify({ pid: process.pid, started_at: new Date().toISOString() }),
+      "utf-8",
+    );
+  } catch {
+    // lock is best-effort — statusline will simply not show the indicator
+  }
+  return lockPath;
+}
+
+function removeStopLock(lockPath: string): void {
+  try {
+    if (existsSync(lockPath)) unlinkSync(lockPath);
+  } catch {
+    // silent
+  }
+}
+
 export async function runStopPipeline(input: StopHookInput): Promise<void> {
   const cwd = input.cwd;
+  const lockPath = writeStopLock(cwd);
+  try {
 
   // Step 1: analyze. Claude Code can fire Stop before the transcript jsonl
   // finishes flushing to disk, or the file may still be locked on Windows
@@ -102,6 +130,10 @@ export async function runStopPipeline(input: StopHookInput): Promise<void> {
     }
   } catch (e) {
     logError(cwd, "compile", e);
+  }
+
+  } finally {
+    removeStopLock(lockPath);
   }
 }
 
