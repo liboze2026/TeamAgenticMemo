@@ -30,11 +30,11 @@ const DENIAL_PATTERNS: Array<{ re: RegExp; weight: number }> = [
 ];
 
 /**
- * 多次失败信号：同一个 turn 内或前一个 turn 内有 ≥2 次失败的 tool call。
+ * 失败信号：同一个 turn 内有 ≥1 次失败的 tool call。
  */
 function hasMultipleFailures(turn: SessionTurn): boolean {
   const failed = turn.toolCalls.filter((tc) => tc.succeeded === false);
-  return failed.length >= 2;
+  return failed.length >= 1;
 }
 
 /**
