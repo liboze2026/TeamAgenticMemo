@@ -45,7 +45,10 @@ describe("createPreToolUseHandler (SDK)", () => {
     expect(result.permissionDecisionReason).toContain("fetch");
     expect(result.permissionDecisionReason).toMatch(/◈ TeamAgent 阻止操作/);
     expect(result.permissionDecisionReason).toMatch(/置信度 0\.\d+/);
-    expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "hook-pre.blocked" }));
+    expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "hook-pre.blocked",
+      tool_name: "Edit",   // NEW: blocked event must carry tool_name for circumvention detection
+    }));
   });
 
   it("warned rules → allow + systemMessage + tool_name in warned event", async () => {
@@ -109,6 +112,45 @@ describe("createPreToolUseHandler (SDK)", () => {
     const complied = appended.filter((e: any) => e.kind === "ai.override.complied");
     expect(complied).toHaveLength(1);
     expect(complied[0]).toMatchObject({ knowledge_id: "rule-A" });
+  });
+
+  it("verbose visibility → clean pass returns systemMessage with rule count + tool name", async () => {
+    const handler = createPreToolUseHandler({
+      matcher: { match: async () => ({ matched: [] }) } as any,
+      eventLog: { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) } as any,
+      visibility: "verbose",
+      ruleCount: 136,
+    });
+    const result = await handler({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "ls" },
+      tool_use_id: "tu-verbose",
+    } as any);
+    expect(result.permissionDecision).toBe("allow");
+    expect(result.systemMessage).toMatch(/◈ TeamAgent/);
+    expect(result.systemMessage).toContain("Bash");
+    expect(result.systemMessage).toContain("136");
+    expect(result.systemMessage).toContain("放行");
+  });
+
+  it("smart/silent visibility → clean pass stays silent (no systemMessage)", async () => {
+    for (const vis of ["smart", "silent"] as const) {
+      const handler = createPreToolUseHandler({
+        matcher: { match: async () => ({ matched: [] }) } as any,
+        eventLog: { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) } as any,
+        visibility: vis,
+        ruleCount: 50,
+      });
+      const result = await handler({
+        hook_event_name: "PreToolUse",
+        tool_name: "Edit",
+        tool_input: {},
+        tool_use_id: `tu-${vis}`,
+      } as any);
+      expect(result.permissionDecision).toBe("allow");
+      expect(result.systemMessage).toBeUndefined();
+    }
   });
 
   it("does NOT emit complied when no recent warns exist", async () => {

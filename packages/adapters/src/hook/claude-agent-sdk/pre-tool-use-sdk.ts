@@ -9,6 +9,14 @@ export interface PreToolUseDeps {
     append(e: any): void;
     readLast(n: number): any[];
   };
+  /**
+   * 归因可见度。"verbose" 时在 clean-pass (无规则命中) 也发一条短 systemMessage,
+   * 让用户感知到 hook 在跑。"smart"/"silent" 保持静默 (原行为)。
+   * 缺省 → "smart" (向后兼容)。
+   */
+  visibility?: "silent" | "smart" | "verbose";
+  /** 本次匹配用了多少条规则, 仅 verbose pass 消息里展示 */
+  ruleCount?: number;
 }
 
 export interface PreToolUseResult {
@@ -46,6 +54,13 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
         timestamp: now,
         schema_version: 1,
       });
+      if (deps.visibility === "verbose") {
+        const n = typeof deps.ruleCount === "number" ? deps.ruleCount : 0;
+        return {
+          permissionDecision: "allow",
+          systemMessage: `◈ TeamAgent: ✓ ${tool_name} 放行 (检查 ${n} 条规则, 无命中)`,
+        };
+      }
       return { permissionDecision: "allow" };
     }
 
@@ -66,6 +81,7 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
         kind: "hook-pre.blocked",
         knowledge_id: top.id,
         tool_use_id,
+        tool_name,              // M3: 供 detectBlockedCircumventedSignals 用
         timestamp: now,
         schema_version: 1,
       });
