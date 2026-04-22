@@ -22,6 +22,7 @@ export interface PersistedEvent {
     | "hook-post.result"
     | "ai.override.ignored"
     | "ai.override.complied"
+    | "ai.override.blocked_circumvented"
     | "pitfall.added"
     | "compiler.updated"
     | "extractor.extracted"

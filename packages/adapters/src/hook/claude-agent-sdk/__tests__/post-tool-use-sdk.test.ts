@@ -99,4 +99,81 @@ describe("createPostToolUseHandler (SDK)", () => {
     await handler({ tool_use_id: "t1", tool_response: {} } as any);
     expect(appended.filter((e: any) => e.kind === "ai.override.ignored")).toHaveLength(0);
   });
+
+  it("emits ai.override.blocked_circumvented when recent blocked exists for same tool_name and tool succeeded", async () => {
+    const recentEvents = [
+      {
+        kind: "hook-pre.blocked",
+        tool_use_id: "t-prev",
+        knowledge_id: "rule-B",
+        tool_name: "Bash",
+        timestamp: new Date(Date.now() - 60_000).toISOString(), // 1 min ago
+      },
+    ];
+    const appended: any[] = [];
+    const handler = createPostToolUseHandler({
+      eventLog: {
+        append: (e: any) => appended.push(e),
+        readLast: (_n: number) => recentEvents,
+      } as any,
+    });
+    await handler({
+      tool_name: "Bash",
+      tool_use_id: "t-curr",
+      tool_response: { is_error: false, exit_code: 0 },
+    } as any);
+    const circum = appended.filter((e: any) => e.kind === "ai.override.blocked_circumvented");
+    expect(circum).toHaveLength(1);
+    expect(circum[0]).toMatchObject({ knowledge_id: "rule-B", tool_use_id: "t-curr" });
+  });
+
+  it("does NOT emit blocked_circumvented when tool failed", async () => {
+    const recentEvents = [
+      {
+        kind: "hook-pre.blocked",
+        tool_use_id: "t-prev",
+        knowledge_id: "rule-B",
+        tool_name: "Bash",
+        timestamp: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ];
+    const appended: any[] = [];
+    const handler = createPostToolUseHandler({
+      eventLog: {
+        append: (e: any) => appended.push(e),
+        readLast: (_n: number) => recentEvents,
+      } as any,
+    });
+    await handler({
+      tool_name: "Bash",
+      tool_use_id: "t-curr",
+      tool_response: { is_error: true, error: "failed" },
+    } as any);
+    expect(appended.filter((e: any) => e.kind === "ai.override.blocked_circumvented")).toHaveLength(0);
+  });
+
+  it("does NOT emit blocked_circumvented when tool_name differs", async () => {
+    const recentEvents = [
+      {
+        kind: "hook-pre.blocked",
+        tool_use_id: "t-prev",
+        knowledge_id: "rule-B",
+        tool_name: "Bash",
+        timestamp: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ];
+    const appended: any[] = [];
+    const handler = createPostToolUseHandler({
+      eventLog: {
+        append: (e: any) => appended.push(e),
+        readLast: (_n: number) => recentEvents,
+      } as any,
+    });
+    await handler({
+      tool_name: "Write",
+      tool_use_id: "t-curr",
+      tool_response: { is_error: false },
+    } as any);
+    expect(appended.filter((e: any) => e.kind === "ai.override.blocked_circumvented")).toHaveLength(0);
+  });
 });

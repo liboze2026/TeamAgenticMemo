@@ -15,6 +15,8 @@ import type { KnowledgeEntry, PersistedEvent } from "@teamagent/types";
 
 const DEMERIT_KIND_TO_SOURCE: Record<string, DemeritEvent["source"]> = {
   "ai.override.ignored": "ai_override_ignored",
+  // M3: block 被绕路 → 复用 ai_override_ignored 权重（demerit base 一致）
+  "ai.override.blocked_circumvented": "ai_override_ignored",
   "calibrator.user_reject": "user_reject",
   "validator.failure": "validator_fail",
 };

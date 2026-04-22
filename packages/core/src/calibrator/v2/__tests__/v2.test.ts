@@ -83,4 +83,19 @@ describe("v2Calibrator integration", () => {
     const r = v2Calibrator.calibrate(entry, { events: [], observations: obs, now });
     expect(r.delta_breakdown.length).toBeGreaterThan(0);
   });
+
+  it("M3: ai.override.blocked_circumvented event → demerit increases", () => {
+    const events: PersistedEvent[] = [
+      {
+        id: "e-circum",
+        kind: "ai.override.blocked_circumvented" as any,
+        knowledge_id: "r-int",
+        timestamp: now.toISOString(),
+        schema_version: 1,
+      } as PersistedEvent,
+    ];
+    const r = v2Calibrator.calibrate(entry, { events, observations: [], now });
+    expect(r.demerit).toBeGreaterThan(0);
+    expect(r.demerit_delta).toBeGreaterThan(0);
+  });
 });

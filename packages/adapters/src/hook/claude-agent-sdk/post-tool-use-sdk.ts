@@ -1,5 +1,9 @@
 import type { PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
-import { detectIgnoredSignals, type OverrideSignalEvent } from "@teamagent/core";
+import {
+  detectIgnoredSignals,
+  detectBlockedCircumventedSignals,
+  type OverrideSignalEvent,
+} from "@teamagent/core";
 
 export interface PostToolUseDeps {
   eventLog: {
@@ -45,6 +49,26 @@ export function createPostToolUseHandler(deps: PostToolUseDeps) {
         timestamp: now,
         schema_version: 1,
       });
+    }
+
+    // M3: detect block-circumvention — only when tool succeeded
+    const toolName = (input as { tool_name?: string }).tool_name;
+    if (success && toolName) {
+      const circumList = detectBlockedCircumventedSignals(
+        toolName,
+        recent as OverrideSignalEvent[],
+        new Date(now),
+      );
+      for (const c of circumList) {
+        deps.eventLog.append({
+          id: `e-override-circum-${tool_use_id}-${c.knowledge_id}`,
+          kind: "ai.override.blocked_circumvented",
+          knowledge_id: c.knowledge_id,
+          tool_use_id,
+          timestamp: now,
+          schema_version: 1,
+        });
+      }
     }
 
     return {};
