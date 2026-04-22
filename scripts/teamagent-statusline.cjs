@@ -30,8 +30,39 @@ function tryOpenDb(dbPath) {
 
 function getEntryCount(db) {
   try {
-    const row = db.prepare("SELECT COUNT(*) AS n FROM knowledge WHERE status = 'active'").get();
+    const row = db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM knowledge WHERE status = 'active' AND (type IS NULL OR type != 'wiki')",
+      )
+      .get();
     return row ? row.n : null;
+  } catch {
+    return null;
+  }
+}
+
+function getWikiCount(db) {
+  try {
+    const row = db
+      .prepare("SELECT COUNT(*) AS n FROM knowledge WHERE status = 'active' AND type = 'wiki'")
+      .get();
+    return row ? row.n : null;
+  } catch {
+    return null;
+  }
+}
+
+function getLastWikiPullDate(db) {
+  try {
+    const row = db
+      .prepare(
+        "SELECT MAX(created_at) AS d FROM knowledge WHERE status = 'active' AND type = 'wiki'",
+      )
+      .get();
+    if (!row || !row.d) return null;
+    const d = new Date(row.d);
+    if (isNaN(d.getTime())) return null;
+    return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   } catch {
     return null;
   }
@@ -95,14 +126,20 @@ function main() {
 
   // 两库分别取活跃数 + 最近更新日，聚合。
   let count = 0;
+  let wikiCount = 0;
   let lastDate = null;
+  let lastWikiDate = null;
   for (const db of [projectDb, globalDb]) {
     if (!db) continue;
     try {
       const c = getEntryCount(db);
       if (typeof c === "number") count += c;
+      const w = getWikiCount(db);
+      if (typeof w === "number") wikiCount += w;
       const d = getLastLearnedDate(db);
       if (d && (!lastDate || d > lastDate)) lastDate = d;
+      const wd = getLastWikiPullDate(db);
+      if (wd && (!lastWikiDate || wd > lastWikiDate)) lastWikiDate = wd;
     } finally {
       db.close();
     }
@@ -121,7 +158,8 @@ function main() {
   }
 
   const parts = ["TeamAgent正在运行"];
-  parts.push(`规则库现有：${count !== null ? count : "-"}条`);
+  parts.push(`规则库：${count !== null ? count : "-"}条`);
+  parts.push(`wiki：${wikiCount}条${lastWikiDate ? ` (${lastWikiDate})` : ""}`);
   parts.push(todayBlocks !== null ? `今日已拦截：${todayBlocks}` : "今日已拦截：-");
   parts.push(todayPassed !== null ? `今日放行：${todayPassed}` : "今日放行：-");
   if (lastDate) parts.push(`最近全局解析：${lastDate}`);
