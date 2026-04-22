@@ -16,6 +16,9 @@ vi.mock("../commands/compile.js", () => ({
     skills: { written: [], removed: [] },
   }),
 }));
+vi.mock("../commands/scan-errors.js", () => ({
+  executeScanErrors: vi.fn().mockResolvedValue(""),
+}));
 vi.mock("../commands/recent-entries.js", () => ({
   getRecentEntries: vi.fn(),
 }));

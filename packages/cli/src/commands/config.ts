@@ -3,10 +3,16 @@ import path from "node:path";
 
 export interface TeamAgentConfig {
   stop_mode: "sync" | "async";
+  /** Run scan-errors as part of Stop pipeline (writes to ~/.teamagent/candidates.db). */
+  stop_scan_errors: boolean;
+  /** Timeout budget (ms) for the scan-errors step inside Stop. */
+  stop_scan_errors_timeout_ms: number;
 }
 
 const DEFAULTS: TeamAgentConfig = {
   stop_mode: "async",
+  stop_scan_errors: true,
+  stop_scan_errors_timeout_ms: 90_000,
 };
 
 export function readTeamAgentConfig(cwd: string): TeamAgentConfig {

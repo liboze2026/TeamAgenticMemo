@@ -24,6 +24,7 @@ import { momentSignature } from "@teamagent/core";
 import { executeAnalyze, type AnalyzeMeta } from "./commands/analyze.js";
 import { executeCalibrate } from "./commands/calibrate.js";
 import { executeCompile } from "./commands/compile.js";
+import { executeScanErrors } from "./commands/scan-errors.js";
 import { readTeamAgentConfig } from "./commands/config.js";
 import { readCursor, writeCursor, clearCursor, readSeen, writeSeen } from "./scan-cursor.js";
 import { appendHarvest } from "./harvest-writer.js";
@@ -214,6 +215,38 @@ export async function runStopPipeline(
     });
   } catch (e) {
     logError(cwd, "harvest", e);
+  }
+
+  // Step 5: scan-errors → candidates.db (opt-out via config). Runs last so
+  // the main rules pipeline (analyze/calibrate/compile/harvest) is already
+  // durable by the time we do the extra LLM work.
+  const stopScanCfg = readTeamAgentConfig(cwd);
+  if (stopScanCfg.stop_scan_errors) {
+    try {
+      process.stderr.write("TeamAgent: 扫描工具失败信号 (scan-errors)...\n");
+      const scanTimeoutMs = stopScanCfg.stop_scan_errors_timeout_ms;
+      const scanLlm = buildLLMClient();
+      const out = await Promise.race<string | null>([
+        executeScanErrors({
+          mode: "efficient",
+          minFreq: 2,
+          dryRun: false,
+          quiet: true,
+          llmClient: scanLlm,
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), scanTimeoutMs)),
+      ]);
+      if (out === null) {
+        process.stderr.write(
+          `TeamAgent: scan-errors 超时 (>${scanTimeoutMs}ms)，跳过\n`,
+        );
+      } else {
+        const lastLine = out.trim().split("\n").filter(Boolean).pop() ?? "";
+        if (lastLine) process.stderr.write(`TeamAgent: scan-errors ${lastLine}\n`);
+      }
+    } catch (e) {
+      logError(cwd, "scan-errors", e);
+    }
   }
 
   } finally {
