@@ -58,6 +58,31 @@ describe("matchRules — basic matching", () => {
     expect(matches[0]?.id).toBe("moment");
   });
 
+  it("M3 洞1: matches type=practice rule that carries wrong_pattern", () => {
+    const rule = makeRule({
+      id: "practice-with-wp",
+      type: "practice",
+      wrong_pattern: "等通知",
+      correct_pattern: "立即读 output-file",
+    });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "echo 等通知" } },
+      [rule],
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.id).toBe("practice-with-wp");
+  });
+
+  it("M3 洞1: skips rule with empty wrong_pattern regardless of type", () => {
+    const practiceNoWp = makeRule({ id: "practice-empty", type: "practice", wrong_pattern: "" });
+    const avoidanceNoWp = makeRule({ id: "avoidance-empty", type: "avoidance", wrong_pattern: "" });
+    const matches = matchRules(
+      { toolName: "Bash", input: { command: "anything" } },
+      [practiceNoWp, avoidanceNoWp],
+    );
+    expect(matches).toEqual([]);
+  });
+
   it("does not match when pattern absent", () => {
     const rule = makeRule({ wrong_pattern: "moment" });
     const matches = matchRules(

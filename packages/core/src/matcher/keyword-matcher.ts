@@ -35,7 +35,10 @@ export function matchRules(
 
   for (const rule of rules) {
     if (rule.status !== "active") continue;
-    if (rule.type !== "avoidance") continue;
+    // M3 洞1: 脱钩 type，matcher 真正判的是 "是否有 wrong_pattern"。
+    // 原 `rule.type !== "avoidance"` 硬筛把 34 条 type=practice+wrong_pattern 的
+    // 规则扫进死角 (其中 11 条 enforcement=block)，分数永不动。
+    // 改为只判 wrong_pattern 有无 — type 仅用于 CLAUDE.md 渲染语义。
     if (!rule.wrong_pattern) continue;
 
     if (!checkScope(rule, filePath)) continue;
