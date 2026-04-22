@@ -18,7 +18,11 @@ export {
 export { ruleBasedCorrectionDetector } from "./correction-detector/rule-based.js";
 export { ruleBasedSuccessDetector } from "./success-detector/rule-based.js";
 export { parseSessionFile } from "./session-parser/index.js";
-export { buildExtractionPrompt } from "./extractor/prompt.js";
+export {
+  buildExtractionPrompt,
+  buildRetrofitPrompt,
+  type RetrofitInput,
+} from "./extractor/prompt.js";
 export { extractRuleBullets } from "./importer/claude-md-parser.js";
 export { extractCursorRules } from "./importer/cursor-rules-parser.js";
 export {
@@ -97,6 +101,7 @@ export type { CompilePipelineDeps, CompilePipelineResult, SkillEvent, MarkdownCo
 export {
   detectIgnoredSignals,
   detectCompliedSignals,
+  detectBlockedCircumventedSignals,
   type OverrideSignalEvent,
 } from "./pipeline/override-signal.js";
 export { clusterByTag } from "./error-collector/cross-session-cluster.js";
