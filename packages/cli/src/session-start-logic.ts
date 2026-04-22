@@ -31,7 +31,11 @@ export function spawnRefresh(cwd: string): void {
     detached: true,
     stdio: "ignore",
     cwd,
-    env: { ...process.env, CLAUDE_PROJECT_DIR: cwd },
+    env: {
+      ...process.env,
+      CLAUDE_PROJECT_DIR: cwd,
+      TEAMAGENT_WIKI_TRIGGER: "session-start",
+    },
     windowsHide: true,
   });
   child.unref();

@@ -34,6 +34,8 @@ export interface RefreshOptions {
   zeroHitMinAgeDays?: number;
   perSourceKeep?: number;
   bus?: AttributionBus;
+  /** Who triggered this refresh — recorded into last-wiki-pull.md */
+  trigger?: "manual" | "session-start" | "scheduled";
   _testDeps?: TestDeps;
 }
 
@@ -66,14 +68,23 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
     errors: [],
   };
   const teamagentDir = path.join(opts.cwd, ".teamagent");
+  const startedAt = new Date();
 
   // Load per-project config (defaults on missing/malformed)
-  let cfg: { autoRefresh: { enabled: boolean; debounceHours: number }; sweep: { enabled: boolean; zeroHitMinAgeDays: number; perSourceKeep: number } };
+  let cfg: {
+    autoRefresh: { enabled: boolean; debounceHours: number };
+    sweep: { enabled: boolean; zeroHitMinAgeDays: number; perSourceKeep: number };
+    manualStack: string[];
+  };
   try {
     const { loadWikiConfig } = await import("@teamagent/adapters");
     cfg = loadWikiConfig(opts.cwd);
   } catch {
-    cfg = { autoRefresh: { enabled: true, debounceHours: 24 }, sweep: { enabled: true, zeroHitMinAgeDays: 60, perSourceKeep: 3 } };
+    cfg = {
+      autoRefresh: { enabled: true, debounceHours: 24 },
+      sweep: { enabled: true, zeroHitMinAgeDays: 60, perSourceKeep: 3 },
+      manualStack: [],
+    };
   }
   const debounceHours = opts.debounceHours ?? cfg.autoRefresh.debounceHours;
   const zeroHitMinAgeDays = opts.zeroHitMinAgeDays ?? cfg.sweep.zeroHitMinAgeDays;
@@ -87,7 +98,21 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
     const marker = new LastPullMarker(teamagentDir);
     if (!opts.force && marker.shouldSkip(new Date(), debounceHours)) {
       emit(opts.bus, "skipped", { userFacingValue: "wiki 24h 内刚刷过，跳过" });
-      return { ...result, skipped: true, skipReason: "debounced" };
+      const skipResult: RefreshResult = { ...result, skipped: true, skipReason: "debounced" };
+      try {
+        const { appendWikiHarvest } = await import("./wiki-harvest-writer.js");
+        appendWikiHarvest(opts.cwd, {
+          trigger: opts.trigger ?? "manual",
+          forced: opts.force,
+          added: 0,
+          archived: 0,
+          skipped: true,
+          skipReason: "debounced",
+          errors: [],
+          newEntries: [],
+        });
+      } catch { /* silent */ }
+      return skipResult;
     }
   } catch (e) {
     result.errors.push({ stage: "debounce-check", error: String(e) });
@@ -104,7 +129,21 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
   } catch (e) {
     result.errors.push({ stage: "open-db", error: String(e) });
     emit(opts.bus, "skipped", { userFacingValue: "没有 knowledge.db，跳过" });
-    return { ...result, skipped: true, skipReason: "db-missing" };
+    const skipResult: RefreshResult = { ...result, skipped: true, skipReason: "db-missing" };
+    try {
+      const { appendWikiHarvest } = await import("./wiki-harvest-writer.js");
+      appendWikiHarvest(opts.cwd, {
+        trigger: opts.trigger ?? "manual",
+        forced: opts.force,
+        added: 0,
+        archived: 0,
+        skipped: true,
+        skipReason: "db-missing",
+        errors: result.errors,
+        newEntries: [],
+      });
+    } catch { /* silent */ }
+    return skipResult;
   }
 
   // 3. pipeline.run()
@@ -120,7 +159,9 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
       const llm = new ClaudeCodeLLMClient();
       const embedder = new XenovaEmbedder();
       const pipeline = new WikiPipeline(db, llm, embedder);
-      const report = await pipeline.run({});
+      const report = await pipeline.run({
+        manualStackOverride: cfg.manualStack.length > 0 ? cfg.manualStack : undefined,
+      });
       result.added = report.added;
       for (const e of report.errors) {
         result.errors.push({ stage: `pipeline:${e.source}`, error: e.error });
@@ -167,6 +208,46 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
       target: { count: result.archived },
       userFacingValue: `归档 ${result.archived} 条过时 wiki`,
     });
+  }
+
+  // 6. append harvest log so user can see what came in even if refresh ran detached
+  try {
+    const newEntries: Array<{ title: string; sourceType: string; tldr: string }> = [];
+    if (result.added > 0 && db!) {
+      const rows = db!
+        .prepare(
+          `SELECT k.trigger AS title, wm.source_type AS source_type, wm.tldr AS tldr
+           FROM knowledge k
+           JOIN wiki_meta wm ON k.id = wm.knowledge_id
+           WHERE k.type = 'wiki' AND k.status = 'active' AND k.created_at >= ?
+           ORDER BY k.created_at DESC
+           LIMIT 50`,
+        )
+        .all(startedAt.toISOString()) as Array<{
+          title: string;
+          source_type: string;
+          tldr: string;
+        }>;
+      for (const r of rows) {
+        newEntries.push({
+          title: r.title ?? "(untitled)",
+          sourceType: r.source_type ?? "unknown",
+          tldr: r.tldr ?? "",
+        });
+      }
+    }
+    const { appendWikiHarvest } = await import("./wiki-harvest-writer.js");
+    appendWikiHarvest(opts.cwd, {
+      trigger: opts.trigger ?? "manual",
+      forced: opts.force,
+      added: result.added,
+      archived: result.archived,
+      skipped: false,
+      errors: result.errors,
+      newEntries,
+    });
+  } catch (e) {
+    result.errors.push({ stage: "harvest-write", error: String(e) });
   }
 
   return result;

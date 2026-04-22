@@ -41,17 +41,20 @@ function parseSince(s: string | undefined): Date | undefined {
 // wiki:pull
 export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline } = await import("@teamagent/adapters");
+  const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline, loadWikiConfig } = await import("@teamagent/adapters");
 
   const db = openDb(resolveDbPath(opts));
   // ClaudeCodeLLMClient defaults to 120s and respects TEAMAGENT_LLM_TIMEOUT_MS.
   const llm = new ClaudeCodeLLMClient();
   const embedder = new XenovaEmbedder();
   const pipeline = new WikiPipeline(db, llm, embedder);
+  const cfg = loadWikiConfig(process.cwd());
+  const startedAt = new Date();
 
   const report = await pipeline.run({
     since: parseSince(opts.since),
     dryRun: opts.dryRun,
+    manualStackOverride: cfg.manualStack.length > 0 ? cfg.manualStack : undefined,
   });
 
   if (opts.dryRun) {
@@ -63,6 +66,44 @@ export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
     process.stdout.write(
       `wiki:pull complete — added: ${report.added}, skipped: ${report.skipped}, rejected: ${report.rejected}\n`
     );
+
+    // Append to .teamagent/last-wiki-pull.md so user can see what came in.
+    try {
+      const newEntries: Array<{ title: string; sourceType: string; tldr: string }> = [];
+      if (report.added > 0) {
+        const rows = db
+          .prepare(
+            `SELECT k.trigger AS title, wm.source_type AS source_type, wm.tldr AS tldr
+             FROM knowledge k
+             JOIN wiki_meta wm ON k.id = wm.knowledge_id
+             WHERE k.type = 'wiki' AND k.status = 'active' AND k.created_at >= ?
+             ORDER BY k.created_at DESC
+             LIMIT 100`,
+          )
+          .all(startedAt.toISOString()) as Array<{
+            title: string;
+            source_type: string;
+            tldr: string;
+          }>;
+        for (const r of rows) {
+          newEntries.push({
+            title: r.title ?? "(untitled)",
+            sourceType: r.source_type ?? "unknown",
+            tldr: r.tldr ?? "",
+          });
+        }
+      }
+      const { appendWikiHarvest } = await import("../wiki-harvest-writer.js");
+      appendWikiHarvest(process.cwd(), {
+        trigger: "manual",
+        forced: false,
+        added: report.added,
+        archived: 0,
+        skipped: false,
+        errors: report.errors.map((e) => ({ stage: `pipeline:${e.source}`, error: e.error })),
+        newEntries,
+      });
+    } catch { /* silent — harvest log is best-effort */ }
   }
 
   if (report.errors.length > 0) {

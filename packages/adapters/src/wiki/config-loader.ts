@@ -4,11 +4,14 @@ import { join } from "node:path";
 export interface WikiConfig {
   autoRefresh: { enabled: boolean; debounceHours: number };
   sweep: { enabled: boolean; zeroHitMinAgeDays: number; perSourceKeep: number };
+  /** Extra stack keywords merged into detected package list before stack-relevance filter. */
+  manualStack: string[];
 }
 
 export const DEFAULT_WIKI_CONFIG: WikiConfig = {
   autoRefresh: { enabled: true, debounceHours: 24 },
   sweep: { enabled: true, zeroHitMinAgeDays: 60, perSourceKeep: 3 },
+  manualStack: [],
 };
 
 function num(v: unknown, fallback: number): number {
@@ -26,10 +29,14 @@ export function loadWikiConfig(cwd: string): WikiConfig {
       wiki?: {
         autoRefresh?: Record<string, unknown>;
         sweep?: Record<string, unknown>;
+        manualStack?: unknown;
       };
     };
     const ar = obj.wiki?.autoRefresh ?? {};
     const sw = obj.wiki?.sweep ?? {};
+    const manualStack = Array.isArray(obj.wiki?.manualStack)
+      ? (obj.wiki!.manualStack as unknown[]).filter((x): x is string => typeof x === "string")
+      : DEFAULT_WIKI_CONFIG.manualStack;
     return {
       autoRefresh: {
         enabled: bool(ar.enabled, DEFAULT_WIKI_CONFIG.autoRefresh.enabled),
@@ -40,6 +47,7 @@ export function loadWikiConfig(cwd: string): WikiConfig {
         zeroHitMinAgeDays: num(sw.zeroHitMinAgeDays, DEFAULT_WIKI_CONFIG.sweep.zeroHitMinAgeDays),
         perSourceKeep: num(sw.perSourceKeep, DEFAULT_WIKI_CONFIG.sweep.perSourceKeep),
       },
+      manualStack,
     };
   } catch {
     return DEFAULT_WIKI_CONFIG;
