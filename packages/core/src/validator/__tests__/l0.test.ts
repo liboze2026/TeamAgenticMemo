@@ -218,6 +218,55 @@ describe("validateLevel0 — check 5: scope.paths", () => {
   });
 });
 
+describe("validateLevel0 — check 6: type/wrong_pattern alignment (M3)", () => {
+  it("fails when type=practice has non-empty wrong_pattern", () => {
+    const r = validateLevel0(
+      baseInput({
+        entry: {
+          ...baseAvoidance,
+          type: "practice",
+          wrong_pattern: "等通知",
+        },
+      }),
+    );
+    expect(r.failed_checks).toContain("practice_must_not_have_wrong_pattern");
+  });
+
+  it("fails when type=avoidance has empty wrong_pattern", () => {
+    const r = validateLevel0(
+      baseInput({
+        entry: {
+          ...baseAvoidance,
+          type: "avoidance",
+          wrong_pattern: "",
+        },
+      }),
+    );
+    expect(r.failed_checks).toContain("avoidance_must_have_wrong_pattern");
+  });
+
+  it("passes when avoidance + wrong_pattern non-empty", () => {
+    const r = validateLevel0(baseInput());
+    expect(r.failed_checks).not.toContain("practice_must_not_have_wrong_pattern");
+    expect(r.failed_checks).not.toContain("avoidance_must_have_wrong_pattern");
+  });
+
+  it("passes when practice + wrong_pattern empty", () => {
+    const r = validateLevel0(
+      baseInput({
+        entry: {
+          ...baseAvoidance,
+          type: "practice",
+          wrong_pattern: "",
+          scope: { level: "team" },
+        },
+      }),
+    );
+    expect(r.failed_checks).not.toContain("practice_must_not_have_wrong_pattern");
+    expect(r.failed_checks).not.toContain("avoidance_must_have_wrong_pattern");
+  });
+});
+
 describe("validateLevel0 — combined & purity", () => {
   it("accumulates multiple failures", () => {
     const r = validateLevel0(

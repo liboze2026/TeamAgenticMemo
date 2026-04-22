@@ -62,6 +62,19 @@ export function validateLevel0(input: ValidateL0Input): ValidationL0Result {
     }
   }
 
+  // 6. M3 type/wrong_pattern 对齐约束：
+  //    matcher 解耦 type 后 (keyword-matcher.ts M3 洞1)，wrong_pattern 是真正的匹配
+  //    开关。为防止 extractor 再产 "type=practice + wrong_pattern=X" 这种歧义组合，
+  //    两边必须对齐：
+  //      practice → 不描述可字面匹配的反模式，wrong_pattern 必须为空
+  //      avoidance → 必须给出可匹配的 wrong_pattern，否则是空规则
+  if (entry.type === "practice" && entry.wrong_pattern) {
+    failed.push("practice_must_not_have_wrong_pattern");
+  }
+  if (entry.type === "avoidance" && !entry.wrong_pattern) {
+    failed.push("avoidance_must_have_wrong_pattern");
+  }
+
   return {
     ok: failed.length === 0,
     failed_checks: failed,
