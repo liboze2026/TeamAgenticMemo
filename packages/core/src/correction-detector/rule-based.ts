@@ -55,12 +55,17 @@ export const ruleBasedCorrectionDetector: CorrectionDetector = {
         out.push(buildMoment(turn, prevTurn, "explicit_denial", denial.weight));
       }
 
-      // Signal B: 上一 turn 多次工具失败 + 本 turn 用户介入（任意 user 消息都算介入）
-      if (prevTurn && hasMultipleFailures(prevTurn) && turn.userMessage.trim()) {
-        // 如果已经记为 denial，就不再加 multi_failure（同一时刻多信号取最高权重）
+      // Signal B: 上一 turn 有工具失败 —— 无论用户是否介入都触发。
+      // 权重根据用户是否说话分档:
+      //   - 用户介入 (0.85) → 更可能是真·纠正时刻
+      //   - 用户沉默 (0.70) → 可能是 AI 自己重试中；交给 LLM 二次判断,
+      //     prompt 会在信息不足时返回 null
+      if (prevTurn && hasMultipleFailures(prevTurn)) {
         const already = out.find((m) => m.turnIndex === i);
         if (!already) {
-          out.push(buildMoment(turn, prevTurn, "multi_failure", 0.85));
+          const userSpoke = turn.userMessage.trim().length > 0;
+          const weight = userSpoke ? 0.85 : 0.70;
+          out.push(buildMoment(turn, prevTurn, "multi_failure", weight));
         }
       }
 
@@ -208,5 +213,12 @@ function buildMoment(
 
 function summarizeToolCall(tc: ToolCall): string {
   const keys = Object.keys(tc.input).slice(0, 3);
-  return `${tc.name}(${keys.join(",")})`;
+  const head = `${tc.name}(${keys.join(",")})`;
+  if (tc.succeeded === false) {
+    // 把失败工具的 stderr/result 前 200 字纳入摘要,
+    // 让后续 LLM 看到实际错误内容再判断要不要提规则
+    const err = typeof tc.result === "string" ? tc.result.trim().slice(0, 200) : "";
+    return err ? `${head} ✗ ${err}` : `${head} ✗ FAILED`;
+  }
+  return head;
 }

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   DualLayerStore,
   SqliteKnowledgeStore,
@@ -38,6 +39,10 @@ export interface InitOptions {
   skipImport?: boolean;
   /** 跳过 hook 安装（测试环境下 dist bundle 可能不存在）。 */
   skipHook?: boolean;
+  /** 跳过打包 seed 注入（测试环境隔离 dev 产物；正常安装应保持 false）。 */
+  skipSeed?: boolean;
+  /** 显式指定 seed 文件路径（测试用）。 */
+  seedPath?: string;
   /**
    * Opt-in：装团队标配 plugins（superpowers/caveman/sales/playground）。
    * 默认 false——插件装在用户全局（~/.claude/settings.json），跨所有项目生效，
@@ -67,6 +72,7 @@ export interface InitResult {
   summary: {
     stack: string;
     presetAdded: number;
+    seedAdded: number;
     importedRules: number;
     totalActiveEntries: number;
   };
@@ -127,6 +133,11 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
   const presetStep = doLoadPresets(paths.userGlobalDbPath, dryRun, now);
   steps.push(presetStep.step);
 
+  const seedStep = opts.skipSeed
+    ? { step: { step: "load-seed", status: "skipped" as const, detail: "skipSeed=true" }, addedCount: 0, wouldAddCount: 0 }
+    : doLoadSeed(paths.userGlobalDbPath, dryRun, opts.seedPath);
+  steps.push(seedStep.step);
+
   const importStep = await doImportRules(paths, opts, dryRun, now);
   steps.push(...importStep.steps);
 
@@ -153,7 +164,7 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
 
   let totalActive = 0;
   if (dryRun) {
-    totalActive = presetStep.wouldAddCount + importStep.wouldImport;
+    totalActive = presetStep.wouldAddCount + seedStep.wouldAddCount + importStep.wouldImport;
   } else {
     try {
       fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
@@ -172,6 +183,7 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
   const summary = {
     stack: stackSummary,
     presetAdded: presetStep.addedCount,
+    seedAdded: seedStep.addedCount,
     importedRules: importStep.importedCount,
     totalActiveEntries: totalActive,
   };
@@ -267,6 +279,99 @@ function doLoadPresets(
   } catch (err) {
     return {
       step: failStep("load-preset", String(err).slice(0, 200)),
+      addedCount: 0,
+      wouldAddCount: 0,
+    };
+  }
+}
+
+/**
+ * 寻找打包时随 tarball 一起进来的 seed/rules.jsonl。
+ * - Dev (source, tsx):  .../packages/cli/src/commands/init.ts
+ *                       → .../packages/teamagent/seed/rules.jsonl
+ * - Bundled (npm):      .../node_modules/teamagent/dist/init.js (or bin.js)
+ *                       → .../node_modules/teamagent/dist/seed/rules.jsonl
+ */
+function resolveSeedPath(): string | undefined {
+  const here = fileURLToPath(import.meta.url);
+  let dir = path.dirname(here);
+  for (let i = 0; i < 8; i++) {
+    // bundled: <root>/dist/bin.js → <root>/dist/seed/rules.jsonl
+    const bundled = path.join(dir, "dist", "seed", "rules.jsonl");
+    if (fs.existsSync(bundled)) return bundled;
+    // dev: <root>/packages/teamagent/seed/rules.jsonl — walk up and try
+    const dev = path.join(dir, "packages", "teamagent", "seed", "rules.jsonl");
+    if (fs.existsSync(dev)) return dev;
+    // inside packages/cli/... path — climb to repo root
+    const siblingSeed = path.join(dir, "..", "teamagent", "seed", "rules.jsonl");
+    if (fs.existsSync(siblingSeed)) return siblingSeed;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return undefined;
+}
+
+function doLoadSeed(
+  userGlobalDbPath: string,
+  dryRun: boolean,
+  explicitSeedPath?: string,
+): { step: InitStepResult; addedCount: number; wouldAddCount: number } {
+  const seedPath = explicitSeedPath ?? resolveSeedPath();
+  if (!seedPath) {
+    return {
+      step: okStep("load-seed", "未找到 seed/rules.jsonl（开发安装或 tarball 缺失），跳过"),
+      addedCount: 0,
+      wouldAddCount: 0,
+    };
+  }
+  let entries: KnowledgeEntry[];
+  try {
+    const text = fs.readFileSync(seedPath, "utf-8");
+    entries = text
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l) as KnowledgeEntry);
+  } catch (err) {
+    return {
+      step: failStep("load-seed", `读取 seed 失败: ${String(err).slice(0, 150)}`),
+      addedCount: 0,
+      wouldAddCount: 0,
+    };
+  }
+
+  if (dryRun) {
+    return {
+      step: okStep("load-seed", `(dry-run) 会注入 ${entries.length} 条打包规则`),
+      addedCount: 0,
+      wouldAddCount: entries.length,
+    };
+  }
+  try {
+    fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
+    const store = new SqliteKnowledgeStore(openDb(userGlobalDbPath));
+    let added = 0;
+    for (const e of entries) {
+      if (store.getById(e.id)) continue;
+      try {
+        store.add(e);
+        added++;
+      } catch {
+        // schema 异常单条跳过，不阻断整批
+      }
+    }
+    store.close();
+    return {
+      step: okStep(
+        "load-seed",
+        `注入打包规则 ${added} 条（总 ${entries.length} 条，${entries.length - added} 条已存在）`,
+      ),
+      addedCount: added,
+      wouldAddCount: entries.length,
+    };
+  } catch (err) {
+    return {
+      step: failStep("load-seed", String(err).slice(0, 200)),
       addedCount: 0,
       wouldAddCount: 0,
     };
@@ -519,7 +624,7 @@ function failStep(step: string, detail: string): InitStepResult {
   return { step, status: "failed", detail };
 }
 function emptySummary() {
-  return { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 };
+  return { stack: "", presetAdded: 0, seedAdded: 0, importedRules: 0, totalActiveEntries: 0 };
 }
 function finalize(
   ok: boolean,
@@ -553,7 +658,7 @@ export function renderInitResult(result: InitResult): string {
   // Group steps for display
   const stepGroups: Array<{ icon: string; label: string; stepKeys: string[] }> = [
     { icon: "🔍", label: "检测项目环境", stepKeys: ["detect-stack"] },
-    { icon: "📦", label: "初始化知识库", stepKeys: ["pre-check", "create-dirs", "load-preset", "scan-rules", "structure-rules"] },
+    { icon: "📦", label: "初始化知识库", stepKeys: ["pre-check", "create-dirs", "load-preset", "load-seed", "scan-rules", "structure-rules"] },
     { icon: "🔗", label: "注册 Hook", stepKeys: ["install-hook"] },
     { icon: "🔌", label: "安装团队标配插件", stepKeys: ["install-plugins"] },
     { icon: "📄", label: "编译 CLAUDE.md", stepKeys: ["compile-claude-md"] },
@@ -606,6 +711,7 @@ function stepLabel(step: string): string {
     "detect-stack": "技术栈",
     "create-dirs": "目录创建",
     "load-preset": "预置规则",
+    "load-seed": "打包规则",
     "scan-rules": "扫描规则",
     "structure-rules": "导入规则",
     "install-hook": "Hook 注册",

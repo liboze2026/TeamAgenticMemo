@@ -51,9 +51,11 @@ async function main(): Promise<void> {
     const store = new DualLayerStore({ projectDbPath, userGlobalDbPath: globalDbPath });
     const eventLog = new SqliteEventLog(openDb(eventsDbPath));
 
+    let lastRuleCount = 0;
     const matcher = {
       match: async ({ tool_name, tool_input }: { tool_name: string; tool_input: unknown }) => {
         const rules = store.findActive();
+        lastRuleCount = rules.length;
         const result = await matchRulesAsync(
           { ...(typeof tool_input === "object" && tool_input !== null ? tool_input : {}), tool_name },
           rules,
@@ -63,7 +65,15 @@ async function main(): Promise<void> {
       },
     };
 
-    const handler = createPreToolUseHandler({ matcher, eventLog });
+    const rawVis = (process.env.TEAMAGENT_VISIBILITY ?? "verbose").toLowerCase();
+    const visibility: "silent" | "smart" | "verbose" =
+      rawVis === "silent" || rawVis === "smart" ? rawVis : "verbose";
+    const handler = createPreToolUseHandler({
+      matcher,
+      eventLog,
+      visibility,
+      get ruleCount() { return lastRuleCount; },
+    });
     const result = await handler(input);
 
     store.close();

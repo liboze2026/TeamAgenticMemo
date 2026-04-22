@@ -8,6 +8,7 @@ import {
 import { executeStats } from "./commands/stats.js";
 import { executeDemoHook, parseDemoHookArgs } from "./commands/demo-hook.js";
 import { installHook, uninstallHook } from "./commands/install-hook.js";
+import { installUserHook, uninstallUserHook } from "./commands/install-user-hook.js";
 import { executeAnalyze, parseAnalyzeArgs } from "./commands/analyze.js";
 import { executeReview, parseReviewArgs } from "./commands/review.js";
 import {
@@ -145,6 +146,31 @@ async function main(): Promise<void> {
         process.stdout.write(`✅ Hook 已移除: ${r.settingsPath}\n`);
       } else {
         process.stdout.write(`未找到 TeamAgent hook 注册。无需移除。\n`);
+      }
+      return;
+    }
+    case "install-user-hook": {
+      const r = installUserHook();
+      if (r.alreadyInstalled) {
+        process.stdout.write(
+          `✓ 用户级 SessionStart hook 已安装 (无变化): ${r.settingsPath}\n`,
+        );
+      } else {
+        process.stdout.write(
+          `✅ 用户级 SessionStart hook 已注册: ${r.settingsPath}\n` +
+            (r.backupPath ? `   原配置已备份: ${r.backupPath}\n` : "") +
+            `   入口: ${r.hookEntry}\n` +
+            `   打开任何新项目时将自动检测并 init\n`,
+        );
+      }
+      return;
+    }
+    case "uninstall-user-hook": {
+      const r = uninstallUserHook();
+      if (r.removed) {
+        process.stdout.write(`✅ 用户级 SessionStart hook 已移除: ${r.settingsPath}\n`);
+      } else {
+        process.stdout.write(`未找到用户级 SessionStart hook，无需移除\n`);
       }
       return;
     }
@@ -384,6 +410,9 @@ async function main(): Promise<void> {
           "                                   离线模拟 PreToolUse hook (例: teamagent demo hook Bash 'command=npm install moment')",
           "  teamagent install-hook           把 PreToolUse hook 注册到当前项目 .claude/settings.local.json",
           "  teamagent uninstall-hook         移除 PreToolUse hook 注册",
+          "  teamagent install-user-hook      把 SessionStart hook 注册到 ~/.claude/settings.json",
+          "                                   (打开任何新项目时自动 init, 一次装永久生效)",
+          "  teamagent uninstall-user-hook    移除用户级 SessionStart hook 注册",
           "  teamagent analyze [--session=<id|path>] [--verbose] [--commit]",
           "                                   分析 Claude Code 会话日志，识别纠正时刻+成功信号",
           "                                   --commit: 通过 LLM 提取成知识条目并写入知识库 + 重编译 CLAUDE.md",

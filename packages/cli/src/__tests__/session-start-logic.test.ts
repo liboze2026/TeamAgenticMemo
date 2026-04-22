@@ -14,9 +14,26 @@ describe("decideAction", () => {
     rmSync(cwd, { recursive: true, force: true });
   });
 
-  it("无 .teamagent/knowledge.db → skip-no-db", () => {
+  it("无 .teamagent/knowledge.db + 非项目目录 → skip-not-a-project", () => {
     const action = decideAction(cwd, new Date(), 24);
-    expect(action).toBe("skip-no-db");
+    expect(action).toBe("skip-not-a-project");
+  });
+
+  it("无 db + 有 package.json → auto-init", () => {
+    writeFileSync(join(cwd, "package.json"), "{}");
+    expect(decideAction(cwd, new Date(), 24)).toBe("auto-init");
+  });
+
+  it("无 db + 有 .git → auto-init", () => {
+    mkdirSync(join(cwd, ".git"), { recursive: true });
+    expect(decideAction(cwd, new Date(), 24)).toBe("auto-init");
+  });
+
+  it("无 db + .teamagent/auto-init.disabled 存在 → skip-auto-init-disabled", () => {
+    writeFileSync(join(cwd, "package.json"), "{}");
+    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
+    writeFileSync(join(cwd, ".teamagent", "auto-init.disabled"), "");
+    expect(decideAction(cwd, new Date(), 24)).toBe("skip-auto-init-disabled");
   });
 
   it("有 db 无 marker → spawn（首次）", () => {

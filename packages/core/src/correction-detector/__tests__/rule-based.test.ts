@@ -56,6 +56,42 @@ describe("ruleBasedCorrectionDetector", () => {
       expect(hit).toBeDefined();
       expect(hit!.weight).toBeGreaterThanOrEqual(0.8);
     });
+
+    it("triggers even when user stays silent after failed tool (weight 0.70)", () => {
+      const session = {
+        sessionId: "s-silent",
+        turns: [
+          {
+            turnIndex: 0,
+            userMessage: "install moment",
+            assistantText: "running install",
+            toolCalls: [
+              {
+                id: "t1", name: "Bash",
+                input: { command: "npm install moment" },
+                result: "npm ERR! 404 Not Found", succeeded: false,
+              },
+            ],
+            timestamp: "2026-04-14T10:00:00Z",
+          },
+          {
+            // user silent — no userMessage, just auto-continue
+            turnIndex: 1,
+            userMessage: "",
+            assistantText: "retrying",
+            toolCalls: [],
+            timestamp: "2026-04-14T10:00:10Z",
+          },
+        ],
+      };
+      const corrections = ruleBasedCorrectionDetector.detect(session as any);
+      const hit = corrections.find((c) => c.signal === "multi_failure");
+      expect(hit).toBeDefined();
+      expect(hit!.weight).toBeCloseTo(0.70);
+      // context includes failed tool stderr preview
+      expect(hit!.previousToolCalls[0]).toMatch(/✗/);
+      expect(hit!.previousToolCalls[0]).toContain("npm ERR!");
+    });
   });
 
   describe("suggestion_override signal", () => {

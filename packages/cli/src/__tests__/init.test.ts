@@ -48,6 +48,7 @@ describe("executeInit", () => {
     cwd: tmp.cwd,
     homeDir: tmp.home,
     skipHook: true,
+    skipSeed: true,
     idGen: () => `pers-test-${++ctr}`,
     now: () => new Date("2026-04-14T12:00:00Z"),
   });
@@ -205,6 +206,64 @@ describe("executeInit", () => {
     expect(stackStep.detail).toContain("pnpm");
   });
 
+  it("load-seed: injects bundled rules when seedPath is provided", async () => {
+    const seedFile = path.join(tmp.root, "rules.jsonl");
+    const seedEntry = {
+      id: "seed-demo-1",
+      scope: { level: "global" },
+      category: "E",
+      tags: ["seed"],
+      type: "practice",
+      nature: "subjective",
+      trigger: "test seed",
+      wrong_pattern: "",
+      correct_pattern: "use seed value",
+      reasoning: "bundled",
+      confidence: 0.9,
+      enforcement: "suggest",
+      status: "active",
+      hit_count: 0,
+      success_count: 0,
+      override_count: 0,
+      evidence: { success_sessions: 0, success_users: 0, correction_sessions: 0 },
+      created_at: "2026-04-14T12:00:00Z",
+      last_hit_at: "",
+      last_validated_at: "2026-04-14T12:00:00Z",
+      source: "preset",
+      conflict_with: [],
+      current_tier: "experimental",
+      max_tier_ever: "experimental",
+      tier_entered_at: "",
+      demerit: 0,
+      demerit_last_updated: "",
+      resurrect_count: 0,
+    };
+    nodeFs.writeFileSync(seedFile, JSON.stringify(seedEntry) + "\n");
+
+    const r = await executeInit({
+      ...commonOpts(),
+      skipSeed: false,
+      seedPath: seedFile,
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.summary.seedAdded).toBe(1);
+    const globalStore = new SqliteKnowledgeStore(openDb(tmp.userGlobalDbPath));
+    expect(globalStore.getById("seed-demo-1")).toBeDefined();
+    expect(globalStore.count()).toBe(5); // 4 presets + 1 seed
+    globalStore.close();
+
+    // idempotent second run
+    const r2 = await executeInit({
+      ...commonOpts(),
+      skipSeed: false,
+      seedPath: seedFile,
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+    expect(r2.summary.seedAdded).toBe(0);
+  });
+
   it("writes install-log on successful run", async () => {
     await executeInit({
       ...commonOpts(),
@@ -311,6 +370,7 @@ describe("renderInitResult", () => {
       summary: {
         stack: "lang=typescript",
         presetAdded: 4,
+        seedAdded: 0,
         importedRules: 2,
         totalActiveEntries: 6,
       },
@@ -326,7 +386,7 @@ describe("renderInitResult", () => {
       ok: false,
       dryRun: false,
       steps: [{ step: "pre-check", status: "failed", detail: "bad permissions" }],
-      summary: { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 },
+      summary: { stack: "", presetAdded: 0, seedAdded: 0, importedRules: 0, totalActiveEntries: 0 },
     });
     expect(out).toContain("❌ 安装未完成");
     expect(out).toContain("前置检查");
@@ -340,6 +400,7 @@ describe("renderInitResult", () => {
       summary: {
         stack: "lang=typescript",
         presetAdded: 4,
+        seedAdded: 0,
         importedRules: 0,
         totalActiveEntries: 4,
       },
@@ -358,6 +419,7 @@ describe("renderInitResult", () => {
       summary: {
         stack: "lang=typescript",
         presetAdded: 4,
+        seedAdded: 0,
         importedRules: 0,
         totalActiveEntries: 4,
       },
@@ -380,7 +442,7 @@ describe("renderInitResult — new UX", () => {
         { step: "install-hook", status: "ok" as const, detail: "已写入" },
         { step: "compile-claude-md", status: "ok" as const, detail: "写入 3 条" },
       ],
-      summary: { stack: "typescript", presetAdded: 12, importedRules: 5, totalActiveEntries: 17 },
+      summary: { stack: "typescript", presetAdded: 12, seedAdded: 0, importedRules: 5, totalActiveEntries: 17 },
     };
     const out = renderInitResult(result);
     expect(out).toContain("✅ TeamAgent 安装成功");
@@ -395,7 +457,7 @@ describe("renderInitResult — new UX", () => {
       steps: [
         { step: "pre-check", status: "failed" as const, detail: "CLAUDE.md 文件无写入权限，请运行: chmod 644 CLAUDE.md" },
       ],
-      summary: { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 },
+      summary: { stack: "", presetAdded: 0, seedAdded: 0, importedRules: 0, totalActiveEntries: 0 },
     };
     const out = renderInitResult(result);
     expect(out).toContain("❌ 安装未完成");
@@ -408,7 +470,7 @@ describe("renderInitResult — new UX", () => {
       ok: true,
       dryRun: true,
       steps: [],
-      summary: { stack: "", presetAdded: 0, importedRules: 0, totalActiveEntries: 0 },
+      summary: { stack: "", presetAdded: 0, seedAdded: 0, importedRules: 0, totalActiveEntries: 0 },
     };
     const out = renderInitResult(result);
     expect(out).toContain("预览模式");
