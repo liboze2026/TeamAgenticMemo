@@ -128,3 +128,13 @@ export {
   type ArchiveDecision,
 } from "./wiki/index.js";
 export * from "./wiki-injection/index.js";
+export {
+  scanNarrative,
+  formatPendingRecord,
+  mergePending,
+  selectTopForInjection,
+  formatInjectionText,
+  type NarrativeHit,
+  type PendingWarning,
+  type PendingContext,
+} from "./narrative-scanner/index.js";
