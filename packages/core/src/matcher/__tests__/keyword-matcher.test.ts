@@ -402,3 +402,75 @@ describe("matchRules — performance", () => {
     expect(duration).toBeLessThan(5);
   });
 });
+
+describe("matchRules — channel gate (M4-A)", () => {
+  it("tool-action channel participates in matching", () => {
+    const rules = [
+      makeRule({ id: "t1", wrong_pattern: "moment", channel: "tool-action" }),
+    ];
+    const result = matchRules(
+      { toolName: "Bash", input: { command: "npm install moment" } },
+      rules,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("t1");
+  });
+
+  it("ai-narrative channel excluded from PreToolUse matcher", () => {
+    const rules = [
+      makeRule({ id: "n1", wrong_pattern: "narrative-phrase", channel: "ai-narrative" }),
+    ];
+    const result = matchRules(
+      { toolName: "Bash", input: { command: "echo narrative-phrase here" } },
+      rules,
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it("user-input channel excluded from PreToolUse matcher", () => {
+    const rules = [
+      makeRule({ id: "u1", wrong_pattern: "input-tag", channel: "user-input" }),
+    ];
+    const result = matchRules(
+      { toolName: "Bash", input: { command: "echo input-tag here" } },
+      rules,
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it("passive-knowledge channel excluded from PreToolUse matcher", () => {
+    const rules = [
+      makeRule({ id: "p1", wrong_pattern: "moment", channel: "passive-knowledge" }),
+    ];
+    const result = matchRules(
+      { toolName: "Bash", input: { command: "npm install moment" } },
+      rules,
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it("legacy rule without channel field defaults to tool-action (backward compat)", () => {
+    const rule = makeRule({ id: "legacy", wrong_pattern: "moment" });
+    delete (rule as any).channel;
+    const result = matchRules(
+      { toolName: "Bash", input: { command: "npm install moment" } },
+      [rule],
+    );
+    expect(result).toHaveLength(1);
+  });
+
+  it("mixed rule set: only tool-action survives", () => {
+    const rules = [
+      makeRule({ id: "t", wrong_pattern: "axios", channel: "tool-action" }),
+      makeRule({ id: "n", wrong_pattern: "axios", channel: "ai-narrative" }),
+      makeRule({ id: "u", wrong_pattern: "axios", channel: "user-input" }),
+      makeRule({ id: "p", wrong_pattern: "axios", channel: "passive-knowledge" }),
+    ];
+    const result = matchRules(
+      { toolName: "Bash", input: { command: "npm install axios" } },
+      rules,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("t");
+  });
+});

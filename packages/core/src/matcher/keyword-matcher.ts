@@ -1,4 +1,5 @@
 import type { KnowledgeEntry } from "@teamagent/types";
+import { normalizeChannel } from "@teamagent/types";
 
 export interface ToolCallContext {
   toolName: string;
@@ -40,6 +41,13 @@ export function matchRules(
     // 规则扫进死角 (其中 11 条 enforcement=block)，分数永不动。
     // 改为只判 wrong_pattern 有无 — type 仅用于 CLAUDE.md 渲染语义。
     if (!rule.wrong_pattern) continue;
+
+    // M4-A: PreToolUse matcher only processes tool-action channel.
+    // ai-narrative / user-input / passive-knowledge rules physically cannot
+    // fire here — their triggers live in AI output, user prompt, or are
+    // abstract principles. Undefined channel (legacy DB rows) treated as
+    // tool-action for backward compatibility.
+    if (normalizeChannel((rule as any).channel) !== "tool-action") continue;
 
     if (!checkScope(rule, filePath)) continue;
 
