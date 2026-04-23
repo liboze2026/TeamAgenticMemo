@@ -50,8 +50,12 @@ export async function runCalibrationPipelineV2(
   const now = deps.now();
 
   // M2.5: ai.override.complied events → synthetic success observations
+  // M4-A: ai.narrative.complied events → same treatment (AI was warned, didn't repeat)
   const syntheticObs: Observation[] = deps.events
-    .filter((e) => e.kind === "ai.override.complied" && e.knowledge_id)
+    .filter((e) =>
+      (e.kind === "ai.override.complied" || e.kind === "ai.narrative.complied") &&
+      e.knowledge_id,
+    )
     .map((e) => ({
       id: `synth-complied-${e.id}`,
       knowledge_id: e.knowledge_id!,

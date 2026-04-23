@@ -17,6 +17,8 @@ const DEMERIT_KIND_TO_SOURCE: Record<string, DemeritEvent["source"]> = {
   "ai.override.ignored": "ai_override_ignored",
   // M3: block 被绕路 → 复用 ai_override_ignored 权重（demerit base 一致）
   "ai.override.blocked_circumvented": "ai_override_ignored",
+  // M4-A: AI 被注入警告后下一轮又说了同类话术 → 教育失败，复用 ignored 权重
+  "ai.narrative.recurred": "ai_override_ignored",
   "calibrator.user_reject": "user_reject",
   "validator.failure": "validator_fail",
 };
