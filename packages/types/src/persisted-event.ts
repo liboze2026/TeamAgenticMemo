@@ -31,7 +31,13 @@ export interface PersistedEvent {
     | "scenario.run"
     | "error.candidate.added"    // CandidateQueue 入队（payload: { count: number }）
     | "error.candidate.approved" // 用户批准（payload: { knowledge_id: string }）
-    | "error.candidate.rejected"; // 用户拒绝（payload: { candidate_id: string }）
+    | "error.candidate.rejected" // 用户拒绝（payload: { candidate_id: string }）
+    // M4-A: AI output-layer feedback loop
+    | "ai.output.bad_pattern"       // Stop scanner matched ai-narrative rule on assistant text
+    | "ai.narrative.injected"       // UserPromptSubmit injected pending warning into next turn
+    | "ai.narrative.recurred"       // Same rule hit again after injection (education failed)
+    | "ai.narrative.complied"       // Previously-injected rule no longer hit (education succeeded)
+    | "ai.user_input.flagged";      // user-input channel rule matched the incoming user prompt
   /** Claude Code 会话 id（从 hook input 拿到） */
   session_id?: string;
   /** 涉及的知识条目 id（如 hook 命中某条规则） */
@@ -51,6 +57,12 @@ export interface PersistedEvent {
   };
   /** 当前工作目录 */
   cwd?: string;
+  /** M4-A: 叙事扫描命中的片段（ai.output.bad_pattern）*/
+  matched_snippet?: string;
+  /** M4-A: 本轮注入的规则 id 列表（ai.narrative.injected）*/
+  knowledge_ids?: string[];
+  /** M4-A: AI 回合索引，session 内递增 */
+  turn_index?: number;
   /** Calibrator 调整前的 confidence（仅 calibrator.adjusted 用） */
   confidence_before?: number;
   /** Calibrator 调整后的 confidence（仅 calibrator.adjusted 用） */

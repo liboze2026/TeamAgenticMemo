@@ -15,12 +15,17 @@
  * NEVER exits non-zero — must not block session close.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync, existsSync, unlinkSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ClaudeCodeLLMClient } from "@teamagent/adapters";
+import {
+  ClaudeCodeLLMClient,
+  DualLayerStore,
+  SqliteEventLog,
+  openDb,
+} from "@teamagent/adapters";
 import type { LLMClient } from "@teamagent/ports";
-import { momentSignature } from "@teamagent/core";
+import { momentSignature, parseSessionFile } from "@teamagent/core";
 import { executeAnalyze, type AnalyzeMeta } from "./commands/analyze.js";
 import { executeCalibrate } from "./commands/calibrate.js";
 import { executeCompile } from "./commands/compile.js";
@@ -29,6 +34,7 @@ import { readTeamAgentConfig } from "./commands/config.js";
 import { readCursor, writeCursor, clearCursor, readSeen, writeSeen } from "./scan-cursor.js";
 import { appendHarvest } from "./harvest-writer.js";
 import { makeFallbackLLMClient } from "./llm-with-fallback.js";
+import { runStopNarrativeScan, readLastInjected, lastInjectedFilePath } from "./stop-narrative-scan.js";
 
 export interface StopHookInput {
   session_id: string;
@@ -247,6 +253,58 @@ export async function runStopPipeline(
     } catch (e) {
       logError(cwd, "scan-errors", e);
     }
+  }
+
+  // Step 6 (M4-A): narrative scan on the AI's last assistant turn.
+  // Never fails the pipeline — all errors swallowed.
+  try {
+    const transcriptPath = input.transcript_path;
+    if (transcriptPath && existsSync(transcriptPath)) {
+      const raw = readFileSync(transcriptPath, "utf-8");
+      const parsed = parseSessionFile(raw);
+      const lastTurn = parsed.turns.length > 0
+        ? parsed.turns[parsed.turns.length - 1]
+        : undefined;
+      const aiText = lastTurn?.assistantText ?? "";
+      if (aiText) {
+        const projectDbPath = path.join(cwd, ".teamagent", "knowledge.db");
+        const globalDbPath = path.join(os.homedir(), ".teamagent", "global.db");
+        const eventsDbPath = path.join(os.homedir(), ".teamagent", "events.db");
+        const sessionsDir = path.join(os.homedir(), ".teamagent", "sessions");
+        mkdirSync(path.dirname(projectDbPath), { recursive: true });
+        mkdirSync(path.dirname(globalDbPath), { recursive: true });
+        mkdirSync(path.dirname(eventsDbPath), { recursive: true });
+
+        const store = new DualLayerStore({ projectDbPath, userGlobalDbPath: globalDbPath });
+        const eventLog = new SqliteEventLog(openDb(eventsDbPath));
+        const rules = store.findActive();
+        const lastInjected = readLastInjected(sessionsDir, sessionId);
+
+        try {
+          runStopNarrativeScan({
+            aiText,
+            rules,
+            sessionId,
+            turnIndex: lastTurn!.turnIndex,
+            now: new Date().toISOString(),
+            pendingDir: sessionsDir,
+            emit: (e) => eventLog.append(e),
+            lastInjectedKnowledgeIds: lastInjected,
+          });
+
+          // Once we've classified (recurred/complied) the last-injected batch,
+          // clear the marker so it doesn't re-classify next turn.
+          if (lastInjected.length > 0) {
+            try { unlinkSync(lastInjectedFilePath(sessionsDir, sessionId)); } catch { /* ignore */ }
+          }
+        } finally {
+          store.close();
+          eventLog.close();
+        }
+      }
+    }
+  } catch (e) {
+    logError(cwd, "narrative-scan", e);
   }
 
   } finally {
