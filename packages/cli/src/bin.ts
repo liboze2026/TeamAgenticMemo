@@ -391,6 +391,41 @@ async function main(): Promise<void> {
       if (!result.ok) process.exit(1);
       return;
     }
+    case "reclassify": {
+      const sub = rest[0];
+      const subArgs = rest.slice(1);
+      const { runReclassifyApply, runReclassifyRollback } = await import("./commands/reclassify.js");
+      if (sub === "apply") {
+        const planIdx = subArgs.findIndex((a) => a === "--plan");
+        const planFile = planIdx >= 0 ? subArgs[planIdx + 1] : undefined;
+        if (!planFile) {
+          process.stderr.write("Usage: teamagent reclassify apply --plan <path> [--dry-run] [--min-conf=0.7]\n");
+          process.exit(1);
+        }
+        const dryRun = subArgs.includes("--dry-run");
+        const minConfArg = subArgs.find((a) => a.startsWith("--min-conf="));
+        const minConfidence = minConfArg ? parseFloat(minConfArg.split("=")[1]!) : 0.7;
+        runReclassifyApply({ plan: planFile, dryRun, minConfidence });
+        return;
+      }
+      if (sub === "rollback") {
+        const auditIdx = subArgs.findIndex((a) => a === "--audit");
+        const auditId = auditIdx >= 0 ? subArgs[auditIdx + 1] : undefined;
+        if (!auditId) {
+          process.stderr.write("Usage: teamagent reclassify rollback --audit <audit-id>\n");
+          process.exit(1);
+        }
+        runReclassifyRollback({ auditId });
+        return;
+      }
+      process.stderr.write(
+        "Usage:\n" +
+          "  teamagent reclassify apply --plan <path> [--dry-run] [--min-conf=0.7]\n" +
+          "  teamagent reclassify rollback --audit <audit-id>\n",
+      );
+      process.exit(1);
+      return;
+    }
     case undefined:
     case "--help":
     case "-h":
