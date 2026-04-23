@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { KnowledgeEntry, Scope } from "@teamagent/types";
+import { normalizeChannel } from "@teamagent/types";
 
 /** Flattened row shape coming from SQLite. */
 interface KnowledgeRow {
@@ -39,6 +40,7 @@ interface KnowledgeRow {
   created_at: string;
   last_hit_at: string | null;
   last_validated_at: string | null;
+  channel: string | null;
 }
 
 function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
@@ -80,6 +82,7 @@ function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
     created_at: entry.created_at,
     last_hit_at: entry.last_hit_at || null,
     last_validated_at: entry.last_validated_at || null,
+    channel: normalizeChannel((entry as any).channel),
   };
 }
 
@@ -123,6 +126,7 @@ function deserializeRow(row: KnowledgeRow): KnowledgeEntry {
     last_validated_at: row.last_validated_at ?? "",
     source: row.source as KnowledgeEntry["source"],
     conflict_with: row.conflict_with ? JSON.parse(row.conflict_with) : [],
+    channel: normalizeChannel(row.channel),
   };
 }
 
@@ -134,7 +138,8 @@ INSERT INTO knowledge (
   reasoning, when_expression, confidence, demerit, demerit_last_updated,
   current_tier, max_tier_ever, tier_entered_at, enforcement, status,
   hit_count, success_count, override_count, resurrect_count,
-  evidence, source, conflict_with, created_at, last_hit_at, last_validated_at
+  evidence, source, conflict_with, created_at, last_hit_at, last_validated_at,
+  channel
 ) VALUES (
   @id, @scope_level, @scope_project, @scope_paths, @scope_file_types, @scope_branches,
   @category, @tags, @type, @nature, @trigger, @wrong_pattern, @correct_pattern,
@@ -142,7 +147,8 @@ INSERT INTO knowledge (
   @reasoning, @when_expression, @confidence, @demerit, @demerit_last_updated,
   @current_tier, @max_tier_ever, @tier_entered_at, @enforcement, @status,
   @hit_count, @success_count, @override_count, @resurrect_count,
-  @evidence, @source, @conflict_with, @created_at, @last_hit_at, @last_validated_at
+  @evidence, @source, @conflict_with, @created_at, @last_hit_at, @last_validated_at,
+  @channel
 )`;
 
 const SELECT_BY_ID = "SELECT * FROM knowledge WHERE id = @id";
@@ -258,6 +264,7 @@ export class SqliteKnowledgeStore {
       "evidence = @evidence", "source = @source", "conflict_with = @conflict_with",
       "created_at = @created_at", "last_hit_at = @last_hit_at",
       "last_validated_at = @last_validated_at",
+      "channel = @channel",
     ];
 
     const sql = `UPDATE knowledge SET ${setClauses.join(", ")} WHERE id = @id`;

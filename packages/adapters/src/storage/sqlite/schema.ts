@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS knowledge (
   conflict_with TEXT,
   created_at TEXT NOT NULL,
   last_hit_at TEXT,
-  last_validated_at TEXT
+  last_validated_at TEXT,
+  -- M4-A: 规则通道。tool-action 是向后兼容默认值。
+  channel TEXT NOT NULL DEFAULT 'tool-action'
+    CHECK(channel IN ('tool-action','ai-narrative','user-input','passive-knowledge'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_tier ON knowledge(current_tier);
@@ -152,7 +155,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (1, datetime('now'));
 `;
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 
 /**
@@ -211,6 +214,16 @@ export function openDb(path: string): DatabaseSync {
   if (!versionNow || versionNow.version < 4) {
     try { db.exec("ALTER TABLE wiki_meta ADD COLUMN last_injected_at TEXT"); } catch {}
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (4, datetime('now'))");
+  }
+
+  // Migration: schema_version 4 → 5 (M4-A: add channel column to knowledge)
+  const versionM4 = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
+  if (!versionM4 || versionM4.version < 5) {
+    // node:sqlite ALTER TABLE throws on existing column — swallow and continue.
+    try {
+      db.exec("ALTER TABLE knowledge ADD COLUMN channel TEXT NOT NULL DEFAULT 'tool-action'");
+    } catch { /* column already exists (fresh DB via INIT_SQL, or previous partial migration) */ }
+    db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (5, datetime('now'))");
   }
 
   return db;
