@@ -169,6 +169,7 @@ function completeEntry(
     demerit: 0,
     demerit_last_updated: "",
     resurrect_count: 0,
+    channel: "tool-action",
   };
 }
 

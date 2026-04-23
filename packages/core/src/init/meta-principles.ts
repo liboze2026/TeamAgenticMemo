@@ -95,5 +95,8 @@ function makePreset(args: {
     demerit: 0,
     demerit_last_updated: "",
     resurrect_count: 0,
+    // M4-A: meta principles are abstract guidance (no literal wrong_pattern),
+    // so they live in passive-knowledge channel — CLAUDE.md only, no runtime hook.
+    channel: "passive-knowledge",
   };
 }
