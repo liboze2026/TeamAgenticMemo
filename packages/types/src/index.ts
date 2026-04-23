@@ -3,9 +3,12 @@ export {
   ScopeSchema,
   EvidenceSchema,
   computeEnforcement,
+  RULE_CHANNELS,
+  normalizeChannel,
   type KnowledgeEntry,
   type Scope,
   type Evidence,
+  type RuleChannel,
 } from "./knowledge-entry.js";
 
 export type {

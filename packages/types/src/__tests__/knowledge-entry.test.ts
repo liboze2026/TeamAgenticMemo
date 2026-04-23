@@ -2,8 +2,70 @@ import { describe, it, expect } from "vitest";
 import {
   KnowledgeEntrySchema,
   computeEnforcement,
+  normalizeChannel,
   type KnowledgeEntry,
+  type RuleChannel,
 } from "../knowledge-entry.js";
+
+describe("normalizeChannel (M4-A)", () => {
+  it("returns tool-action for undefined (backward compat)", () => {
+    expect(normalizeChannel(undefined)).toBe("tool-action");
+  });
+  it("returns tool-action for null", () => {
+    expect(normalizeChannel(null)).toBe("tool-action");
+  });
+  it("returns tool-action for empty string", () => {
+    expect(normalizeChannel("")).toBe("tool-action");
+  });
+  it("passes through valid channel strings", () => {
+    expect(normalizeChannel("ai-narrative")).toBe("ai-narrative");
+    expect(normalizeChannel("tool-action")).toBe("tool-action");
+    expect(normalizeChannel("user-input")).toBe("user-input");
+    expect(normalizeChannel("passive-knowledge")).toBe("passive-knowledge");
+  });
+  it("coerces unknown string to tool-action", () => {
+    expect(normalizeChannel("garbage")).toBe("tool-action");
+  });
+  it("coerces non-string values to tool-action", () => {
+    expect(normalizeChannel(123)).toBe("tool-action");
+    expect(normalizeChannel({})).toBe("tool-action");
+    expect(normalizeChannel([])).toBe("tool-action");
+  });
+});
+
+describe("KnowledgeEntrySchema channel field (M4-A)", () => {
+  const baseValid = {
+    id: "r1",
+    scope: { level: "team" as const },
+    category: "E" as const,
+    tags: [],
+    type: "avoidance" as const,
+    nature: "subjective" as const,
+    trigger: "t",
+    correct_pattern: "c",
+    reasoning: "r",
+    confidence: 0.5,
+    enforcement: "passive" as const,
+    created_at: "2026-04-16T00:00:00Z",
+    source: "accumulated" as const,
+  };
+
+  it("defaults channel to tool-action when omitted", () => {
+    const parsed = KnowledgeEntrySchema.parse(baseValid);
+    expect(parsed.channel).toBe("tool-action");
+  });
+
+  it("accepts all four valid channels", () => {
+    for (const ch of ["tool-action", "ai-narrative", "user-input", "passive-knowledge"] as const) {
+      const parsed = KnowledgeEntrySchema.parse({ ...baseValid, channel: ch });
+      expect(parsed.channel).toBe(ch);
+    }
+  });
+
+  it("rejects unknown channel value", () => {
+    expect(() => KnowledgeEntrySchema.parse({ ...baseValid, channel: "bogus" })).toThrow();
+  });
+});
 
 describe("KnowledgeEntrySchema v2 fields", () => {
   const baseValid = {

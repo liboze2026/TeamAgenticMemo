@@ -30,6 +30,26 @@ export const EvidenceSchema = z.object({
 export type Evidence = z.infer<typeof EvidenceSchema>;
 
 /**
+ * 规则通道——决定规则在哪个拦截点生效。
+ * M4-A 新增。tool-action 是向后兼容的默认值（老规则视为 tool-action）。
+ */
+export const RULE_CHANNELS = [
+  "tool-action",      // wrong_pattern 出现在工具调用参数里 → PreToolUse 拦
+  "ai-narrative",     // wrong_pattern 是 AI 输出话术 → Stop 扫描 + 下轮注入
+  "user-input",       // wrong_pattern 是进入 AI 的外部噪声 → UserPromptSubmit 标记
+  "passive-knowledge",// 抽象原则 → 只进 CLAUDE.md 教学，不做实时处理
+] as const;
+
+export type RuleChannel = (typeof RULE_CHANNELS)[number];
+
+export function normalizeChannel(v: unknown): RuleChannel {
+  if (typeof v !== "string") return "tool-action";
+  return (RULE_CHANNELS as readonly string[]).includes(v)
+    ? (v as RuleChannel)
+    : "tool-action";
+}
+
+/**
  * 知识条目——知识库的最小单元。
  *
  * 字段设计对齐 spec v5.2 "知识条目" 章节。
@@ -105,6 +125,9 @@ export const KnowledgeEntrySchema = z.object({
   demerit_last_updated: z.string().default(""),
   /** Number of times rule was revived from dormant (3 = permanent archive) */
   resurrect_count: z.number().int().nonnegative().default(0),
+
+  /** M4-A: 规则通道。决定生效拦截点。缺省=tool-action（向后兼容）。*/
+  channel: z.enum(RULE_CHANNELS).default("tool-action"),
 });
 
 export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
