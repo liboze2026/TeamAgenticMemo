@@ -153,7 +153,9 @@ describe("MarkdownCompiler adapter", () => {
 
     it("TEAMAGENT_CLAUDE_MD_LIMIT env var controls the cap", () => {
       const prev = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+      const prevDiv = process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY;
       process.env.TEAMAGENT_CLAUDE_MD_LIMIT = "4";
+      process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY = "off";
       try {
         const compiler = new MarkdownCompiler(
           mdPath,
@@ -172,6 +174,8 @@ describe("MarkdownCompiler adapter", () => {
       } finally {
         if (prev === undefined) delete process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
         else process.env.TEAMAGENT_CLAUDE_MD_LIMIT = prev;
+        if (prevDiv === undefined) delete process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY;
+        else process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY = prevDiv;
       }
     });
 
@@ -201,7 +205,9 @@ describe("MarkdownCompiler adapter", () => {
 
     it("ignores invalid env var values (non-numeric / ≤0)", () => {
       const prev = process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
+      const prevDiv = process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY;
       process.env.TEAMAGENT_CLAUDE_MD_LIMIT = "not-a-number";
+      process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY = "off";
       try {
         const compiler = new MarkdownCompiler(
           mdPath,
@@ -221,6 +227,8 @@ describe("MarkdownCompiler adapter", () => {
       } finally {
         if (prev === undefined) delete process.env.TEAMAGENT_CLAUDE_MD_LIMIT;
         else process.env.TEAMAGENT_CLAUDE_MD_LIMIT = prev;
+        if (prevDiv === undefined) delete process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY;
+        else process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY = prevDiv;
       }
     });
   });

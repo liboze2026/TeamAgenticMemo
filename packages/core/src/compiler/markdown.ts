@@ -42,6 +42,40 @@ export interface CompileMarkdownOptions {
    * Adapter 注入 js-tiktoken 得到精确值。
    */
   countTokens?: (s: string) => number;
+
+  /**
+   * MMR 多样性阈值 (0.0–1.0)。
+   *
+   * 按 score 降序遍历候选时，对每个候选与已选集做字符 3-gram Jaccard；
+   * 若 max similarity >= threshold，跳过该候选（视为近义重复）。
+   *
+   * - undefined（默认）：不启用，保持旧行为
+   * - 0.5–0.7 推荐：保留核心含义不同的规则，压掉同一话题的多个变体
+   * - 1.0：等价于只跳过完全相同字符串（几乎不起作用，dedup 脚本已处理）
+   */
+  diversityThreshold?: number;
+}
+
+/** 字符 3-gram 集合。纯函数。 */
+function charNgrams(text: string, n = 3): Set<string> {
+  const s = text.replace(/\s+/g, " ").trim().toLowerCase();
+  const out = new Set<string>();
+  if (s.length < n) {
+    if (s.length > 0) out.add(s);
+    return out;
+  }
+  for (let i = 0; i <= s.length - n; i++) out.add(s.slice(i, i + n));
+  return out;
+}
+
+/** Jaccard 相似度（两个集合交/并）。纯函数。 */
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
 }
 
 /**
@@ -92,8 +126,29 @@ export function compileMarkdownBlock(
 
   const lines: string[] = [];
   let truncatedCount = 0;
+  let droppedByDiversity = 0;
+
+  const threshold = options.diversityThreshold;
+  const selectedNgrams: Array<Set<string>> = [];
+  const entryFingerprint = (e: KnowledgeEntry): string =>
+    [e.correct_pattern, e.wrong_pattern, e.reasoning].filter(Boolean).join(" ");
 
   for (const { entry } of sorted) {
+    if (threshold !== undefined) {
+      const fp = charNgrams(entryFingerprint(entry));
+      let maxSim = 0;
+      for (const prev of selectedNgrams) {
+        const sim = jaccard(fp, prev);
+        if (sim > maxSim) maxSim = sim;
+        if (maxSim >= threshold) break;
+      }
+      if (maxSim >= threshold) {
+        droppedByDiversity++;
+        continue;
+      }
+      selectedNgrams.push(fp);
+    }
+
     if (options.tokenBudget !== undefined) {
       const line = formatEntry(entry);
       const lineTokens = countFn(line);
@@ -129,6 +184,9 @@ export function compileMarkdownBlock(
   const parts = [BLOCK_START, header, ...lines];
   if (truncatedCount > 0 && options.tokenBudget !== undefined) {
     parts.push(`> 还有 ${truncatedCount} 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）`);
+  }
+  if (droppedByDiversity > 0) {
+    parts.push(`> 另有 ${droppedByDiversity} 条因与已选条目近义（Jaccard ≥ ${threshold}）被多样性过滤`);
   }
   parts.push(BLOCK_END);
   return parts.join("\n");

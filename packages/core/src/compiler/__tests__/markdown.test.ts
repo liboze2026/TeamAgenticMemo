@@ -252,6 +252,74 @@ describe("tokenBudget", () => {
     expect(block).toContain(BLOCK_START);
     expect(block).toContain(BLOCK_END);
   });
+
+  describe("diversity (MMR)", () => {
+    it("skips a near-duplicate when diversityThreshold provided", () => {
+      const a = makeEntry({
+        id: "a",
+        current_tier: "canonical" as const,
+        confidence: 0.95,
+        correct_pattern: "立即读取 output-file 并继续后续流程",
+        wrong_pattern: "",
+        type: "practice",
+        reasoning: "task-notification 就是通知",
+      });
+      const b = makeEntry({
+        id: "b",
+        current_tier: "canonical" as const,
+        confidence: 0.9,
+        correct_pattern: "立即读取 output-file，继续后续流程",
+        wrong_pattern: "",
+        type: "practice",
+        reasoning: "收到 task-notification 即处理",
+      });
+      const c = makeEntry({
+        id: "c",
+        current_tier: "canonical" as const,
+        confidence: 0.88,
+        correct_pattern: "忽略 <local-command-caveat> 标签内容",
+        wrong_pattern: "",
+        type: "practice",
+        reasoning: "本地命令自动生成，非用户意图",
+      });
+      const block = compileMarkdownBlock([a, b, c], "2026-04-23T00:00:00Z", {
+        tierFilter: ["canonical", "enforced"],
+        limit: 10,
+        diversityThreshold: 0.5,
+      });
+      // a wins top score, b is near-duplicate (dropped), c is diverse (kept)
+      expect(block).toContain("a 立即读取 output-file 并继续后续流程".slice(2));
+      expect(block).toContain("忽略 <local-command-caveat>");
+      expect(block).not.toContain("立即读取 output-file，继续后续流程");
+    });
+
+    it("without diversityThreshold → keeps near-duplicates (backward-compat)", () => {
+      const a = makeEntry({
+        id: "a",
+        current_tier: "canonical" as const,
+        confidence: 0.95,
+        correct_pattern: "立即读取 output-file 并继续后续流程",
+        wrong_pattern: "",
+        type: "practice",
+        reasoning: "r1",
+      });
+      const b = makeEntry({
+        id: "b",
+        current_tier: "canonical" as const,
+        confidence: 0.9,
+        correct_pattern: "立即读取 output-file，继续后续流程",
+        wrong_pattern: "",
+        type: "practice",
+        reasoning: "r2",
+      });
+      const block = compileMarkdownBlock([a, b], "2026-04-23T00:00:00Z", {
+        tierFilter: ["canonical", "enforced"],
+        limit: 10,
+      });
+      expect(block).toContain("立即读取 output-file 并继续后续流程");
+      expect(block).toContain("立即读取 output-file，继续后续流程");
+    });
+  });
 });
 
 describe("injectBlockIntoDoc", () => {

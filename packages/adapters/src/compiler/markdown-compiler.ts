@@ -12,6 +12,7 @@ import { createTiktokenCounter } from "../token-counter/index.js";
 
 const DEFAULT_TIER_FILTER = ["canonical", "enforced"] as const;
 const DEFAULT_TOKEN_BUDGET = 3000;
+const DEFAULT_DIVERSITY_THRESHOLD = 0.6;
 
 /**
  * writeToFile 的返回信息，供归因事件使用。
@@ -106,6 +107,7 @@ function resolveOptionsFromEnv(): CompileMarkdownOptions {
     tierFilter: DEFAULT_TIER_FILTER,
     tokenBudget: DEFAULT_TOKEN_BUDGET,
     countTokens: createTiktokenCounter(),
+    diversityThreshold: DEFAULT_DIVERSITY_THRESHOLD,
   };
 
   const rawBudget = process.env.TEAMAGENT_CLAUDE_MD_TOKEN_BUDGET;
@@ -121,6 +123,17 @@ function resolveOptionsFromEnv(): CompileMarkdownOptions {
       out.limit = n;
       // 显式设置条目数上限时，禁用 token budget（让 limit 优先）
       out.tokenBudget = undefined;
+    }
+  }
+
+  const rawDiversity = process.env.TEAMAGENT_CLAUDE_MD_DIVERSITY;
+  if (rawDiversity !== undefined) {
+    const normalized = rawDiversity.trim().toLowerCase();
+    if (normalized === "off" || normalized === "0" || normalized === "false") {
+      out.diversityThreshold = undefined;
+    } else {
+      const n = parseFloat(normalized);
+      if (Number.isFinite(n) && n > 0 && n <= 1) out.diversityThreshold = n;
     }
   }
 
