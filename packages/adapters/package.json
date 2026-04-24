@@ -22,6 +22,7 @@
     "./skill-compiler": "./src/compiler/skill-compiler.ts",
     "./storage/sqlite/sqlite-wiki-retriever": "./src/storage/sqlite/sqlite-wiki-retriever.ts",
     "./wiki/xenova-embedder": "./src/wiki/xenova-embedder.ts",
+    "./embedding/xenova-rule-embedder": "./src/embedding/xenova-rule-embedder.ts",
     "./util/normalize-cwd": "./src/util/normalize-cwd.ts"
   },
   "scripts": {

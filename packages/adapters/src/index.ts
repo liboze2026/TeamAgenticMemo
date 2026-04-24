@@ -51,6 +51,7 @@ export { SqliteCandidateQueue } from "./storage/sqlite/sqlite-candidate-queue.js
 export { CompositeErrorSignalCollector } from "./error-collector/composite-error-signal-collector.js";
 export { HaikuJudge, buildJudgePrompt, parseJudgeResponse } from "./wiki/haiku-judge.js";
 export { XenovaEmbedder } from "./wiki/xenova-embedder.js";
+export { XenovaRuleEmbedder } from "./embedding/xenova-rule-embedder.js";
 export { WikiPipeline, type PipelineOptions, type PipelineReport } from "./wiki/wiki-pipeline.js";
 export { WikiStore } from "./storage/sqlite/wiki-store.js";
 export { WikiSubscriptionStore } from "./wiki/wiki-subscription-store.js";
