@@ -63,3 +63,4 @@ export { LastPullMarker } from "./wiki/last-pull-marker.js";
 export type { LastPullRecord } from "./wiki/last-pull-marker.js";
 export { loadWikiConfig, DEFAULT_WIKI_CONFIG } from "./wiki/config-loader.js";
 export type { WikiConfig } from "./wiki/config-loader.js";
+export { SqliteSemanticRetriever } from "./retriever/sqlite-semantic-retriever.js";

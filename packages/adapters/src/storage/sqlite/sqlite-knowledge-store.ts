@@ -3,7 +3,7 @@ import type { KnowledgeEntry, Scope } from "@teamagent/types";
 import { normalizeChannel } from "@teamagent/types";
 
 /** Flattened row shape coming from SQLite. */
-interface KnowledgeRow {
+export interface KnowledgeRow {
   id: string;
   scope_level: string;
   scope_project: string | null;
@@ -104,7 +104,7 @@ function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
   };
 }
 
-function deserializeRow(row: KnowledgeRow): KnowledgeEntry {
+export function deserializeRow(row: KnowledgeRow): KnowledgeEntry {
   const scope: Scope = {
     level: row.scope_level as Scope["level"],
     ...(row.scope_project != null ? { project: row.scope_project } : {}),
