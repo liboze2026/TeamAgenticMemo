@@ -41,6 +41,15 @@ interface KnowledgeRow {
   last_hit_at: string | null;
   last_validated_at: string | null;
   channel: string | null;
+  // v6 semantic matching fields (may be absent in old rows)
+  trigger_description: string | null;
+  pattern_description: string | null;
+  hard_negatives: Buffer | string | null;
+  threshold_alpha: number | null;
+  threshold_beta: number | null;
+  fire_threshold: number | null;
+  observation_window: Buffer | string | null;
+  embedder_model_id: string | null;
 }
 
 function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
@@ -83,6 +92,15 @@ function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
     last_hit_at: entry.last_hit_at || null,
     last_validated_at: entry.last_validated_at || null,
     channel: normalizeChannel((entry as any).channel),
+    // v6 semantic matching fields
+    trigger_description: e.trigger_description ?? null,
+    pattern_description: e.pattern_description ?? null,
+    hard_negatives: e.hard_negatives ? JSON.stringify(e.hard_negatives) : null,
+    threshold_alpha: e.threshold_alpha ?? null,
+    threshold_beta: e.threshold_beta ?? null,
+    fire_threshold: e.fire_threshold ?? null,
+    observation_window: e.observation_window ? JSON.stringify(e.observation_window) : null,
+    embedder_model_id: e.embedder_model_id ?? null,
   };
 }
 
@@ -127,6 +145,25 @@ function deserializeRow(row: KnowledgeRow): KnowledgeEntry {
     source: row.source as KnowledgeEntry["source"],
     conflict_with: row.conflict_with ? JSON.parse(row.conflict_with) : [],
     channel: normalizeChannel(row.channel),
+    // v6 semantic matching fields (default-safe for old rows)
+    trigger_description: row.trigger_description ?? "",
+    pattern_description: row.pattern_description ?? "",
+    fire_threshold: row.fire_threshold ?? 0.55,
+    threshold_alpha: row.threshold_alpha ?? 1.0,
+    threshold_beta: row.threshold_beta ?? 1.0,
+    embedder_model_id: row.embedder_model_id ?? "",
+    hard_negatives: (() => {
+      const v = row.hard_negatives;
+      if (!v) return [];
+      const s = typeof v === "string" ? v : Buffer.from(v as Buffer).toString("utf8");
+      try { return JSON.parse(s); } catch { return []; }
+    })(),
+    observation_window: (() => {
+      const v = row.observation_window;
+      if (!v) return [];
+      const s = typeof v === "string" ? v : Buffer.from(v as Buffer).toString("utf8");
+      try { return JSON.parse(s); } catch { return []; }
+    })(),
   };
 }
 
@@ -139,7 +176,9 @@ INSERT INTO knowledge (
   current_tier, max_tier_ever, tier_entered_at, enforcement, status,
   hit_count, success_count, override_count, resurrect_count,
   evidence, source, conflict_with, created_at, last_hit_at, last_validated_at,
-  channel
+  channel,
+  trigger_description, pattern_description, hard_negatives,
+  threshold_alpha, threshold_beta, fire_threshold, observation_window, embedder_model_id
 ) VALUES (
   @id, @scope_level, @scope_project, @scope_paths, @scope_file_types, @scope_branches,
   @category, @tags, @type, @nature, @trigger, @wrong_pattern, @correct_pattern,
@@ -148,7 +187,9 @@ INSERT INTO knowledge (
   @current_tier, @max_tier_ever, @tier_entered_at, @enforcement, @status,
   @hit_count, @success_count, @override_count, @resurrect_count,
   @evidence, @source, @conflict_with, @created_at, @last_hit_at, @last_validated_at,
-  @channel
+  @channel,
+  @trigger_description, @pattern_description, @hard_negatives,
+  @threshold_alpha, @threshold_beta, @fire_threshold, @observation_window, @embedder_model_id
 )`;
 
 const SELECT_BY_ID = "SELECT * FROM knowledge WHERE id = @id";
@@ -172,6 +213,14 @@ export class SqliteKnowledgeStore {
   getById(id: string): KnowledgeEntry | undefined {
     const row = this.db.prepare(SELECT_BY_ID).get({ id }) as KnowledgeRow | undefined;
     return row ? deserializeRow(row) : undefined;
+  }
+
+  /** Batch fetch by a list of ids. Missing ids are silently omitted. */
+  byIds(ids: string[]): KnowledgeEntry[] {
+    if (ids.length === 0) return [];
+    return ids
+      .map((id) => this.getById(id))
+      .filter((e): e is KnowledgeEntry => e !== undefined);
   }
 
   getAll(): KnowledgeEntry[] {
@@ -265,6 +314,14 @@ export class SqliteKnowledgeStore {
       "created_at = @created_at", "last_hit_at = @last_hit_at",
       "last_validated_at = @last_validated_at",
       "channel = @channel",
+      "trigger_description = @trigger_description",
+      "pattern_description = @pattern_description",
+      "hard_negatives = @hard_negatives",
+      "threshold_alpha = @threshold_alpha",
+      "threshold_beta = @threshold_beta",
+      "fire_threshold = @fire_threshold",
+      "observation_window = @observation_window",
+      "embedder_model_id = @embedder_model_id",
     ];
 
     const sql = `UPDATE knowledge SET ${setClauses.join(", ")} WHERE id = @id`;
