@@ -208,6 +208,19 @@ export class SqliteKnowledgeStore {
   add(entry: KnowledgeEntry): void {
     const params = serializeEntry(entry);
     this.db.prepare(INSERT_SQL).run(params as Record<string, any>);
+    // Sync FTS5 index (BM25 search). vec0 requires embedder — deferred to migrate-v6.
+    if ((entry as any).trigger_description || (entry as any).pattern_description) {
+      try {
+        this.db.prepare(
+          `INSERT OR REPLACE INTO knowledge_fts(id, trigger_description, pattern_description)
+           VALUES (?, ?, ?)`,
+        ).run(
+          entry.id,
+          (entry as any).trigger_description ?? "",
+          (entry as any).pattern_description ?? "",
+        );
+      } catch { /* FTS5 not compiled in this SQLite build */ }
+    }
   }
 
   getById(id: string): KnowledgeEntry | undefined {
@@ -326,6 +339,21 @@ export class SqliteKnowledgeStore {
 
     const sql = `UPDATE knowledge SET ${setClauses.join(", ")} WHERE id = @id`;
     this.db.prepare(sql).run(params as Record<string, any>);
+    // Sync FTS5 index (BM25 search). Use DELETE+INSERT because FTS5 virtual tables
+    // don't support UPDATE. vec0 requires embedder — deferred to migrate-v6.
+    // TODO(Phase C): after accumulateHardNegative wiring, trigger_vec/pattern_vec
+    // sync should also happen here when embedder_model_id is present.
+    const trigDescr = merged.trigger_description ?? (merged as any).trigger_description;
+    const patDescr = merged.pattern_description ?? (merged as any).pattern_description;
+    if (trigDescr || patDescr) {
+      try {
+        this.db.prepare(`DELETE FROM knowledge_fts WHERE id = ?`).run(id);
+        this.db.prepare(
+          `INSERT INTO knowledge_fts(id, trigger_description, pattern_description)
+           VALUES (?, ?, ?)`,
+        ).run(id, trigDescr ?? "", patDescr ?? "");
+      } catch { /* FTS5 not compiled in this SQLite build */ }
+    }
   }
 
   delete(id: string): void {
