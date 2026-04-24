@@ -153,6 +153,7 @@ describe("KnowledgeEntrySchema", () => {
     demerit: 0,
     demerit_last_updated: "",
     resurrect_count: 0,
+    channel: "tool-action",
   };
 
   it("accepts a valid entry", () => {

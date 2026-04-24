@@ -63,12 +63,13 @@ export const KnowledgeEntrySchema = z.object({
   /** 自由标签，系统会自动聚类 */
   tags: z.array(z.string()),
 
-  /** avoidance=避坑 practice=最佳实践 */
+  /** @deprecated M4-B: all rules participate in semantic matching regardless of type */
   type: z.enum(["avoidance", "practice"]),
   /** objective=客观可验证 subjective=主观偏好 */
   nature: z.enum(["objective", "subjective"]),
 
   trigger: z.string(),
+  /** @deprecated M4-B: replaced by pattern_description + semantic matching */
   wrong_pattern: z.string().default(""),
   correct_pattern: z.string(),
   reasoning: z.string(),
@@ -126,8 +127,22 @@ export const KnowledgeEntrySchema = z.object({
   /** Number of times rule was revived from dormant (3 = permanent archive) */
   resurrect_count: z.number().int().nonnegative().default(0),
 
-  /** M4-A: 规则通道。决定生效拦截点。缺省=tool-action（向后兼容）。*/
+  /** @deprecated M4-B: replaced by unified semantic matcher */
   channel: z.enum(RULE_CHANNELS).default("tool-action"),
+
+  // M4-B 语义匹配字段（全部 optional，兼容旧数据）
+  /** 触发场景的自然语言描述（用于 embedding） */
+  trigger_description: z.string().optional(),
+  /** 错误行为的自然语言描述（用于 embedding） */
+  pattern_description: z.string().optional(),
+  /** 规则触发阈值（固定阈值版本默认 0.55） */
+  fire_threshold: z.number().optional(),
+  /** Thompson Beta α（Phase C 用；A+B 阶段默认 1.0） */
+  threshold_alpha: z.number().optional(),
+  /** Thompson Beta β（Phase C 用；A+B 阶段默认 1.0） */
+  threshold_beta: z.number().optional(),
+  /** 生成向量的 embedder 模型指纹 */
+  embedder_model_id: z.string().optional(),
 });
 
 export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
