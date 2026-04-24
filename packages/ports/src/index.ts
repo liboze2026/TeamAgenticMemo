@@ -59,3 +59,4 @@ export { WikiFetchError } from "./wiki-source.js";
 export type { WikiEmbedderPort } from "./wiki-embedder.js";
 export type { WikiRetrieverPort, WikiInjectionEntry, WikiQueryOptions } from "./wiki-retriever.js";
 export type { RuleEmbedder } from "./rule-embedder.js";
+export type { SemanticRetriever, SemanticCandidate } from "./semantic-retriever.js";
