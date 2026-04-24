@@ -24,6 +24,10 @@ export {
   semanticMatch,
   type SemanticMatch,
 } from "./matcher/semantic-matcher.js";
+export {
+  accumulateHardNegative,
+  MAX_HARD_NEG,
+} from "./matcher/hard-negative-accumulator.js";
 export { ruleBasedCorrectionDetector } from "./correction-detector/rule-based.js";
 export { ruleBasedSuccessDetector } from "./success-detector/rule-based.js";
 export { parseSessionFile } from "./session-parser/index.js";
