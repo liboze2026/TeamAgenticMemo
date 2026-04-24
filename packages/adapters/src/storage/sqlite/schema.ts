@@ -155,7 +155,76 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (1, datetime('now'));
 `;
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
+
+const V6_ADDITIONS = `
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+  id UNINDEXED,
+  trigger_description,
+  pattern_description,
+  tokenize='porter unicode61'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_trigger_vec USING vec0(
+  id TEXT PRIMARY KEY,
+  vec FLOAT[384]
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_pattern_vec USING vec0(
+  id TEXT PRIMARY KEY,
+  vec FLOAT[384]
+);
+`;
+
+const V6_FTS_ONLY = `
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+  id UNINDEXED,
+  trigger_description,
+  pattern_description,
+  tokenize='porter unicode61'
+);
+`;
+
+const V6_ALTER_COLUMNS = [
+  "trigger_description TEXT DEFAULT ''",
+  "pattern_description TEXT DEFAULT ''",
+  "hard_negatives BLOB",
+  "threshold_alpha REAL DEFAULT 1.0",
+  "threshold_beta REAL DEFAULT 1.0",
+  "fire_threshold REAL DEFAULT 0.55",
+  "observation_window BLOB",
+  "embedder_model_id TEXT DEFAULT ''",
+];
+
+function applyV6Migration(db: DatabaseSync): void {
+  const existing = new Set(
+    (db.prepare("PRAGMA table_info(knowledge)").all() as Array<{ name: string }>)
+      .map((c) => c.name),
+  );
+  for (const colDef of V6_ALTER_COLUMNS) {
+    const colName = colDef.split(/\s+/)[0];
+    if (!existing.has(colName)) {
+      db.exec(`ALTER TABLE knowledge ADD COLUMN ${colDef}`);
+    }
+  }
+  // FTS5 may not be compiled into Node 22 experimental SQLite — guard it
+  try {
+    db.exec(V6_FTS_ONLY);
+  } catch { /* FTS5 not available in this SQLite build — BM25 search disabled */ }
+  // vec0 requires sqlite-vec extension to be loaded
+  if (_sqliteVecLoad) {
+    try {
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_trigger_vec USING vec0(
+        id TEXT PRIMARY KEY,
+        vec FLOAT[384]
+      )`);
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_pattern_vec USING vec0(
+        id TEXT PRIMARY KEY,
+        vec FLOAT[384]
+      )`);
+    } catch { /* vec0 not available */ }
+  }
+}
 
 
 /**
@@ -224,6 +293,13 @@ export function openDb(path: string): DatabaseSync {
       db.exec("ALTER TABLE knowledge ADD COLUMN channel TEXT NOT NULL DEFAULT 'tool-action'");
     } catch { /* column already exists (fresh DB via INIT_SQL, or previous partial migration) */ }
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (5, datetime('now'))");
+  }
+
+  // Migration: schema_version 5 → 6 (M4-B: semantic matching fields + FTS5 + vec0)
+  const versionM4B = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
+  if (!versionM4B || versionM4B.version < 6) {
+    applyV6Migration(db);
+    db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (6, datetime('now'))");
   }
 
   return db;
