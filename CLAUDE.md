@@ -38,6 +38,13 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - **Windows 下 vitest 并发 OOM**：`vitest.config.ts` 强制 `fileParallelism: false`，测试顺序跑。不要打开并发。
 - **CLI E2E subprocess 测试**：M0 暂未启用（相同 OOM 原因）。手动运行 `pnpm teamagent skeleton-demo` 做视觉验证。M1 引入真实 IO 后再考虑方案。
 
+## M4-B 语义匹配（自 0.9.4 起）
+
+- Matcher 已从 substring 升级为 BM25+dense RRF + soft-AND 打分
+- 所有规则（含 practice 类）都参与运行时匹配，通道字段已废弃
+- 若新版表现异常，回滚：env `TEAMAGENT_MATCHER=legacy`
+- 规则迁移：`pnpm teamagent migrate-v6` 给旧规则生成语义描述 + embedding
+
 ---
 
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
