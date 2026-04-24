@@ -23,9 +23,11 @@ import {
   DualLayerStore,
   SqliteEventLog,
   openDb,
+  XenovaRuleEmbedder,
+  SqliteSemanticRetriever,
 } from "@teamagent/adapters";
 import type { LLMClient } from "@teamagent/ports";
-import { momentSignature, parseSessionFile } from "@teamagent/core";
+import { momentSignature, parseSessionFile, semanticMatch } from "@teamagent/core";
 import { executeAnalyze, type AnalyzeMeta } from "./commands/analyze.js";
 import { executeCalibrate } from "./commands/calibrate.js";
 import { executeCompile } from "./commands/compile.js";
@@ -35,6 +37,13 @@ import { readCursor, writeCursor, clearCursor, readSeen, writeSeen } from "./sca
 import { appendHarvest } from "./harvest-writer.js";
 import { makeFallbackLLMClient } from "./llm-with-fallback.js";
 import { runStopNarrativeScan, readLastInjected, lastInjectedFilePath } from "./stop-narrative-scan.js";
+
+// ---- Lazy singleton for semantic embedder (shared across Stop calls in same process) ----
+let _stopEmbedder: XenovaRuleEmbedder | null = null;
+function getStopEmbedder(): XenovaRuleEmbedder {
+  if (!_stopEmbedder) _stopEmbedder = new XenovaRuleEmbedder();
+  return _stopEmbedder;
+}
 
 export interface StopHookInput {
   session_id: string;
@@ -300,6 +309,60 @@ export async function runStopPipeline(
         } finally {
           store.close();
           eventLog.close();
+        }
+
+        // Step 6b (M4-B): semantic match on AI last turn — supplement to literal scanNarrative.
+        // Skipped when TEAMAGENT_MATCHER=legacy. Never throws (all errors swallowed).
+        const useLegacyMatcher = (process.env.TEAMAGENT_MATCHER ?? "").toLowerCase() === "legacy";
+        if (!useLegacyMatcher) {
+          try {
+            const contextText = lastTurn?.userMessage ?? "";
+            const actionText = aiText.slice(0, 500);
+
+            const embedder = getStopEmbedder();
+            const semanticDb = openDb(globalDbPath);
+            const semanticRetriever = new SqliteSemanticRetriever(semanticDb);
+
+            let semanticHits: import("@teamagent/core").SemanticMatch[];
+            try {
+              semanticHits = await semanticMatch({
+                contextText,
+                actionText,
+                embedder,
+                retriever: semanticRetriever,
+                scope: { level: "global" },
+              });
+            } finally {
+              try { semanticDb.close(); } catch { /* ok */ }
+            }
+
+            if (semanticHits.length > 0) {
+              const semanticEventsDb = openDb(eventsDbPath);
+              const semanticEventLog = new SqliteEventLog(semanticEventsDb);
+              const nowTs = new Date().toISOString();
+              try {
+                for (const hit of semanticHits) {
+                  semanticEventLog.append({
+                    id: `e-sem-bad-${sessionId}-${lastTurn!.turnIndex}-${hit.rule.id}`,
+                    kind: "ai.output.bad_pattern",
+                    knowledge_id: hit.rule.id,
+                    session_id: sessionId,
+                    turn_index: lastTurn!.turnIndex,
+                    matched_snippet: `[semantic score=${hit.score.toFixed(3)}] ${actionText.slice(0, 80)}`,
+                    timestamp: nowTs,
+                    schema_version: 1,
+                  });
+                }
+                process.stderr.write(
+                  `TeamAgent: semantic-scan 命中 ${semanticHits.length} 条规则\n`,
+                );
+              } finally {
+                semanticEventLog.close();
+              }
+            }
+          } catch (semErr) {
+            logError(cwd, "semantic-scan", semErr);
+          }
         }
       }
     }
