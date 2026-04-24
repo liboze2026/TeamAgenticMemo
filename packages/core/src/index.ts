@@ -9,7 +9,7 @@ export {
 export {
   matchRules,
   type ToolCallContext,
-} from "./matcher/keyword-matcher.js";
+} from "./matcher/legacy/keyword-matcher.js";
 export {
   matchRules as matchRulesAsync,
   type MatchContext,
@@ -20,6 +20,10 @@ export {
   DEFAULT_SOFTAND,
   type SoftAndWeights,
 } from "./matcher/soft-and-scorer.js";
+export {
+  semanticMatch,
+  type SemanticMatch,
+} from "./matcher/semantic-matcher.js";
 export { ruleBasedCorrectionDetector } from "./correction-detector/rule-based.js";
 export { ruleBasedSuccessDetector } from "./success-detector/rule-based.js";
 export { parseSessionFile } from "./session-parser/index.js";

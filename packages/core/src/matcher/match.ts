@@ -1,6 +1,6 @@
 import type { KnowledgeEntry } from "@teamagent/types";
-import { matchRules as keywordMatch, type ToolCallContext } from "./keyword-matcher.js";
-import { isInsideCommentOrString } from "./ast-context.js";
+import { matchRules as keywordMatch, type ToolCallContext } from "./legacy/keyword-matcher.js";
+import { isInsideCommentOrString } from "./legacy/ast-context.js";
 
 export interface MatchContext {
   file_path?: string;

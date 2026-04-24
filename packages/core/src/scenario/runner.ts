@@ -5,7 +5,7 @@ import type {
 } from "@teamagent/ports";
 import type { KnowledgeEntry, ParsedSession, Scope } from "@teamagent/types";
 import { computeEnforcement } from "@teamagent/types";
-import { matchRules } from "../matcher/keyword-matcher.js";
+import { matchRules } from "../matcher/legacy/keyword-matcher.js";
 import { runExtractPipeline } from "../pipeline/extract-pipeline.js";
 import type {
   Scenario,

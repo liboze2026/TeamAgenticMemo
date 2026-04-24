@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { initAstMatcher } from "../ast-context.js";
+import { initAstMatcher } from "../legacy/ast-context.js";
 import { matchRules } from "../match.js";
 
 beforeAll(async () => {
