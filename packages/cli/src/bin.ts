@@ -278,6 +278,17 @@ async function main(): Promise<void> {
       }
       break;
     }
+    case "migrate-v6": {
+      const dryRun = rest.includes("--dry-run");
+      const limitArg = rest.find((a) => a.startsWith("--limit="));
+      const limit = limitArg ? Number(limitArg.split("=")[1]) : undefined;
+      const dbArg = rest.find((a) => a.startsWith("--db="));
+      const dbPath = dbArg ? dbArg.split("=").slice(1).join("=") : undefined;
+      const { executeMigrateV6 } = await import("./commands/migrate-v6.js");
+      const result = await executeMigrateV6({ dryRun, dbPath, limit });
+      process.stdout.write(`migrated=${result.migrated} resurrected=${result.resurrected} skipped=${result.skipped}\n`);
+      return;
+    }
     case "migrate": {
       const dryRun = rest.includes("--dry-run");
       const { executeMigrate } = await import("./commands/migrate-v1-to-v2.js");
@@ -497,6 +508,8 @@ async function main(): Promise<void> {
           "  teamagent wiki:unsubscribe --id <id>  退订某个源",
           "  teamagent wiki:rejected [--limit=20]  查看被拒绝的条目",
           "  teamagent wiki:dislike <id>      标记条目为不喜欢（M2.7 注入时跳过）",
+          "  teamagent migrate-v6 [--dry-run] [--limit=N] [--db=<path>]",
+          "                                   迁移旧规则（trigger_description 为空）通过 LLM 生成双描述，并写入 vec0 和 FTS5",
           "  teamagent ingest --from-insights <path> | --from-audit | --from-pr <n>",
           "                   | --from-git [--since=30d] | --from-ci [--since=30d] | --from-candidates <path>",
           "                                   多源摄入：Claude /insights / npm audit / PR review / git hotspot / CI failure",
