@@ -4,6 +4,7 @@ export { SqliteEventLog } from "./storage/sqlite/sqlite-event-log.js";
 export { SqliteObservations, type Observation } from "./storage/sqlite/sqlite-observations.js";
 export { DualLayerStore, type DualLayerStoreConfig } from "./storage/sqlite/dual-layer-store.js";
 export { openDb, closeDb, INIT_SQL, CURRENT_SCHEMA_VERSION } from "./storage/sqlite/schema.js";
+export { syncRuleVectors, deleteRuleVectors } from "./storage/sqlite/vec-sync.js";
 
 // v2 SDK hooks
 export {
