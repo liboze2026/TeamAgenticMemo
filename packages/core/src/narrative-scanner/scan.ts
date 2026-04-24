@@ -21,14 +21,30 @@ export interface NarrativeHit {
   reasoning: string;
 }
 
-const MIN_TOKEN_LENGTH = 3;
+const MIN_ASCII_TOKEN_LENGTH = 3;
+const MIN_CJK_TOKEN_LENGTH = 2;
 
+/**
+ * 切分 `|`-分隔的规则关键词。
+ * 保留策略：
+ *  - 含非 ASCII（CJK、emoji 等）的 token：≥ 2 字符即保留（"不对"、"错了"）
+ *  - 纯 ASCII token：≥ 3 字符保留（避免 "a" / "of" 之类满屏乱中）
+ *  - 全部被过滤时返回空数组（不 fallback 到原始 pipe 串——那样永远匹配不到）
+ */
 function splitPatterns(raw: string): string[] {
-  const tokens = raw
-    .split("|")
-    .map((s) => s.trim())
-    .filter((s) => s.length >= MIN_TOKEN_LENGTH);
-  return tokens.length > 0 ? tokens : [raw.trim()];
+  if (!raw.includes("|")) {
+    const t = raw.trim();
+    return t.length > 0 ? [t] : [];
+  }
+  const tokens: string[] = [];
+  for (const piece of raw.split("|")) {
+    const t = piece.trim();
+    if (t.length === 0) continue;
+    const hasNonAscii = /[^\x00-\x7f]/.test(t);
+    const min = hasNonAscii ? MIN_CJK_TOKEN_LENGTH : MIN_ASCII_TOKEN_LENGTH;
+    if (t.length >= min) tokens.push(t);
+  }
+  return tokens;
 }
 
 function snippet(haystack: string, needle: string, pad = 20): string {

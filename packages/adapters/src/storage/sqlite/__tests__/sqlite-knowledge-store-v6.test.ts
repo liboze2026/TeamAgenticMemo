@@ -29,10 +29,10 @@ describe("SqliteKnowledgeStore v6 fields", () => {
     expect(got?.embedder_model_id).toBe("Xenova/multilingual-e5-small");
   });
 
-  it("defaults fire_threshold to 0.55 when not provided", async () => {
+  it("defaults fire_threshold when not provided", async () => {
     await store.add(mkEntry({ id: "r2" }));
     const [got] = await store.byIds(["r2"]);
-    expect(got?.fire_threshold).toBeCloseTo(0.55);
+    expect(got?.fire_threshold).toBeCloseTo(0.40);
   });
 
   it("reads old rows without new fields without error", async () => {
@@ -43,7 +43,7 @@ describe("SqliteKnowledgeStore v6 fields", () => {
     const [got] = await store.byIds(["old1"]);
     expect(got?.id).toBe("old1");
     expect(got?.trigger_description).toBe("");
-    expect(got?.fire_threshold).toBeCloseTo(0.55);
+    expect(got?.fire_threshold).toBeCloseTo(0.40);
   });
 });
 

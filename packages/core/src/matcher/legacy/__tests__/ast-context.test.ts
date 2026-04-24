@@ -30,6 +30,12 @@ describe("AST context matching", () => {
     expect(isInsideCommentOrString(code, pos, "typescript")).toBe(true);
   });
 
+  it("TS: axios in import module specifier is real dependency use", () => {
+    const code = `import client from "axios";\nconst r = client.get(url);`;
+    const pos = code.indexOf("axios");
+    expect(isInsideCommentOrString(code, pos, "typescript")).toBe(false);
+  });
+
   it("Python: axios in # comment is filtered", () => {
     const code = `# use requests not axios\nimport requests`;
     const pos = code.indexOf("axios");

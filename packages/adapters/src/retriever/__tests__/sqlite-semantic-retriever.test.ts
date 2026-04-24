@@ -88,7 +88,7 @@ describe("SqliteSemanticRetriever", () => {
             pattern_description: e.pattern_description ?? "",
             threshold_alpha: e.threshold_alpha ?? 1.0,
             threshold_beta: e.threshold_beta ?? 1.0,
-            fire_threshold: e.fire_threshold ?? 0.55,
+            fire_threshold: e.fire_threshold ?? 0.40,
             embedder_model_id: e.embedder_model_id ?? "",
           });
 

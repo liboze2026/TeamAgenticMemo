@@ -2,6 +2,7 @@ export {
   KnowledgeEntrySchema,
   ScopeSchema,
   EvidenceSchema,
+  DEFAULT_FIRE_THRESHOLD,
   computeEnforcement,
   RULE_CHANNELS,
   normalizeChannel,

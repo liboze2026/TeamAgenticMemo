@@ -18,6 +18,8 @@ export const ScopeSchema = z.object({
 
 export type Scope = z.infer<typeof ScopeSchema>;
 
+export const DEFAULT_FIRE_THRESHOLD = 0.40;
+
 /**
  * 支持证据：多少次验证过这条知识有效。
  */
@@ -135,7 +137,7 @@ export const KnowledgeEntrySchema = z.object({
   trigger_description: z.string().optional(),
   /** 错误行为的自然语言描述（用于 embedding） */
   pattern_description: z.string().optional(),
-  /** 规则触发阈值（固定阈值版本默认 0.55） */
+  /** 规则触发阈值（固定阈值版本默认 DEFAULT_FIRE_THRESHOLD） */
   fire_threshold: z.number().optional(),
   /** Thompson Beta α（Phase C 用；A+B 阶段默认 1.0） */
   threshold_alpha: z.number().optional(),
@@ -143,9 +145,23 @@ export const KnowledgeEntrySchema = z.object({
   threshold_beta: z.number().optional(),
   /** 生成向量的 embedder 模型指纹 */
   embedder_model_id: z.string().optional(),
+  /** Context vectors that previously produced false positives. */
+  hard_negatives: z.union([z.string(), z.array(z.array(z.number()))]).optional(),
+  /** Recent observations for adaptive thresholding. */
+  observation_window: z.union([z.string(), z.array(z.unknown())]).optional(),
 });
 
-export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
+type KnowledgeEntryParsed = z.infer<typeof KnowledgeEntrySchema>;
+
+/**
+ * Runtime parsing supplies `channel: "tool-action"` by default, but legacy DB
+ * rows and many in-process builders may omit it. Keep the TypeScript surface
+ * compatible with that reality; all runtime consumers should call
+ * `normalizeChannel()` before branching on the value.
+ */
+export type KnowledgeEntry = Omit<KnowledgeEntryParsed, "channel"> & {
+  channel?: RuleChannel;
+};
 
 /**
  * 根据 confidence 和 nature 自动推导 enforcement。

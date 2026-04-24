@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { DatabaseSync } from "node:sqlite";
+import { DEFAULT_FIRE_THRESHOLD } from "@teamagent/types";
 
 // node:sqlite 是 Node 22+ 实验性内置模块，不在 builtinModules 列表里，
 // vite/vitest 的静态 import 无法解析。用 createRequire 在运行时加载。
@@ -191,7 +192,7 @@ const V6_ALTER_COLUMNS = [
   "hard_negatives BLOB",
   "threshold_alpha REAL DEFAULT 1.0",
   "threshold_beta REAL DEFAULT 1.0",
-  "fire_threshold REAL DEFAULT 0.55",
+  `fire_threshold REAL DEFAULT ${DEFAULT_FIRE_THRESHOLD}`,
   "observation_window BLOB",
   "embedder_model_id TEXT DEFAULT ''",
 ];
@@ -203,6 +204,7 @@ function applyV6Migration(db: DatabaseSync): void {
   );
   for (const colDef of V6_ALTER_COLUMNS) {
     const colName = colDef.split(/\s+/)[0];
+    if (!colName) continue;
     if (!existing.has(colName)) {
       db.exec(`ALTER TABLE knowledge ADD COLUMN ${colDef}`);
     }
@@ -236,6 +238,7 @@ export function openDb(path: string): DatabaseSync {
   // node:sqlite forbids extension loading by default, which silently broke the
   // wiki_vec virtual table creation and disabled wiki injection end-to-end.
   const db = new DatabaseSyncCtor(path, { allowExtension: true });
+  db.exec("PRAGMA busy_timeout = 5000;");
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
 
@@ -301,6 +304,9 @@ export function openDb(path: string): DatabaseSync {
     applyV6Migration(db);
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (6, datetime('now'))");
   }
+  // Repair partially-applied M4-B databases. Some installs reached version 6
+  // before sqlite-vec/FTS tables were available, so version alone is not enough.
+  applyV6Migration(db);
 
   return db;
 }

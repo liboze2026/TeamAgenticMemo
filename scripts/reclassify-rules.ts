@@ -200,7 +200,7 @@ function main() {
       `SELECT id, wrong_pattern, correct_pattern, reasoning, trigger, channel, enforcement, status
        FROM knowledge WHERE status = 'active'`,
     )
-    .all() as RawRule[];
+    .all() as unknown as RawRule[];
   db.close();
 
   const useLLM = claudeAvailable();

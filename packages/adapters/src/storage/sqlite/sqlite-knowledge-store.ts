@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { KnowledgeEntry, Scope } from "@teamagent/types";
+import { DEFAULT_FIRE_THRESHOLD } from "@teamagent/types";
 import { normalizeChannel } from "@teamagent/types";
 
 /** Flattened row shape coming from SQLite. */
@@ -54,6 +55,10 @@ export interface KnowledgeRow {
 
 function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
   const e = entry as any;
+  const toJson = (value: unknown): string | null => {
+    if (value == null) return null;
+    return typeof value === "string" ? value : JSON.stringify(value);
+  };
   return {
     id: entry.id,
     scope_level: entry.scope.level,
@@ -95,11 +100,11 @@ function serializeEntry(entry: KnowledgeEntry): Record<string, unknown> {
     // v6 semantic matching fields
     trigger_description: e.trigger_description ?? null,
     pattern_description: e.pattern_description ?? null,
-    hard_negatives: e.hard_negatives ? JSON.stringify(e.hard_negatives) : null,
+    hard_negatives: toJson(e.hard_negatives),
     threshold_alpha: e.threshold_alpha ?? null,
     threshold_beta: e.threshold_beta ?? null,
     fire_threshold: e.fire_threshold ?? null,
-    observation_window: e.observation_window ? JSON.stringify(e.observation_window) : null,
+    observation_window: toJson(e.observation_window),
     embedder_model_id: e.embedder_model_id ?? null,
   };
 }
@@ -148,7 +153,7 @@ export function deserializeRow(row: KnowledgeRow): KnowledgeEntry {
     // v6 semantic matching fields (default-safe for old rows)
     trigger_description: row.trigger_description ?? "",
     pattern_description: row.pattern_description ?? "",
-    fire_threshold: row.fire_threshold ?? 0.55,
+    fire_threshold: row.fire_threshold ?? DEFAULT_FIRE_THRESHOLD,
     threshold_alpha: row.threshold_alpha ?? 1.0,
     threshold_beta: row.threshold_beta ?? 1.0,
     embedder_model_id: row.embedder_model_id ?? "",

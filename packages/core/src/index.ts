@@ -90,6 +90,11 @@ export {
   type ExtractPipelineDeps,
   type ExtractPipelineResult,
 } from "./pipeline/extract-pipeline.js";
+export {
+  buildSemanticDescriptions,
+  type SemanticDescriptions,
+  type SemanticDescriptionSource,
+} from "./pipeline/semantic-descriptions.js";
 export { v2Calibrator } from "./calibrator/v2/index.js";
 export {
   runCalibrationPipelineV2,

@@ -116,9 +116,13 @@ async function main(): Promise<void> {
         const eventsDbPath = path.join(os.homedir(), ".teamagent", "events.db");
         const eventLog = new SqliteEventLog(openDb(eventsDbPath));
         const now = new Date().toISOString();
+        // Base time + short random suffix: prevents millisecond collisions when
+        // the hook re-fires rapidly (harness retry, parallel agents, etc).
+        const stamp = () =>
+          `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         if (injectedIds.length > 0) {
           eventLog.append({
-            id: `e-inject-${sessionId}-${Date.now()}`,
+            id: `e-inject-${sessionId}-${stamp()}`,
             kind: "ai.narrative.injected",
             knowledge_ids: injectedIds,
             session_id: sessionId,
@@ -128,7 +132,7 @@ async function main(): Promise<void> {
         }
         for (const h of userHits) {
           eventLog.append({
-            id: `e-uflag-${sessionId}-${h.knowledge_id}-${Date.now()}`,
+            id: `e-uflag-${sessionId}-${h.knowledge_id}-${stamp()}`,
             kind: "ai.user_input.flagged",
             knowledge_id: h.knowledge_id,
             session_id: sessionId,

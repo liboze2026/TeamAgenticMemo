@@ -3,8 +3,8 @@ import { getMetaPrinciples } from "../meta-principles.js";
 import { KnowledgeEntrySchema } from "@teamagent/types";
 
 describe("getMetaPrinciples", () => {
-  it("returns exactly 4 entries", () => {
-    expect(getMetaPrinciples()).toHaveLength(4);
+  it("returns 6 entries (4 base meta + 2 canonical team rules)", () => {
+    expect(getMetaPrinciples()).toHaveLength(6);
   });
 
   it("all entries validate against KnowledgeEntrySchema", () => {
@@ -22,7 +22,30 @@ describe("getMetaPrinciples", () => {
       expect(entry.source).toBe("preset");
       expect(entry.scope.level).toBe("global");
       expect(entry.type).toBe("practice");
-      expect(entry.enforcement).toBe("suggest");
+    }
+  });
+
+  it("base meta principles (4) are enforcement=suggest", () => {
+    const base = getMetaPrinciples().filter(
+      (e) => !e.id.startsWith("preset-search-web") && !e.id.startsWith("preset-prefer-gstack"),
+    );
+    expect(base).toHaveLength(4);
+    for (const e of base) expect(e.enforcement).toBe("suggest");
+  });
+
+  it("canonical team rules are high-confidence, tier=canonical, always-distributed", () => {
+    const canon = getMetaPrinciples().filter(
+      (e) => e.current_tier === "canonical",
+    );
+    expect(canon.length).toBeGreaterThanOrEqual(2);
+    const ids = canon.map((e) => e.id);
+    expect(ids).toContain("preset-search-web-before-trusting-memory");
+    expect(ids).toContain("preset-prefer-gstack-tooling");
+    for (const e of canon) {
+      expect(e.confidence).toBeGreaterThanOrEqual(0.9);
+      expect(e.enforcement).toBe("warn");
+      expect(e.max_tier_ever).toBe("canonical");
+      expect(e.status).toBe("active");
     }
   });
 

@@ -60,15 +60,20 @@ export function isInsideCommentOrString(
   let cur: ReturnType<typeof tree.rootNode.descendantForIndex> | null = node;
   while (cur) {
     const t = cur.type;
+    if (t === "comment" || t === "line_comment" || t === "block_comment") {
+      tree.delete();
+      return true;
+    }
     if (
-      t === "comment" ||
-      t === "line_comment" ||
-      t === "block_comment" ||
       t === "string" ||
       t === "string_literal" ||
       t === "string_fragment" ||
       t === "template_string"
     ) {
+      if (hasAncestor(cur, new Set(["import_statement", "export_statement"]))) {
+        tree.delete();
+        return false;
+      }
       tree.delete();
       return true;
     }
@@ -76,5 +81,14 @@ export function isInsideCommentOrString(
   }
 
   tree.delete();
+  return false;
+}
+
+function hasAncestor(node: any, types: Set<string>): boolean {
+  let cur = node;
+  while (cur) {
+    if (types.has(cur.type)) return true;
+    cur = cur.parent;
+  }
   return false;
 }

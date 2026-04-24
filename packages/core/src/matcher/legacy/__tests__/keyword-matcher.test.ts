@@ -413,7 +413,27 @@ describe("matchRules — channel gate (M4-A)", () => {
       rules,
     );
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("t1");
+    expect(result[0]!.id).toBe("t1");
+  });
+
+  it("plain tokens match on boundaries, not inside larger words", () => {
+    const rules = [
+      makeRule({ id: "moment-rule", wrong_pattern: "moment", channel: "tool-action" }),
+    ];
+
+    expect(
+      matchRules(
+        { toolName: "Bash", input: { command: "echo momentum is useful" } },
+        rules,
+      ),
+    ).toHaveLength(0);
+
+    expect(
+      matchRules(
+        { toolName: "Bash", input: { command: "npm install moment" } },
+        rules,
+      ),
+    ).toHaveLength(1);
   });
 
   it("ai-narrative channel excluded from PreToolUse matcher", () => {
@@ -471,6 +491,6 @@ describe("matchRules — channel gate (M4-A)", () => {
       rules,
     );
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("t");
+    expect(result[0]!.id).toBe("t");
   });
 });

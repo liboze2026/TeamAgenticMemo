@@ -1,6 +1,6 @@
 import type { KnowledgeEntry } from "@teamagent/types";
 import { matchRules as keywordMatch, type ToolCallContext } from "./legacy/keyword-matcher.js";
-import { isInsideCommentOrString } from "./legacy/ast-context.js";
+import { initAstMatcher, isInsideCommentOrString } from "./legacy/ast-context.js";
 
 export interface MatchContext {
   file_path?: string;
@@ -62,6 +62,8 @@ export async function matchRules(
   if (!content || !lang) {
     return { matched: candidates };
   }
+
+  await initAstMatcher();
 
   const filtered: KnowledgeEntry[] = [];
   for (const rule of candidates) {

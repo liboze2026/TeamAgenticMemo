@@ -13,7 +13,8 @@ import type {
   ParsedSession,
   Scope,
 } from "@teamagent/types";
-import { computeEnforcement } from "@teamagent/types";
+import { DEFAULT_FIRE_THRESHOLD, computeEnforcement } from "@teamagent/types";
+import { buildSemanticDescriptions } from "./semantic-descriptions.js";
 
 /**
  * Stable signature for a CorrectionMoment — used for cross-run dedup so the
@@ -284,6 +285,12 @@ function assembleEntry(
   const nature = (partial.nature ?? "subjective") as "objective" | "subjective";
   const enforcement = computeEnforcement(confidence, nature);
   const nowIso = isoNow(deps.now);
+  const descriptions = buildSemanticDescriptions({
+    trigger: partial.trigger,
+    wrong_pattern: partial.wrong_pattern,
+    correct_pattern: partial.correct_pattern,
+    reasoning: partial.reasoning,
+  });
 
   // 若调用方没有显式给 scope 加范围，加默认代码文件范围
   const scopeHasExplicitRange =
@@ -327,6 +334,12 @@ function assembleEntry(
     demerit_last_updated: "",
     resurrect_count: 0,
     channel: "tool-action",
+    trigger_description: partial.trigger_description ?? descriptions.trigger_description,
+    pattern_description: partial.pattern_description ?? descriptions.pattern_description,
+    fire_threshold: partial.fire_threshold ?? DEFAULT_FIRE_THRESHOLD,
+    threshold_alpha: partial.threshold_alpha ?? 1.0,
+    threshold_beta: partial.threshold_beta ?? 1.0,
+    embedder_model_id: partial.embedder_model_id ?? "",
   };
 }
 

@@ -1,5 +1,5 @@
 import type { RuleEmbedder, SemanticRetriever } from "@teamagent/ports";
-import type { KnowledgeEntry } from "@teamagent/types";
+import { DEFAULT_FIRE_THRESHOLD, type KnowledgeEntry } from "@teamagent/types";
 import { scoreSoftAnd } from "./soft-and-scorer.js";
 
 export interface SemanticMatch {
@@ -78,7 +78,7 @@ export async function semanticMatch(args: {
         hardNegSim,
       };
     })
-    .filter((m) => m.score > (m.rule.fire_threshold ?? 0.55))
+    .filter((m) => m.score > (m.rule.fire_threshold ?? DEFAULT_FIRE_THRESHOLD))
     .sort((a, b) => b.score - a.score);
 }
 

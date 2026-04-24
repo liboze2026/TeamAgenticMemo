@@ -130,7 +130,7 @@ export class SqliteSemanticRetriever implements SemanticRetriever {
            AND status = 'active'
            AND scope_level = ?`,
       )
-      .all(...ids, args.scope.level) as KnowledgeRow[];
+      .all(...ids, args.scope.level) as unknown as KnowledgeRow[];
 
     return rows
       .map((r) => {

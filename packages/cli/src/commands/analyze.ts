@@ -109,8 +109,15 @@ export async function executeAnalyze(opts: AnalyzeOptions = {}): Promise<string>
     sourceDesc = `最近会话 ${recent[0]!.sessionId}`;
   }
 
-  const corrections = ruleBasedCorrectionDetector.detect(session);
-  const successes = ruleBasedSuccessDetector.detect(session);
+  // 增量过滤：当 fromTurnIndex 被传入时，只保留 turnIndex 严格大于它的信号。
+  // 对 correction 和 success 两个检测器一致处理，避免报告数字虚胖或重复校准。
+  const rawCorrections = ruleBasedCorrectionDetector.detect(session);
+  const rawSuccesses = ruleBasedSuccessDetector.detect(session);
+  const fromTi = opts.fromTurnIndex;
+  const corrections =
+    fromTi !== undefined ? rawCorrections.filter((m) => m.turnIndex > fromTi) : rawCorrections;
+  const successes =
+    fromTi !== undefined ? rawSuccesses.filter((m) => m.turnIndex > fromTi) : rawSuccesses;
   const dryRun = renderReport(
     session,
     corrections,

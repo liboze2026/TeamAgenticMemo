@@ -24,6 +24,7 @@ import {
 } from "@teamagent/adapters";
 import { matchRulesAsync, semanticMatch } from "@teamagent/core";
 import type { KnowledgeEntry } from "@teamagent/types";
+import { mergeSemanticAndLegacyMatches } from "./pre-tool-use-merge.js";
 
 // ---- Lazy singletons for semantic path (per-process, reused if process is long-lived) ----
 let _embedder: XenovaRuleEmbedder | null = null;
@@ -71,6 +72,15 @@ async function main(): Promise<void> {
     let lastRuleCount = 0;
     const matcher = {
       match: async ({ tool_name, tool_input }: { tool_name: string; tool_input: unknown }) => {
+        const rules = store.findActive();
+        lastRuleCount = rules.length;
+        const legacyResult = await matchRulesAsync(
+          { ...(typeof tool_input === "object" && tool_input !== null ? tool_input : {}), tool_name },
+          rules,
+          {},
+        );
+        const legacyMatches = legacyResult.matched;
+
         if (!useLegacy) {
           // --- Semantic path ---
           try {
@@ -85,16 +95,24 @@ async function main(): Promise<void> {
             const projectRetriever = new SqliteSemanticRetriever(projectDb);
             const globalRetriever = new SqliteSemanticRetriever(globalDb);
 
-            let projectResults: import("@teamagent/core").SemanticMatch[];
+            let projectPersonalResults: import("@teamagent/core").SemanticMatch[];
+            let projectTeamResults: import("@teamagent/core").SemanticMatch[];
             let globalResults: import("@teamagent/core").SemanticMatch[];
             try {
-              [projectResults, globalResults] = await Promise.all([
+              [projectPersonalResults, projectTeamResults, globalResults] = await Promise.all([
                 semanticMatch({
                   contextText,
                   actionText,
                   embedder,
                   retriever: projectRetriever,
                   scope: { level: "personal" },
+                }),
+                semanticMatch({
+                  contextText,
+                  actionText,
+                  embedder,
+                  retriever: projectRetriever,
+                  scope: { level: "team" },
                 }),
                 semanticMatch({
                   contextText,
@@ -109,17 +127,12 @@ async function main(): Promise<void> {
               try { globalDb.close(); } catch { /* ok */ }
             }
 
-            // Merge and sort by score descending, dedup by rule id
-            const seen = new Set<string>();
-            const merged: KnowledgeEntry[] = [];
-            for (const m of [...projectResults, ...globalResults].sort((a, b) => b.score - a.score)) {
-              if (!seen.has(m.rule.id)) {
-                seen.add(m.rule.id);
-                merged.push(m.rule);
-              }
-            }
+            // Keyword matches are always preserved so non-migrated rules still fire.
+            const merged = mergeSemanticAndLegacyMatches(
+              [...projectPersonalResults, ...projectTeamResults, ...globalResults],
+              legacyMatches,
+            );
 
-            lastRuleCount = merged.length;
             return { matched: merged };
           } catch (_semErr) {
             // Silent fallback to legacy on any semantic error
@@ -128,14 +141,7 @@ async function main(): Promise<void> {
         }
 
         // --- Legacy keyword path (default fallback or TEAMAGENT_MATCHER=legacy) ---
-        const rules = store.findActive();
-        lastRuleCount = rules.length;
-        const result = await matchRulesAsync(
-          { ...(typeof tool_input === "object" && tool_input !== null ? tool_input : {}), tool_name },
-          rules,
-          {},
-        );
-        return result;
+        return { matched: legacyMatches };
       },
     };
 

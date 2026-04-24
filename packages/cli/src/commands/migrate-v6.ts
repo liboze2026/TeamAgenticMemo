@@ -2,6 +2,8 @@ import os from "node:os";
 import path from "node:path";
 import type { LLMClient, RuleEmbedder } from "@teamagent/ports";
 import { openDb, syncRuleVectors } from "@teamagent/adapters";
+import { buildSemanticDescriptions } from "@teamagent/core";
+import { DEFAULT_FIRE_THRESHOLD } from "@teamagent/types";
 
 export function buildMigrationPrompt(r: {
   trigger: string;
@@ -37,13 +39,25 @@ export function shouldResurrectDormant(r: { status: string; hit_count: number })
   return r.status === "dormant" && r.hit_count >= 3;
 }
 
+export function buildFallbackDescriptions(r: {
+  trigger: string;
+  wrong_pattern: string;
+  correct_pattern: string;
+  reasoning: string;
+}): { trigger_description: string; pattern_description: string } {
+  return buildSemanticDescriptions(r);
+}
+
 export async function executeMigrateV6(opts: {
   dryRun: boolean;
   dbPath?: string;
   limit?: number;
   cwd?: string;
+  fast?: boolean;
+  repairAll?: boolean;
   /** 注入 LLM client（测试用）；缺省用 ClaudeCodeLLMClient */
   llmClient?: LLMClient;
+  embedder?: RuleEmbedder;
 }): Promise<{ migrated: number; resurrected: number; skipped: number }> {
   const home = os.homedir();
   const dbPath = opts.dbPath ?? path.join(home, ".teamagent", "global.db");
@@ -51,15 +65,16 @@ export async function executeMigrateV6(opts: {
   const db = openDb(dbPath);
 
   const { ClaudeCodeLLMClient, XenovaRuleEmbedder } = await import("@teamagent/adapters");
-  const llm: LLMClient = opts.llmClient ?? new ClaudeCodeLLMClient({ model: "haiku" });
-  const embedder: RuleEmbedder = new XenovaRuleEmbedder();
+  const llm: LLMClient | undefined = opts.fast
+    ? undefined
+    : (opts.llmClient ?? new ClaudeCodeLLMClient({ model: "haiku" }));
+  let embedder: RuleEmbedder | undefined = opts.embedder;
 
   const rows = db
     .prepare(
       `SELECT id, trigger, wrong_pattern, correct_pattern, reasoning, status, hit_count
        FROM knowledge
-       WHERE COALESCE(trigger_description,'') = ''
-       AND status != 'archived'
+       WHERE ${opts.repairAll ? "status != 'archived'" : "COALESCE(trigger_description,'') = '' AND status != 'archived'"}
        ${opts.limit ? "LIMIT ?" : ""}`,
     )
     .all(...(opts.limit ? [opts.limit] : [])) as Array<{
@@ -74,14 +89,23 @@ export async function executeMigrateV6(opts: {
 
   for (const r of rows) {
     try {
-      const promptText = buildMigrationPrompt(r);
-      const rawText = await llm.complete(promptText);
-
-      const jsonStr = rawText.trim().replace(/^```json\s*/m, "").replace(/```\s*$/m, "").trim();
-      const parsed = JSON.parse(jsonStr) as {
-        trigger_description: string;
-        pattern_description: string;
-      };
+      let parsed: { trigger_description: string; pattern_description: string };
+      if (llm) {
+        try {
+          const promptText = buildMigrationPrompt(r);
+          const rawText = await llm.complete(promptText);
+          const jsonStr = rawText.trim().replace(/^```json\s*/m, "").replace(/```\s*$/m, "").trim();
+          parsed = JSON.parse(jsonStr) as {
+            trigger_description: string;
+            pattern_description: string;
+          };
+        } catch (e) {
+          process.stderr.write(`fallback ${r.id}: ${(e as Error).message}\n`);
+          parsed = buildFallbackDescriptions(r);
+        }
+      } else {
+        parsed = buildFallbackDescriptions(r);
+      }
 
       if (opts.dryRun) {
         process.stdout.write(`[dry] ${r.id}: ${parsed.trigger_description.slice(0, 60)}\n`);
@@ -89,6 +113,7 @@ export async function executeMigrateV6(opts: {
         continue;
       }
 
+      embedder ??= new XenovaRuleEmbedder();
       const [tvec, pvec] = await embedder.embed([
         parsed.trigger_description,
         parsed.pattern_description,
@@ -101,7 +126,7 @@ export async function executeMigrateV6(opts: {
            pattern_description = ?,
            threshold_alpha = 1.0,
            threshold_beta = 1.0,
-           fire_threshold = 0.55,
+           fire_threshold = ?,
            embedder_model_id = ?,
            status = CASE WHEN ? THEN 'active' ELSE status END,
            current_tier = CASE WHEN ? THEN 'probation' ELSE current_tier END
@@ -109,12 +134,16 @@ export async function executeMigrateV6(opts: {
       ).run(
         parsed.trigger_description,
         parsed.pattern_description,
+        DEFAULT_FIRE_THRESHOLD,
         embedder.modelId,
         resurrect ? 1 : 0,
         resurrect ? 1 : 0,
         r.id,
       );
 
+      if (!tvec || !pvec) {
+        throw new Error("Embedder returned no vector for rule migration");
+      }
       syncRuleVectors(db, r.id, new Float32Array(tvec), new Float32Array(pvec));
 
       // FTS sync (try/catch in case FTS5 not available)

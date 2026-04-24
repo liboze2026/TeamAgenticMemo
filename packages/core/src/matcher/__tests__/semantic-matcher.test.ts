@@ -9,7 +9,10 @@ const stubEmbedder: RuleEmbedder = {
   async embed(texts: string[]) {
     return texts.map((t) => {
       const v = [0, 0, 0, 0];
-      for (const ch of t) v[ch.charCodeAt(0) % 4] += 0.1;
+      for (const ch of t) {
+        const idx = ch.charCodeAt(0) % 4;
+        v[idx] = (v[idx] ?? 0) + 0.1;
+      }
       const n = Math.sqrt(v.reduce((s: number, x: number) => s + x * x, 0));
       return v.map((x) => x / n);
     });
@@ -57,8 +60,8 @@ describe("semanticMatch", () => {
       scope: { level: "global" },
     });
     expect(out).toHaveLength(1);
-    expect(out[0].rule.id).toBe("r1");
-    expect(out[0].score).toBeGreaterThan(0.4);
+    expect(out[0]!.rule.id).toBe("r1");
+    expect(out[0]!.score).toBeGreaterThan(0.4);
   });
 
   it("does not fire when floor penalty kills the score", async () => {

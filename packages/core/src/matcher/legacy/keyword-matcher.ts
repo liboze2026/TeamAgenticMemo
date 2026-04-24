@@ -52,8 +52,7 @@ export function matchRules(
     if (!checkScope(rule, filePath)) continue;
 
     const patterns = splitPatterns(rule.wrong_pattern);
-    const lower = inputText.toLowerCase();
-    const matched = patterns.some((p) => lower.includes(p.toLowerCase()));
+    const matched = patterns.some((p) => patternMatches(inputText, p));
     if (matched) matches.push(rule);
   }
 
@@ -102,6 +101,26 @@ function splitPatterns(raw: string): string[] {
     .filter((s) => s.length >= MIN_TOKEN_LENGTH);
   // 如果切分后没有合格 token，回退为整体匹配（不切分）
   return tokens.length > 0 ? tokens : [raw.trim()];
+}
+
+function patternMatches(inputText: string, pattern: string): boolean {
+  const token = pattern.trim();
+  if (!token) return false;
+
+  // For plain package/API words, avoid substring false positives such as
+  // `moment` matching `momentum`. Punctuation-heavy patterns keep substring
+  // semantics because they are usually paths, scoped packages, or code snippets.
+  if (/^[a-z0-9_-]+$/i.test(token)) {
+    const escaped = escapeRegExp(token);
+    const re = new RegExp(`(^|[^a-z0-9_-])${escaped}([^a-z0-9_-]|$)`, "i");
+    return re.test(inputText);
+  }
+
+  return inputText.toLowerCase().includes(token.toLowerCase());
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

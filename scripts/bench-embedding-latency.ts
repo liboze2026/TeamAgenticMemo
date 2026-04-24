@@ -1,4 +1,8 @@
-import { pipeline, env } from "@xenova/transformers";
+export {};
+
+const { pipeline, env } = await (Function("s", "return import(s)")(
+  "@xenova/transformers",
+) as Promise<any>);
 
 // Use HuggingFace mirror for regions where huggingface.co is blocked
 env.remoteHost = "https://hf-mirror.com/";
@@ -30,8 +34,8 @@ async function bench(modelId: string): Promise<{ p50: number; p99: number }> {
     }
   }
   latencies.sort((a, b) => a - b);
-  const p50 = latencies[Math.floor(latencies.length * 0.5)];
-  const p99 = latencies[Math.floor(latencies.length * 0.99)];
+  const p50 = latencies[Math.floor(latencies.length * 0.5)] ?? 0;
+  const p99 = latencies[Math.floor(latencies.length * 0.99)] ?? 0;
   return { p50, p99 };
 }
 

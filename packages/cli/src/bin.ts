@@ -34,6 +34,11 @@ import {
   renderVerifyTerminal,
 } from "./commands/verify.js";
 import {
+  executeE2EEvaluate,
+  parseE2EEvaluateArgs,
+  renderE2EEvaluateResult,
+} from "./commands/e2e-evaluate.js";
+import {
   executeDogfoodReport,
   parseDogfoodReportArgs,
 } from "./commands/dogfood-report.js";
@@ -232,6 +237,17 @@ async function main(): Promise<void> {
       if (result.passed !== result.total) process.exit(1);
       return;
     }
+    case "e2e-evaluate": {
+      const opts = parseE2EEvaluateArgs(rest);
+      const result = await executeE2EEvaluate(opts);
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      } else {
+        process.stdout.write(renderE2EEvaluateResult(result));
+      }
+      if (!result.ok) process.exit(1);
+      return;
+    }
     case "ingest": {
       let opts;
       try {
@@ -280,12 +296,14 @@ async function main(): Promise<void> {
     }
     case "migrate-v6": {
       const dryRun = rest.includes("--dry-run");
+      const fast = rest.includes("--fast");
+      const repairAll = rest.includes("--repair-all");
       const limitArg = rest.find((a) => a.startsWith("--limit="));
       const limit = limitArg ? Number(limitArg.split("=")[1]) : undefined;
       const dbArg = rest.find((a) => a.startsWith("--db="));
       const dbPath = dbArg ? dbArg.split("=").slice(1).join("=") : undefined;
       const { executeMigrateV6 } = await import("./commands/migrate-v6.js");
-      const result = await executeMigrateV6({ dryRun, dbPath, limit });
+      const result = await executeMigrateV6({ dryRun, dbPath, limit, fast, repairAll });
       process.stdout.write(`migrated=${result.migrated} resurrected=${result.resurrected} skipped=${result.skipped}\n`);
       return;
     }
@@ -483,6 +501,8 @@ async function main(): Promise<void> {
           "                                   根据 events.jsonl 重算 confidence + 自动归档低分条目",
           "  teamagent verify [--report=path]",
           "                                   跑 5 个验证场景（踩坑→学习→避坑），输出 PRR/KP 指标",
+          "  teamagent e2e-evaluate [--json] [--keep-temp]",
+          "                                   真实 SQLite + analyze + compile + PreToolUse 测评学习、触发、误触发和新成员可见性",
           "  teamagent dogfood-report [--output=path]",
           "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
           "  teamagent compile [--dry-run] [--skills-only] [--markdown-only] [--force]",

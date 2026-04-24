@@ -274,8 +274,12 @@ export async function runStopPipeline(
       const lastTurn = parsed.turns.length > 0
         ? parsed.turns[parsed.turns.length - 1]
         : undefined;
-      const aiText = lastTurn?.assistantText ?? "";
-      if (aiText) {
+      // Run narrative scan whenever there's a last turn — even if aiText is empty.
+      // Empty aiText is meaningful: previously-injected rules should be classified
+      // as "complied" (the AI didn't repeat the mistake). Previously gating on
+      // aiText alone silently skipped compliance scoring for tool-only turns.
+      if (lastTurn) {
+        const aiText = lastTurn.assistantText ?? "";
         const projectDbPath = path.join(cwd, ".teamagent", "knowledge.db");
         const globalDbPath = path.join(os.homedir(), ".teamagent", "global.db");
         const eventsDbPath = path.join(os.homedir(), ".teamagent", "events.db");

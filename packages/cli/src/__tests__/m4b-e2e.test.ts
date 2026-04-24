@@ -138,6 +138,7 @@ async function seedRule(
       rule.trigger_description ?? "",
       rule.pattern_description ?? "",
     ]);
+    if (!tvec || !pvec) throw new Error("E2E embedder returned no vector");
     syncRuleVectors(
       db,
       rule.id,

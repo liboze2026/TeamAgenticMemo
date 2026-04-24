@@ -31,9 +31,11 @@ export async function accumulateHardNegative(args: {
 
   const contextText = String(args.event.payload?.contextText ?? "");
   const [ctxVec] = await args.embedder.embed([contextText || " "]);
+  if (!ctxVec) return;
 
   const existing: number[][] = (() => {
     try {
+      if (Array.isArray(rule.hard_negatives)) return rule.hard_negatives;
       return rule.hard_negatives ? JSON.parse(String(rule.hard_negatives)) : [];
     } catch {
       return [];

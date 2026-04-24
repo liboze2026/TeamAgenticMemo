@@ -11,7 +11,7 @@ const stubEmbedder: RuleEmbedder = {
   async embed(texts) {
     return texts.map((t) => {
       const v = [0.5, 0.5, 0.5, 0.5];
-      v[0] += t.length * 0.01;
+      v[0] = (v[0] ?? 0) + t.length * 0.01;
       const n = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
       return v.map((x) => x / n);
     });

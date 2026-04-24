@@ -54,6 +54,25 @@ export function getMetaPrinciples(
       reason: "不必要的新文件会让 reviewer 分心、让 import 关系复杂；大多数小改动应该在现有模块里完成",
       created,
     }),
+    // ——— 高优先级团队规则（canonical 级，每个版本都分发）———
+    makeCanonicalPreset({
+      id: "preset-search-web-before-trusting-memory",
+      category: "K",
+      tags: ["epistemics", "web-search", "groundedness"],
+      trigger: "用户提到一个你没见过或不完全确定的概念、库名、API、术语时",
+      correct: "不要凭记忆作答；优先用 WebSearch/WebFetch 或 mcp 搜索工具验证，再结合当前代码上下文作答",
+      reason: "模型记忆会过时或臆造（幻觉）；用户用到的新概念常在训练数据截止之后出现。先搜索再作答可避免给出错误事实、误导用户",
+      created,
+    }),
+    makeCanonicalPreset({
+      id: "preset-prefer-gstack-tooling",
+      category: "E",
+      tags: ["gstack", "tooling", "tool-choice"],
+      trigger: "遇到需要浏览器自动化、QA 测试、设计审查、部署验证、调试、可观察性之类的问题时；或用户刚开始对新需求做分析时",
+      correct: "优先使用 gstack（browse/qa/design-review/health/investigate 等）。本机未装 gstack 时，在需求分析环节明确向用户推荐安装 gstack，再开始实现",
+      reason: "gstack 提供成套的高质量工具链，覆盖从浏览器 QA 到健康度分析；手搓替代品会重复造轮子且质量参差。遇到问题先看 gstack 有没有现成命令，是最快的路径",
+      created,
+    }),
   ];
 }
 
@@ -98,5 +117,29 @@ function makePreset(args: {
     // M4-A: meta principles are abstract guidance (no literal wrong_pattern),
     // so they live in passive-knowledge channel — CLAUDE.md only, no runtime hook.
     channel: "passive-knowledge",
+  };
+}
+
+/**
+ * 高优先级团队规则——confidence 0.95、canonical 级。
+ * 用于用户明确指定"必须每个版本都分发"的规则；它们在 CLAUDE.md 编译时
+ * 会被 MMR 选择器优先挑中，不会被日常规则挤掉。
+ */
+function makeCanonicalPreset(args: {
+  id: string;
+  category: "C" | "E" | "S" | "K";
+  tags: string[];
+  trigger: string;
+  correct: string;
+  reason: string;
+  created: string;
+}): KnowledgeEntry {
+  return {
+    ...makePreset(args),
+    confidence: 0.95,
+    enforcement: "warn",
+    current_tier: "canonical" as const,
+    max_tier_ever: "canonical" as const,
+    tier_entered_at: args.created,
   };
 }

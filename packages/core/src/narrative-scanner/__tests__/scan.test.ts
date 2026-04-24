@@ -52,9 +52,9 @@ describe("scanNarrative", () => {
       [makeRule({ id: "n1", wrong_pattern: "claims-victory-phrase" })],
     );
     expect(hits).toHaveLength(1);
-    expect(hits[0].knowledge_id).toBe("n1");
-    expect(hits[0].matched_snippet).toContain("claims-victory-phrase");
-    expect(hits[0].rule_summary).toBeTruthy();
+    expect(hits[0]!.knowledge_id).toBe("n1");
+    expect(hits[0]!.matched_snippet).toContain("claims-victory-phrase");
+    expect(hits[0]!.rule_summary).toBeTruthy();
   });
 
   it("multiple rules hit independently", () => {
@@ -132,6 +132,37 @@ describe("scanNarrative", () => {
       }),
     ]);
     expect(hits).toHaveLength(1);
+  });
+
+  it("2-char CJK patterns match (不对/错了)", () => {
+    const hits = scanNarrative("用户说 不对 了", [
+      makeRule({ id: "cjk1", wrong_pattern: "不对" }),
+    ]);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.matched_snippet).toContain("不对");
+  });
+
+  it("pipe-separated 2-char CJK tokens all count", () => {
+    const hitsA = scanNarrative("AI 说 不对 了", [
+      makeRule({ id: "cjk2", wrong_pattern: "不对|错了" }),
+    ]);
+    const hitsB = scanNarrative("AI 说 错了 吧", [
+      makeRule({ id: "cjk2", wrong_pattern: "不对|错了" }),
+    ]);
+    expect(hitsA).toHaveLength(1);
+    expect(hitsB).toHaveLength(1);
+  });
+
+  it("does NOT match pipe character literally when no tokens survive", () => {
+    // If *every* token is filtered out, we must not fall back to matching the raw
+    // "a|b" literal — that would never match real text but also silently mislead.
+    const hits = scanNarrative("a|b literal present", [
+      makeRule({ id: "short-only", wrong_pattern: "a|b" }),
+    ]);
+    // Either 0 hits (ascii too short) or hits the individual tokens — never the raw pipe.
+    for (const h of hits) {
+      expect(h.matched_snippet).not.toContain("|");
+    }
   });
 
   it("performance: 50 rules, 10KB text, under 50ms", () => {

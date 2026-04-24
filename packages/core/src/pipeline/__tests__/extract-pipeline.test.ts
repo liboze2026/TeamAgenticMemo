@@ -180,6 +180,11 @@ describe("runExtractPipeline", () => {
     expect(entry.evidence.correction_sessions).toBe(1);
     expect(entry.created_at).toBe("2026-04-14T12:00:00.000Z");
     expect(entry.status).toBe("active");
+    expect(entry.trigger_description).toContain(entry.trigger);
+    expect(entry.pattern_description).toContain("axios");
+    expect(entry.fire_threshold).toBe(0.40);
+    expect(entry.threshold_alpha).toBe(1.0);
+    expect(entry.threshold_beta).toBe(1.0);
 
     expect((deps.store as InMemoryStoreStub).entries).toHaveLength(1);
   });

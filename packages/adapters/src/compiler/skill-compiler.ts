@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { formatAsAgentSkill } from "@teamagent/core";
 import type { SkillCompiler, SkillArtifact } from "@teamagent/ports";
 import type { KnowledgeEntry } from "@teamagent/types";
@@ -34,7 +35,7 @@ export function makeSkillCompiler(opts: SkillCompilerOptions = {}): SkillCompile
         await fs.mkdir(ruleDir, { recursive: true });
         const filePath = path.join(ruleDir, "SKILL.md");
         // 原子写（Windows 下 rename 到已存在文件需先 unlink）
-        const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+        const tmp = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
         await fs.writeFile(tmp, a.skillMd, "utf-8");
         try {
           await fs.rename(tmp, filePath);

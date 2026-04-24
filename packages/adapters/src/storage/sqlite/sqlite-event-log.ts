@@ -19,8 +19,12 @@ export class SqliteEventLog {
       if (!CORE_KEYS.has(k)) payload[k] = v;
     }
 
+    // Stable event IDs (e.g. `e-recur-{session}-{turn}-{kid}`) are intentionally
+    // idempotent: re-running the same Stop for the same turn must not error.
+    // OR IGNORE makes duplicate inserts a no-op rather than throwing
+    // SQLITE_CONSTRAINT, which previously aborted the whole batch.
     this.db.prepare(`
-      INSERT INTO events (id, kind, knowledge_id, tool_use_id, timestamp, payload)
+      INSERT OR IGNORE INTO events (id, kind, knowledge_id, tool_use_id, timestamp, payload)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       e.id,
