@@ -15,6 +15,11 @@ export {
   type MatchContext,
   type MatchResult,
 } from "./matcher/match.js";
+export {
+  scoreSoftAnd,
+  DEFAULT_SOFTAND,
+  type SoftAndWeights,
+} from "./matcher/soft-and-scorer.js";
 export { ruleBasedCorrectionDetector } from "./correction-detector/rule-based.js";
 export { ruleBasedSuccessDetector } from "./success-detector/rule-based.js";
 export { parseSessionFile } from "./session-parser/index.js";
