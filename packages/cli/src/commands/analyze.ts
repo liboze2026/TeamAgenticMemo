@@ -17,6 +17,7 @@ import {
   llmBasedKnowledgeExtractor,
   runExtractPipeline,
   defaultCalibrator,
+  defaultValidator,
   runCalibrationPipeline,
   runCompile,
 } from "@teamagent/core";
@@ -218,6 +219,8 @@ async function runCommit(
     source: "accumulated",
     now,
     idGen,
+    validator: defaultValidator,
+    projectStack: [],
     isMomentSeen: opts.isMomentSeen,
     markMomentSeen: opts.markMomentSeen,
   });
