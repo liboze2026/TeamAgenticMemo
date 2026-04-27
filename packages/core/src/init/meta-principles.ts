@@ -18,13 +18,14 @@ export function getMetaPrinciples(
 ): KnowledgeEntry[] {
   const created = now().toISOString();
   return [
+    // ── 保留 ──
     makePreset({
       id: "preset-tdd-cycle",
       category: "S",
       tags: ["tdd", "workflow"],
-      trigger: "开始实现一个新功能",
-      correct: "先写失败测试（红）→ 写最小实现（绿）→ 重构（如需）→ commit",
-      reason: "TDD 让接口设计先行，测试与实现紧耦合；避免写完实现才发现接口难用",
+      trigger: "开始实现一个新功能或修 bug 时",
+      correct: "先写失败测试（红）→ 写最小实现（绿）→ 重构（如需）→ commit；验证产出（跑测试、手动验证）后再声明完成",
+      reason: "TDD 让接口设计先行；未经验证直接声明完成是常见错误，实际输出与预期可能偏差",
       created,
     }),
     makePreset({
@@ -37,15 +38,6 @@ export function getMetaPrinciples(
       created,
     }),
     makePreset({
-      id: "preset-pitfall-cli",
-      category: "K",
-      tags: ["teamagent", "knowledge-capture"],
-      trigger: "想记录一条团队踩坑经验给将来的 AI 和同事参考",
-      correct: "用 teamagent pitfall（交互）或 teamagent pitfall --non-interactive --trigger=... --correct=... 录入；不要手工编辑 .teamagent/knowledge.jsonl",
-      reason: "pitfall 命令会补齐 id/时间戳/scope/enforcement 等字段并触发 CLAUDE.md 重编译；手工编辑容易写出不合 schema 的条目、忘记重新编译",
-      created,
-    }),
-    makePreset({
       id: "preset-prefer-edit-over-create",
       category: "S",
       tags: ["scope", "workflow"],
@@ -54,7 +46,6 @@ export function getMetaPrinciples(
       reason: "不必要的新文件会让 reviewer 分心、让 import 关系复杂；大多数小改动应该在现有模块里完成",
       created,
     }),
-    // ——— 高优先级团队规则（canonical 级，每个版本都分发）———
     makeCanonicalPreset({
       id: "preset-search-web-before-trusting-memory",
       category: "K",
@@ -64,13 +55,41 @@ export function getMetaPrinciples(
       reason: "模型记忆会过时或臆造（幻觉）；用户用到的新概念常在训练数据截止之后出现。先搜索再作答可避免给出错误事实、误导用户",
       created,
     }),
-    makeCanonicalPreset({
-      id: "preset-prefer-gstack-tooling",
-      category: "E",
-      tags: ["gstack", "tooling", "tool-choice"],
-      trigger: "遇到需要浏览器自动化、QA 测试、设计审查、部署验证、调试、可观察性之类的问题时；或用户刚开始对新需求做分析时",
-      correct: "优先使用 gstack（browse/qa/design-review/health/investigate 等）。本机未装 gstack 时，在需求分析环节明确向用户推荐安装 gstack，再开始实现",
-      reason: "gstack 提供成套的高质量工具链，覆盖从浏览器 QA 到健康度分析；手搓替代品会重复造轮子且质量参差。遇到问题先看 gstack 有没有现成命令，是最快的路径",
+    // ── 新增 ──
+    makePreset({
+      id: "preset-audience-adaptive",
+      category: "K",
+      tags: ["communication", "explanation"],
+      trigger: "向用户讲解技术系统、方案、分析结果或操作流程时",
+      correct: "先判断受众层级：非技术受众给功能骨架（做什么/为什么）不给实现细节；技术受众给机制层；所有受众都先结论后细节，从简到繁",
+      reason: "技术细节会淹没非技术受众；过度简化会浪费技术受众时间；先匹配受众心智模型再调整深度，是最高效的讲解路径",
+      created,
+    }),
+    makePreset({
+      id: "preset-execute-not-analyze",
+      category: "S",
+      tags: ["execution", "workflow"],
+      trigger: "收到明确的执行类任务（修 bug、实现功能、多步工作流、批量处理）时",
+      correct: "执行完整序列到底，不要在分析/汇报阶段停下等待确认；只在遇到不可逆操作（删库、force push）或真正无法解决的歧义时才暂停",
+      reason: "用户期望 AI 主动推进工作；频繁停下'先报告''先对齐'会割裂上下文、降低效率；完整执行再报结果是更好的节奏",
+      created,
+    }),
+    makePreset({
+      id: "preset-read-before-asserting",
+      category: "K",
+      tags: ["groundedness", "file-access"],
+      trigger: "即将断言某文件/功能/模块不存在，或声称「计划文档还没实现」「这个路径没有内容」时",
+      correct: "先用 Read 工具读取用户指向的路径，以实际文件内容为准，再基于真实内容推进；不要凭印象或对话历史断言存在性",
+      reason: "AI 断言文件不存在但用户已指向具体路径是常见错误；实际文件可能已经存在或已实现，凭印象断言会误导用户并浪费调试时间",
+      created,
+    }),
+    makePreset({
+      id: "preset-full-pipeline-for-complex",
+      category: "S",
+      tags: ["workflow", "architecture", "planning"],
+      trigger: "面对多组件、多阶段的复杂新功能或系统改造时",
+      correct: "调研 → brainstorm+需求确认 → 设计文档 → 实现计划 → 执行；不得跳过前期设计直接写代码",
+      reason: "跳过前期设计直接实现会导致架构返工；完整流水线确保需求对齐后再拆任务，执行时边界清晰、减少反复",
       created,
     }),
   ];
