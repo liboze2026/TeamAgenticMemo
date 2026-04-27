@@ -1,11 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { getMetaPrinciples } from "../meta-principles.js";
+import { KnowledgeEntrySchema } from "@teamagent/types";
 
 describe("getMetaPrinciples", () => {
   it("returns exactly 8 entries", () => {
-    const now = () => new Date("2026-04-27T00:00:00Z");
-    const principles = getMetaPrinciples(now);
-    expect(principles).toHaveLength(8);
+    expect(getMetaPrinciples()).toHaveLength(8);
+  });
+
+  it("honors injected now()", () => {
+    const fixed = new Date("2026-04-27T00:00:00Z");
+    const principles = getMetaPrinciples(() => fixed);
+    expect(principles[0]!.created_at).toBe(fixed.toISOString());
   });
 
   it("contains the 4 retained presets", () => {
@@ -38,6 +43,14 @@ describe("getMetaPrinciples", () => {
     for (const p of principles) {
       expect(p.source).toBe("preset");
       expect(p.status).toBe("active");
+    }
+  });
+
+  it("all entries are valid KnowledgeEntry objects", () => {
+    const principles = getMetaPrinciples();
+    for (const p of principles) {
+      const result = KnowledgeEntrySchema.safeParse(p);
+      expect(result.success, `Entry ${p.id} failed schema: ${!result.success ? JSON.stringify(result.error?.issues) : ""}`).toBe(true);
     }
   });
 });
