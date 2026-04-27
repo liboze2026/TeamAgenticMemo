@@ -41,7 +41,10 @@ function parseSince(s: string | undefined): Date | undefined {
 // wiki:pull
 export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline, loadWikiConfig } = await import("@teamagent/adapters");
+  const { ClaudeCodeLLMClient } = await import("@teamagent/adapters");
+  const { loadWikiConfig } = await import("@teamagent/adapters/wiki/config-loader");
+  const { WikiPipeline } = await import("@teamagent/adapters/wiki/wiki-pipeline");
+  const { XenovaEmbedder } = await import("@teamagent/adapters/wiki/xenova-embedder");
 
   const db = openDb(resolveDbPath(opts));
   // ClaudeCodeLLMClient defaults to 120s and respects TEAMAGENT_LLM_TIMEOUT_MS.
@@ -117,7 +120,9 @@ export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
 // wiki:add
 export async function executeWikiAdd(url: string, opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline } = await import("@teamagent/adapters");
+  const { ClaudeCodeLLMClient } = await import("@teamagent/adapters");
+  const { WikiPipeline } = await import("@teamagent/adapters/wiki/wiki-pipeline");
+  const { XenovaEmbedder } = await import("@teamagent/adapters/wiki/xenova-embedder");
 
   const db = openDb(resolveDbPath(opts));
   const pipeline = new WikiPipeline(db, new ClaudeCodeLLMClient(), new XenovaEmbedder());
@@ -132,7 +137,7 @@ export async function executeWikiAdd(url: string, opts: WikiCommandOptions): Pro
 // wiki:list
 export async function executeWikiList(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { WikiStore } = await import("@teamagent/adapters");
+  const { WikiStore } = await import("@teamagent/adapters/storage/sqlite/wiki-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiStore(db);
@@ -155,7 +160,8 @@ export async function executeWikiList(opts: WikiCommandOptions): Promise<void> {
 // wiki:stats
 export async function executeWikiStats(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { WikiStore, WikiSubscriptionStore } = await import("@teamagent/adapters");
+  const { WikiStore } = await import("@teamagent/adapters/storage/sqlite/wiki-store");
+  const { WikiSubscriptionStore } = await import("@teamagent/adapters/wiki/wiki-subscription-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiStore(db);
@@ -171,7 +177,7 @@ export async function executeWikiStats(opts: WikiCommandOptions): Promise<void> 
 // wiki:subscriptions
 export async function executeWikiSubscriptions(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { WikiSubscriptionStore } = await import("@teamagent/adapters");
+  const { WikiSubscriptionStore } = await import("@teamagent/adapters/wiki/wiki-subscription-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiSubscriptionStore(db);
@@ -191,7 +197,7 @@ export async function executeWikiSubscriptions(opts: WikiCommandOptions): Promis
 // wiki:subscribe
 export async function executeWikiSubscribe(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { WikiSubscriptionStore } = await import("@teamagent/adapters");
+  const { WikiSubscriptionStore } = await import("@teamagent/adapters/wiki/wiki-subscription-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiSubscriptionStore(db);
@@ -214,7 +220,7 @@ export async function executeWikiSubscribe(opts: WikiCommandOptions): Promise<vo
 // wiki:unsubscribe
 export async function executeWikiUnsubscribe(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { WikiSubscriptionStore } = await import("@teamagent/adapters");
+  const { WikiSubscriptionStore } = await import("@teamagent/adapters/wiki/wiki-subscription-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiSubscriptionStore(db);
@@ -229,7 +235,7 @@ export async function executeWikiUnsubscribe(opts: WikiCommandOptions): Promise<
 // wiki:rejected
 export async function executeWikiRejected(opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { WikiStore } = await import("@teamagent/adapters");
+  const { WikiStore } = await import("@teamagent/adapters/storage/sqlite/wiki-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiStore(db);
@@ -248,7 +254,7 @@ export async function executeWikiRejected(opts: WikiCommandOptions): Promise<voi
 // wiki:dislike
 export async function executeWikiDislike(knowledgeId: string, opts: WikiCommandOptions): Promise<void> {
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
-  const { WikiStore } = await import("@teamagent/adapters");
+  const { WikiStore } = await import("@teamagent/adapters/storage/sqlite/wiki-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiStore(db);

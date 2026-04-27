@@ -19,8 +19,11 @@ const NATIVE_EXTERNAL = [
   "jsdom",
   "sqlite-vec",
   "better-sqlite3",
-  // Wiki-only deps — externalize so the ESM bundle doesn't pull them in.
-  // Required only when `teamagent wiki:*` commands actually run.
+  "web-tree-sitter",
+  "tree-sitter-typescript",
+  "tree-sitter-python",
+  // Wiki-only deps — externalize so the startup bundle does not hard require
+  // optional integrations. Wiki commands import their implementation lazily.
   "@xenova/transformers",
   "rss-parser",
   "@mozilla/readability",
@@ -34,7 +37,7 @@ export default defineConfig([
     target: "node22",
     outDir: "dist",
     bundle: true,
-    splitting: false,
+    splitting: true,
     noExternal: [
       "@teamagent/types",
       "@teamagent/ports",

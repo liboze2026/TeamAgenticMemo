@@ -5,7 +5,8 @@ import { spawn } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
-import { LastPullMarker, loadWikiConfig } from "@teamagent/adapters";
+import { loadWikiConfig } from "@teamagent/adapters/wiki/config-loader";
+import { LastPullMarker } from "@teamagent/adapters/wiki/last-pull-marker";
 
 export const DEFAULT_DEBOUNCE_HOURS = 24;
 

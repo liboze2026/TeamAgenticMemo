@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { runSkeletonDemo } from "./commands/skeleton-demo.js";
 import {
   executePitfall,
@@ -64,24 +67,43 @@ import {
   executeReviewCandidates,
   parseReviewCandidatesArgs,
 } from "./commands/review-candidates.js";
-import {
-  executeWikiPull,
-  executeWikiAdd,
-  executeWikiList,
-  executeWikiStats,
-  executeWikiSubscriptions,
-  executeWikiSubscribe,
-  executeWikiUnsubscribe,
-  executeWikiRejected,
-  executeWikiDislike,
-  parseWikiArgs,
-} from "./commands/wiki.js";
+
+function findPackageVersion(): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    const pkgPath = path.join(dir, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as {
+          name?: string;
+          version?: string;
+          bin?: Record<string, string>;
+        };
+        if (pkg.name === "teamagent" && pkg.bin?.["teamagent"] && pkg.version) {
+          return pkg.version;
+        }
+      } catch {
+        // Keep walking upward; --version should never make the CLI fail.
+      }
+    }
+    const next = path.dirname(dir);
+    if (next === dir) break;
+    dir = next;
+  }
+  return "unknown";
+}
 
 async function main(): Promise<void> {
   const command = process.argv[2];
   const rest = process.argv.slice(3);
 
   switch (command) {
+    case "--version":
+    case "-V":
+    case "version": {
+      process.stdout.write(`${findPackageVersion()}\n`);
+      return;
+    }
     case "skeleton-demo": {
       const output = await runSkeletonDemo();
       if (output) process.stdout.write(output + "\n");
@@ -354,6 +376,7 @@ async function main(): Promise<void> {
       break;
     }
     case "wiki:pull": {
+      const { executeWikiPull, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiPull(opts);
       return;
@@ -361,36 +384,43 @@ async function main(): Promise<void> {
     case "wiki:add": {
       const url = rest.find(a => !a.startsWith("--"));
       if (!url) { process.stderr.write("Usage: teamagent wiki:add <url>\n"); process.exit(1); }
+      const { executeWikiAdd, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiAdd(url, opts);
       return;
     }
     case "wiki:list": {
+      const { executeWikiList, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiList(opts);
       return;
     }
     case "wiki:stats": {
+      const { executeWikiStats, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiStats(opts);
       return;
     }
     case "wiki:subscriptions": {
+      const { executeWikiSubscriptions, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiSubscriptions(opts);
       return;
     }
     case "wiki:subscribe": {
+      const { executeWikiSubscribe, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiSubscribe(opts);
       return;
     }
     case "wiki:unsubscribe": {
+      const { executeWikiUnsubscribe, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiUnsubscribe(opts);
       return;
     }
     case "wiki:rejected": {
+      const { executeWikiRejected, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiRejected(opts);
       return;
@@ -398,6 +428,7 @@ async function main(): Promise<void> {
     case "wiki:dislike": {
       const id = rest.find(a => !a.startsWith("--"));
       if (!id) { process.stderr.write("Usage: teamagent wiki:dislike <knowledge-id>\n"); process.exit(1); }
+      const { executeWikiDislike, parseWikiArgs } = await import("./commands/wiki.js");
       const { opts } = parseWikiArgs(rest);
       await executeWikiDislike(id, opts);
       return;

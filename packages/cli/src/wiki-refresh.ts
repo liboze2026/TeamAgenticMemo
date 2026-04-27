@@ -77,7 +77,7 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
     manualStack: string[];
   };
   try {
-    const { loadWikiConfig } = await import("@teamagent/adapters");
+    const { loadWikiConfig } = await import("@teamagent/adapters/wiki/config-loader");
     cfg = loadWikiConfig(opts.cwd);
   } catch {
     cfg = {
@@ -94,7 +94,7 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
 
   // 1. debounce
   try {
-    const { LastPullMarker } = await import("@teamagent/adapters");
+    const { LastPullMarker } = await import("@teamagent/adapters/wiki/last-pull-marker");
     const marker = new LastPullMarker(teamagentDir);
     if (!opts.force && marker.shouldSkip(new Date(), debounceHours)) {
       emit(opts.bus, "skipped", { userFacingValue: "wiki 24h 内刚刷过，跳过" });
@@ -155,7 +155,9 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
         result.errors.push({ stage: `pipeline:${e.source}`, error: e.error });
       }
     } else {
-      const { ClaudeCodeLLMClient, XenovaEmbedder, WikiPipeline } = await import("@teamagent/adapters");
+      const { ClaudeCodeLLMClient } = await import("@teamagent/adapters");
+      const { XenovaEmbedder } = await import("@teamagent/adapters/wiki/xenova-embedder");
+      const { WikiPipeline } = await import("@teamagent/adapters/wiki/wiki-pipeline");
       const llm = new ClaudeCodeLLMClient();
       const embedder = new XenovaEmbedder();
       const pipeline = new WikiPipeline(db, llm, embedder);
@@ -178,7 +180,7 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
         const sweepReport = opts._testDeps.runSweep(db!, new Date(), { zeroHitMinAgeDays, perSourceKeep });
         result.archived = sweepReport.archived.length;
       } else {
-        const { ArchiveSweeper } = await import("@teamagent/adapters");
+        const { ArchiveSweeper } = await import("@teamagent/adapters/wiki/archive-sweeper");
         const sweepReport = new ArchiveSweeper(db!).sweep(new Date(), { zeroHitMinAgeDays, perSourceKeep });
         result.archived = sweepReport.archived.length;
       }
@@ -189,7 +191,7 @@ export async function runWikiRefresh(opts: RefreshOptions): Promise<RefreshResul
 
   // 5. write marker
   try {
-    const { LastPullMarker } = await import("@teamagent/adapters");
+    const { LastPullMarker } = await import("@teamagent/adapters/wiki/last-pull-marker");
     new LastPullMarker(teamagentDir).write({
       attemptedAt: new Date(),
       added: result.added,
