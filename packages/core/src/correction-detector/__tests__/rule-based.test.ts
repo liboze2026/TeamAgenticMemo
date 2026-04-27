@@ -46,6 +46,32 @@ describe("ruleBasedCorrectionDetector", () => {
       expect(hit!.previousToolCalls.length).toBeGreaterThan(0);
       expect(hit!.previousToolCalls[0]).toContain("Write");
     });
+
+    it("catches concrete correction phrasing without broad bare '不是'", () => {
+      const session = {
+        sessionId: "s-specific-denial",
+        turns: [
+          {
+            turnIndex: 0,
+            userMessage: "build it",
+            assistantText: "I'll implement directly.",
+            toolCalls: [],
+            timestamp: "2026-04-14T10:00:00Z",
+          },
+          {
+            turnIndex: 1,
+            userMessage: "不是这个意思，应该先写测试再实现",
+            assistantText: "",
+            toolCalls: [],
+            timestamp: "2026-04-14T10:00:10Z",
+          },
+        ],
+      };
+      const corrections = ruleBasedCorrectionDetector.detect(session as any);
+      const hit = corrections.find((c) => c.signal === "explicit_denial");
+      expect(hit).toBeDefined();
+      expect(hit!.weight).toBeGreaterThanOrEqual(0.8);
+    });
   });
 
   describe("multi_failure signal", () => {
@@ -103,6 +129,68 @@ describe("ruleBasedCorrectionDetector", () => {
         (c) => c.signal === "suggestion_override" || c.signal === "explicit_denial",
       );
       expect(hit).toBeDefined();
+    });
+
+    it("detects scoped package override phrasing", () => {
+      const session = {
+        sessionId: "s-scoped-override",
+        turns: [
+          {
+            turnIndex: 0,
+            userMessage: "state management?",
+            assistantText: "I recommend Redux for this.",
+            toolCalls: [],
+            timestamp: "2026-04-14T10:00:00Z",
+          },
+          {
+            turnIndex: 1,
+            userMessage: "用 @reduxjs/toolkit instead of redux classic",
+            assistantText: "",
+            toolCalls: [],
+            timestamp: "2026-04-14T10:00:10Z",
+          },
+        ],
+      };
+      const corrections = ruleBasedCorrectionDetector.detect(session as any);
+      expect(
+        corrections.find(
+          (c) => c.signal === "suggestion_override" || c.signal === "explicit_denial",
+        ),
+      ).toBeDefined();
+    });
+  });
+
+  describe("tool context quality", () => {
+    it("includes string tool inputs in the correction context", () => {
+      const session = {
+        sessionId: "s-tool-context",
+        turns: [
+          {
+            turnIndex: 0,
+            userMessage: "install date lib",
+            assistantText: "I'll install moment.",
+            toolCalls: [
+              {
+                id: "t1",
+                name: "Bash",
+                input: { command: "npm install moment" },
+                result: "",
+                succeeded: true,
+              },
+            ],
+            timestamp: "2026-04-14T10:00:00Z",
+          },
+          {
+            turnIndex: 1,
+            userMessage: "不用 moment，改用 dayjs",
+            assistantText: "",
+            toolCalls: [],
+            timestamp: "2026-04-14T10:00:10Z",
+          },
+        ],
+      };
+      const [hit] = ruleBasedCorrectionDetector.detect(session as any);
+      expect(hit!.previousToolCalls[0]).toContain("command=npm install moment");
     });
   });
 

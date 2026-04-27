@@ -16,8 +16,9 @@ const PRAISE_PATTERNS: RegExp[] = [
 
 /** 纠正关键词——用于快速判定一条 user message 是否为 denial。 */
 const DENIAL_PATTERNS: RegExp[] = [
-  /不对|错了|不要|别这样|别那样|别用|思路不对|方向不对|换[一个种]|改用|重来|重新|不该|不应该/,
-  /\b(no|wrong|don't|not|never|instead|that'?s wrong)\b/i,
+  /不对|错了|不行|有问题|不要|不用|别这样|别那样|别用|别这么|先别|先不要|不要直接|别直接|思路不对|方向不对|换[一个种]|换成|改用|改成|重来|重新|不该|不应该|不是(这个|这样|这么|要|让你)|而不是|应该先|先.+再/,
+  /\b(no|wrong|don't|shouldn't|not|never|instead|that'?s wrong|not what I (asked|wanted|meant))\b/i,
+  /\b(use|try|pick|choose)\s+[@A-Za-z0-9][\w@./-]*\s+(instead of|not)\s+[@A-Za-z0-9][\w@./-]*/i,
 ];
 
 /** 只有这些工具代表 AI 实际"生成/修改/执行"，Read/Glob 等只读不算一次"成就" */

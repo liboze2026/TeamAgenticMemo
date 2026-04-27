@@ -17,16 +17,23 @@ const DENIAL_PATTERNS: Array<{ re: RegExp; weight: number }> = [
   // 中文：高置信
   { re: /不对/, weight: 0.95 },
   { re: /错了/, weight: 0.95 },
+  { re: /不行|有问题/, weight: 0.9 },
   { re: /不要/, weight: 0.95 },
+  { re: /不用/, weight: 0.9 },
   { re: /别这样|别那样|别用|别这么/, weight: 0.95 },
+  { re: /先别|先不要|不要直接|别直接/, weight: 0.9 },
   { re: /重来|重新/, weight: 0.9 },
   { re: /换[一个种]|换成|改用|改成/, weight: 0.9 },
   { re: /思路不对|方向不对/, weight: 0.95 },
   { re: /不该|不应该/, weight: 0.9 },
+  { re: /不是(这个|这样|这么|要|让你)|而不是/, weight: 0.85 },
+  { re: /应该先|先.+再/, weight: 0.8 },
   // 英文：整词
-  { re: /\b(no|wrong|don't|not|never)\b/i, weight: 0.9 },
+  { re: /\b(no|wrong|don't|shouldn't|not|never)\b/i, weight: 0.9 },
   { re: /\binstead\b/i, weight: 0.9 },
   { re: /\bthat'?s wrong\b/i, weight: 0.95 },
+  { re: /\bnot what I (asked|wanted|meant)\b/i, weight: 0.9 },
+  { re: /\b(use|try|pick|choose)\s+[@A-Za-z0-9][\w@./-]*\s+(instead of|not)\s+[@A-Za-z0-9][\w@./-]*/i, weight: 0.9 },
 ];
 
 /**
@@ -124,13 +131,15 @@ function detectOverride(assistantText: string, userText: string): boolean {
 
   // 用户明确表达"用 Y" / "Y 更好" / "上 Y" / "改用 Y"
   // 注：\b 不匹配中文边界，中文前缀直接匹配
+  const toolName = "[@A-Za-z0-9][\\w@./-]{1,}";
   const userSpecifies =
-    /(用|改用|上)\s*[A-Za-z][\w-]{1,}/.test(userText) ||
-    /[A-Za-z][\w-]{1,}\s*(更好|轻量|简单)/i.test(userText);
+    new RegExp(`(用|改用|上)\\s*${toolName}`).test(userText) ||
+    new RegExp(`${toolName}\\s*(更好|轻量|简单)`, "i").test(userText) ||
+    new RegExp(`instead of\\s+${toolName}`, "i").test(userText);
   if (!userSpecifies) return false;
 
   // 从用户 message 里抓所有可能的工具/库名
-  const userToolMatch = userText.match(/[A-Za-z][A-Za-z-]{2,}/g);
+  const userToolMatch = userText.match(/[@A-Za-z0-9][A-Za-z0-9@./-]{2,}/g);
   if (!userToolMatch) return false;
 
   // 前提：assistant 上一段确实推荐过某个方案
@@ -214,11 +223,39 @@ function buildMoment(
 function summarizeToolCall(tc: ToolCall): string {
   const keys = Object.keys(tc.input).slice(0, 3);
   const head = `${tc.name}(${keys.join(",")})`;
+  const inputPreview = summarizeToolInput(tc.input);
   if (tc.succeeded === false) {
     // 把失败工具的 stderr/result 前 200 字纳入摘要,
     // 让后续 LLM 看到实际错误内容再判断要不要提规则
     const err = typeof tc.result === "string" ? tc.result.trim().slice(0, 200) : "";
-    return err ? `${head} ✗ ${err}` : `${head} ✗ FAILED`;
+    const body = [inputPreview, err].filter(Boolean).join(" | ");
+    return body ? `${head} ✗ ${body}` : `${head} ✗ FAILED`;
   }
-  return head;
+  return inputPreview ? `${head}: ${inputPreview}` : head;
+}
+
+function summarizeToolInput(input: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const key of [
+    "command",
+    "file_path",
+    "url",
+    "content",
+    "old_string",
+    "new_string",
+    "pattern",
+    "query",
+  ]) {
+    const v = input[key];
+    if (typeof v !== "string" || !v.trim()) continue;
+    parts.push(`${key}=${truncateOneLine(v, 180)}`);
+    if (parts.join(" | ").length > 360) break;
+  }
+  return parts.join(" | ");
+}
+
+function truncateOneLine(s: string, max: number): string {
+  const clean = s.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  return clean.slice(0, max - 1) + "…";
 }
