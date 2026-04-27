@@ -6,6 +6,7 @@ import {
   readSessionInjected,
   appendSessionInjected,
   isFirstPrompt,
+  touchSessionInjected,
 } from "../session-rule-injected.js";
 
 const TMP = path.join(os.tmpdir(), `ta-test-session-${Date.now()}`);
@@ -58,5 +59,25 @@ describe("appendSessionInjected", () => {
   it("is a no-op when ids array is empty", () => {
     appendSessionInjected(TMP, "sess-1", []);
     expect(isFirstPrompt(TMP, "sess-1")).toBe(true);
+  });
+});
+
+describe("touchSessionInjected", () => {
+  it("creates an empty session file marking first-prompt as done", () => {
+    expect(isFirstPrompt(TMP, "sess-touch")).toBe(true);
+    touchSessionInjected(TMP, "sess-touch");
+    expect(isFirstPrompt(TMP, "sess-touch")).toBe(false);
+  });
+
+  it("results in an empty injected set after touch", () => {
+    touchSessionInjected(TMP, "sess-touch");
+    expect(readSessionInjected(TMP, "sess-touch").size).toBe(0);
+  });
+
+  it("is a no-op when file already exists", () => {
+    appendSessionInjected(TMP, "sess-1", ["r1"]);
+    touchSessionInjected(TMP, "sess-1");
+    // Should still contain r1, not be overwritten with []
+    expect(readSessionInjected(TMP, "sess-1").has("r1")).toBe(true);
   });
 });
