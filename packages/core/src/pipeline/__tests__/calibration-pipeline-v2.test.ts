@@ -587,4 +587,60 @@ describe("ai.override.complied → synthetic Observation boosts confidence", () 
       expect(adj.demerit_after).toBeGreaterThan(0);
     }
   });
+
+  it("blocked event creates synthetic success observation", async () => {
+    const entry = makeEntry({ id: "rule-block", confidence: 0.1, demerit: 0 });
+    const store = new InMemoryStore();
+    store.add(entry);
+
+    const blockedEvent = {
+      id: "e-blocked-1",
+      kind: "hook-pre.blocked" as const,
+      knowledge_id: "rule-block",
+      tool_use_id: "t3",
+      timestamp: new Date().toISOString(),
+      schema_version: 1 as const,
+    };
+
+    const result = await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [blockedEvent],
+      observations: [],
+      now: () => NOW,
+      dryRun: true,
+    });
+
+    const adj = result.adjusted.find((a) => a.knowledge_id === "rule-block");
+    expect(adj).toBeDefined();
+    expect(adj!.confidence_after).toBeGreaterThanOrEqual(entry.confidence);
+  });
+
+  it("narrative recurred creates synthetic failure observation and demerit", async () => {
+    const entry = makeEntry({ id: "rule-narr", confidence: 0.8, demerit: 0 });
+    const store = new InMemoryStore();
+    store.add(entry);
+
+    const recurredEvent = {
+      id: "e-recurred-1",
+      kind: "ai.narrative.recurred" as const,
+      knowledge_id: "rule-narr",
+      timestamp: new Date().toISOString(),
+      schema_version: 1 as const,
+    };
+
+    const result = await runCalibrationPipelineV2({
+      calibrator: v2Calibrator,
+      store,
+      events: [recurredEvent],
+      observations: [],
+      now: () => NOW,
+      dryRun: true,
+    });
+
+    const adj = result.adjusted.find((a) => a.knowledge_id === "rule-narr");
+    expect(adj).toBeDefined();
+    expect(adj!.confidence_after).toBeLessThan(entry.confidence);
+    expect(adj!.demerit_after).toBeGreaterThan(0);
+  });
 });

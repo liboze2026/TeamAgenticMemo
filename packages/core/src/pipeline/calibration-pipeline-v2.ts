@@ -49,18 +49,16 @@ export async function runCalibrationPipelineV2(
   const entries = deps.store.getAll();
   const now = deps.now();
 
-  // M2.5: ai.override.complied events → synthetic success observations
-  // M4-A: ai.narrative.complied events → same treatment (AI was warned, didn't repeat)
+  // Convert event-only outcomes into observations so Wilson confidence reacts
+  // even when no PostToolUse result exists (notably blocked tool calls and
+  // narrative/user-input guidance).
   const syntheticObs: Observation[] = deps.events
-    .filter((e) =>
-      (e.kind === "ai.override.complied" || e.kind === "ai.narrative.complied") &&
-      e.knowledge_id,
-    )
+    .filter((e) => e.knowledge_id && syntheticOutcomeForEvent(e.kind) !== null)
     .map((e) => ({
-      id: `synth-complied-${e.id}`,
+      id: `synth-${e.kind}-${e.id}`,
       knowledge_id: e.knowledge_id!,
       timestamp: e.timestamp,
-      outcome: "success" as const,
+      outcome: syntheticOutcomeForEvent(e.kind)!,
       source_event: e.id,
       tool_use_id: e.tool_use_id,
     }));
@@ -295,6 +293,24 @@ function isPromotion(from: string, to: string): boolean {
 const L1_GATED_TIERS = new Set(["stable", "canonical", "enforced"]);
 const L2_GATED_TIERS = new Set(["canonical", "enforced"]);
 const STABLE_PLUS = new Set(["stable", "canonical", "enforced"]);
+
+function syntheticOutcomeForEvent(kind: string): Observation["outcome"] | null {
+  if (
+    kind === "hook-pre.blocked" ||
+    kind === "ai.override.complied" ||
+    kind === "ai.narrative.complied"
+  ) {
+    return "success";
+  }
+  if (
+    kind === "ai.override.ignored" ||
+    kind === "ai.override.blocked_circumvented" ||
+    kind === "ai.narrative.recurred"
+  ) {
+    return "failure";
+  }
+  return null;
+}
 
 /**
  * Validator 阻断晋升时：回退 tier 到 revertTo；清除 tier_transition；
