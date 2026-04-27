@@ -23,3 +23,15 @@ export function deleteRuleVectors(db: DatabaseSync, ruleId: string): void {
   db.prepare("DELETE FROM knowledge_trigger_vec WHERE id = ?").run(ruleId);
   db.prepare("DELETE FROM knowledge_pattern_vec WHERE id = ?").run(ruleId);
 }
+
+/** 把规则的 tool_context 向量写到 knowledge_tool_vec 虚表。幂等。 */
+export function syncToolVector(
+  db: DatabaseSync,
+  ruleId: string,
+  vec: Float32Array,
+): void {
+  db.prepare("DELETE FROM knowledge_tool_vec WHERE id = ?").run(ruleId);
+  db.prepare(
+    "INSERT INTO knowledge_tool_vec(id, vec) VALUES (?, ?)",
+  ).run(ruleId, new Uint8Array(vec.buffer));
+}
