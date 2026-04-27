@@ -36,3 +36,19 @@ export function appendSessionInjected(
     // best-effort
   }
 }
+
+/**
+ * Touch (create) the session injected file with an empty list if it doesn't
+ * already exist. Used to mark "first prompt has been processed" even when no
+ * rules were injected, preventing Tier-1 from re-triggering on subsequent prompts.
+ */
+export function touchSessionInjected(sessionsDir: string, sessionId: string): void {
+  const fp = filePath(sessionsDir, sessionId);
+  if (existsSync(fp)) return;
+  try {
+    mkdirSync(sessionsDir, { recursive: true });
+    writeFileSync(fp, "[]");
+  } catch {
+    // best-effort
+  }
+}

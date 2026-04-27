@@ -28,6 +28,15 @@ import {
   scanUserInput,
   formatUserInputFlag,
 } from "./user-prompt-inject.js";
+import {
+  retrieveRulesForPrompt,
+} from "./user-prompt-rule-retriever.js";
+import {
+  isFirstPrompt,
+  appendSessionInjected,
+  readSessionInjected,
+  touchSessionInjected,
+} from "./session-rule-injected.js";
 
 const DEFAULT_FREQ = {
   cooldownMinutes: 30,
@@ -145,6 +154,44 @@ async function main(): Promise<void> {
     }
   } catch {
     // M4-A injection is best-effort — never block user input
+  }
+
+  // Rule semantic retrieval (Tier-1 / Tier-2)
+  try {
+    const sessionId = input.session_id ?? "";
+    if (sessionId && prompt) {
+      const sessionsDir = path.join(os.homedir(), ".teamagent", "sessions");
+      const globalDbPath = path.join(os.homedir(), ".teamagent", "global.db");
+      const firstPrompt = isFirstPrompt(sessionsDir, sessionId);
+      const seenIds = readSessionInjected(sessionsDir, sessionId);
+
+      const ruleResult = await Promise.race([
+        retrieveRulesForPrompt({
+          userMessage: prompt,
+          cwd,
+          projectDbPath: dbPath,
+          globalDbPath,
+          sessionSeenIds: seenIds,
+          isFirstPrompt: firstPrompt,
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), HOOK_TIMEOUT_MS)),
+      ]);
+
+      if (ruleResult) {
+        if (ruleResult.injectionText) {
+          blocks.push(ruleResult.injectionText);
+        }
+        if (ruleResult.allInjectedIds.length > 0) {
+          appendSessionInjected(sessionsDir, sessionId, ruleResult.allInjectedIds);
+        } else if (firstPrompt) {
+          // Even when no rules were found on the first prompt, touch the session
+          // file so Tier-1 doesn't re-trigger on subsequent prompts.
+          touchSessionInjected(sessionsDir, sessionId);
+        }
+      }
+    }
+  } catch {
+    // rule retrieval is best-effort — never block user input
   }
 
   // Wiki injection (original M2.7 path)
