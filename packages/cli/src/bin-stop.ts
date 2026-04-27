@@ -400,11 +400,29 @@ function logError(cwd: string, step: string, err: unknown): void {
   }
 }
 
+function isValidStopHookInput(v: unknown): v is StopHookInput {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as StopHookInput).session_id === "string" &&
+    typeof (v as StopHookInput).transcript_path === "string" &&
+    typeof (v as StopHookInput).cwd === "string"
+  );
+}
+
 async function main(): Promise<void> {
   // When spawned as detached pipeline subprocess
   if (process.env["TEAMAGENT_STOP_PIPELINE"] === "1") {
-    const input = JSON.parse(process.argv[2] ?? "{}") as StopHookInput;
-    await runStopPipeline(input);
+    const parsed = JSON.parse(process.argv[2] ?? "{}");
+    if (!isValidStopHookInput(parsed)) {
+      logError(
+        process.cwd(),
+        "main",
+        new Error(`detached spawn received invalid input: ${process.argv[2]}`),
+      );
+      return;
+    }
+    await runStopPipeline(parsed);
     return;
   }
 
@@ -414,12 +432,25 @@ async function main(): Promise<void> {
   const raw = Buffer.concat(chunks).toString("utf-8").trim();
   if (!raw) return;
 
-  const input = JSON.parse(raw) as StopHookInput;
-  const cwd = input.cwd ?? process.cwd();
+  const parsed = JSON.parse(raw);
+  if (!isValidStopHookInput(parsed)) {
+    logError(
+      process.cwd(),
+      "main",
+      new Error(`stdin payload missing required fields: ${raw.slice(0, 200)}`),
+    );
+    return;
+  }
+  const input = parsed;
+  const cwd = input.cwd;
   const config = readTeamAgentConfig(cwd);
 
   if (config.stop_mode === "async") {
-    const selfPath = process.argv[1]!;
+    const selfPath = process.argv[1];
+    if (!selfPath) {
+      logError(cwd, "main", new Error("process.argv[1] missing — cannot self-spawn"));
+      return;
+    }
     const child = spawn(process.execPath, [selfPath, JSON.stringify(input)], {
       detached: true,
       stdio: "ignore",
@@ -429,6 +460,12 @@ async function main(): Promise<void> {
       // console window. In async mode that fires on every session close, so
       // users see a flurry of popups. Must hide.
       windowsHide: true,
+    });
+    // Catch spawn errors (e.g. ENOENT when node path resolution fails on
+    // Windows with spaces or when running under tsx with .ts argv[1]); log
+    // and exit cleanly rather than crash with an unhandled 'error' event.
+    child.on("error", (err) => {
+      logError(cwd, "spawn-detached", err);
     });
     child.unref();
     return;

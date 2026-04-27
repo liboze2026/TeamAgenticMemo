@@ -169,10 +169,33 @@ function checkClaudeCode(): DoctorCheckResult {
 }
 
 function checkSqliteVec(): DoctorCheckResult {
+  // sqlite-vec is declared as a dependency of `@teamagent/adapters` and an
+  // (optional) peer of the `teamagent` package. The doctor binary lives in
+  // `@teamagent/cli`, which does NOT declare it directly — so under pnpm,
+  // a naive `require("sqlite-vec")` from doctor.ts may fail simply because
+  // pnpm did not symlink the package into cli's node_modules. Try multiple
+  // resolution anchors before giving up.
   try {
     _require("sqlite-vec");
     return { name: "sqlite-vec", status: "pass", detail: "加载成功" };
   } catch {
+    // Fallback: resolve from sibling packages where sqlite-vec is actually declared.
+    const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w):/, "$1:"));
+    const candidates = [
+      // packages/cli/.../doctor.ts → walk up to monorepo root
+      path.resolve(here, "../../../adapters"),
+      path.resolve(here, "../../../teamagent"),
+      path.resolve(here, "../../../../adapters"),
+      path.resolve(here, "../../../../teamagent"),
+    ];
+    for (const root of candidates) {
+      try {
+        _require.resolve("sqlite-vec", { paths: [root] });
+        return { name: "sqlite-vec", status: "pass", detail: `加载成功 (resolved via ${path.basename(root)})` };
+      } catch {
+        // try next
+      }
+    }
     return {
       name: "sqlite-vec",
       status: "fail",

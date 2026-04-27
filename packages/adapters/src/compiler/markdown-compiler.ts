@@ -84,10 +84,21 @@ export class MarkdownCompiler implements Compiler<string> {
     const block = this.compile(entries);
     const updated = injectBlockIntoDoc(existing, block);
 
-    // 原子写
+    // 原子写。Windows 下 renameSync 偶尔会被 AV/IDE 锁住目标文件触发 EBUSY/EPERM，
+    // 此时直接覆盖回退；任何失败都 unlink 临时文件，否则用户工作区会堆积 .tmp-* 残留。
     const tmpPath = `${this.mdPath}.tmp-${process.pid}-${Date.now()}`;
     fs.writeFileSync(tmpPath, updated, "utf-8");
-    fs.renameSync(tmpPath, this.mdPath);
+    try {
+      fs.renameSync(tmpPath, this.mdPath);
+    } catch (err) {
+      try {
+        fs.writeFileSync(this.mdPath, updated, "utf-8");
+        fs.unlinkSync(tmpPath);
+      } catch {
+        try { fs.unlinkSync(tmpPath); } catch { /* leave for next run */ }
+        throw err;
+      }
+    }
 
     const allLines = updated.split("\n");
     const startLine = allLines.findIndex((l) => l.includes(BLOCK_START));

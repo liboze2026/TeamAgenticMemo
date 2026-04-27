@@ -240,8 +240,21 @@ function normalizeNature(raw: string): "objective" | "subjective" {
   return "subjective";
 }
 
+/** 必填字段缺失或全空时抛出，由 bin.ts 捕获并以非零退出码报错。 */
+export class PitfallValidationError extends Error {
+  constructor(public readonly missing: string[]) {
+    super(
+      `pitfall --non-interactive 缺少必填字段: ${missing.join(", ")}\n` +
+        `用法: teamagent pitfall --non-interactive --trigger=... --correct=... --reason=... [--wrong=...]`,
+    );
+    this.name = "PitfallValidationError";
+  }
+}
+
 /**
  * 解析 CLI 参数，支持 --non-interactive + flag 方式非交互调用。
+ * 必填字段缺失会抛 PitfallValidationError——非交互模式下漏字段会直接污染知识库，
+ * 必须早失败而不是接受空字符串。
  */
 export function parsePitfallArgs(argv: string[]): PitfallInput | null {
   if (!argv.includes("--non-interactive")) return null;
@@ -252,15 +265,22 @@ export function parsePitfallArgs(argv: string[]): PitfallInput | null {
     return found ? found.slice(prefix.length) : undefined;
   };
 
-  const trigger = getFlag("trigger") ?? "";
-  const wrong = getFlag("wrong") ?? "";
-  const correct = getFlag("correct") ?? "";
-  const reason = getFlag("reason") ?? "";
+  const trigger = (getFlag("trigger") ?? "").trim();
+  const wrong = (getFlag("wrong") ?? "").trim();
+  const correct = (getFlag("correct") ?? "").trim();
+  const reason = (getFlag("reason") ?? "").trim();
   const category = getFlag("category") as "C" | "E" | "S" | "K" | undefined;
   const tagsRaw = getFlag("tags");
   const level = getFlag("level") as "personal" | "team" | "global" | undefined;
   const nature = getFlag("nature") as "objective" | "subjective" | undefined;
   const project = getFlag("project");
+
+  // trigger / correct / reason 必填；wrong 可选（避免-> 空 = practice 类规则）
+  const missing: string[] = [];
+  if (!trigger) missing.push("--trigger");
+  if (!correct) missing.push("--correct");
+  if (!reason) missing.push("--reason");
+  if (missing.length > 0) throw new PitfallValidationError(missing);
 
   const tags = tagsRaw
     ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean)

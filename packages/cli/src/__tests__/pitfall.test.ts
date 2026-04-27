@@ -233,4 +233,24 @@ describe("parsePitfallArgs", () => {
     expect(input!.category).toBeUndefined();
     expect(input!.tags).toBeUndefined();
   });
+
+  it("throws PitfallValidationError when required flags are missing", () => {
+    expect(() =>
+      parsePitfallArgs([
+        "--non-interactive",
+        "--trigger=t",
+        "--wrong=w",
+        "--correct=c",
+        // --reason missing
+      ]),
+    ).toThrow(/缺少必填字段.*--reason/);
+    expect(() =>
+      parsePitfallArgs([
+        "--non-interactive",
+        "--trigger=", // empty
+        "--correct=c",
+        "--reason=r",
+      ]),
+    ).toThrow(/缺少必填字段.*--trigger/);
+  });
 });

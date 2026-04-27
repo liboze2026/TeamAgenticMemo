@@ -61,13 +61,13 @@ export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
   });
 
   if (opts.dryRun) {
-    process.stdout.write(`[dry-run] Would fetch ${report.dryRunItems?.length ?? 0} items:\n`);
+    process.stdout.write(`[dry-run] 将拉取 ${report.dryRunItems?.length ?? 0} 条:\n`);
     for (const item of report.dryRunItems ?? []) {
       process.stdout.write(`  [${item.source}] ${item.title} — ${item.url}\n`);
     }
   } else {
     process.stdout.write(
-      `wiki:pull complete — added: ${report.added}, skipped: ${report.skipped}, rejected: ${report.rejected}\n`
+      `wiki:pull 完成 — 新增: ${report.added}, 跳过: ${report.skipped}, 拒绝: ${report.rejected}\n`
     );
 
     // Append to .teamagent/last-wiki-pull.md so user can see what came in.
@@ -110,7 +110,7 @@ export async function executeWikiPull(opts: WikiCommandOptions): Promise<void> {
   }
 
   if (report.errors.length > 0) {
-    process.stderr.write(`Errors (${report.errors.length}):\n`);
+    process.stderr.write(`错误 (${report.errors.length}):\n`);
     for (const e of report.errors) {
       process.stderr.write(`  ${e.source}: ${e.error}\n`);
     }
@@ -130,7 +130,7 @@ export async function executeWikiAdd(url: string, opts: WikiCommandOptions): Pro
   const report = await pipeline.run({ manualUrl: url });
 
   process.stdout.write(
-    `wiki:add — added: ${report.added}, skipped: ${report.skipped}, rejected: ${report.rejected}\n`
+    `wiki:add — 新增: ${report.added}, 跳过: ${report.skipped}, 拒绝: ${report.rejected}\n`
   );
 }
 
@@ -144,16 +144,16 @@ export async function executeWikiList(opts: WikiCommandOptions): Promise<void> {
   const entries = store.list({ limit: opts.limit ?? 20, sourceType: opts.sourceFilter });
 
   if (entries.length === 0) {
-    process.stdout.write("No wiki entries found. Run `teamagent wiki:pull` first.\n");
+    process.stdout.write("暂无 wiki 条目。先运行 `teamagent wiki:pull` 拉取。\n");
     return;
   }
 
   for (const e of entries) {
     process.stdout.write(`\n[${e.knowledgeId.slice(0, 8)}] ${e.title}\n`);
-    process.stdout.write(`  source: ${e.sourceType} | ${e.publishedAt.toISOString().slice(0, 10)}\n`);
-    process.stdout.write(`  tldr: ${e.tldr}\n`);
-    process.stdout.write(`  keywords: ${e.keywords.join(", ")}\n`);
-    process.stdout.write(`  url: ${e.sourceUrl}\n`);
+    process.stdout.write(`  来源: ${e.sourceType} | ${e.publishedAt.toISOString().slice(0, 10)}\n`);
+    process.stdout.write(`  摘要: ${e.tldr}\n`);
+    process.stdout.write(`  关键词: ${e.keywords.join(", ")}\n`);
+    process.stdout.write(`  链接: ${e.sourceUrl}\n`);
   }
 }
 
@@ -169,9 +169,9 @@ export async function executeWikiStats(opts: WikiCommandOptions): Promise<void> 
   const s = store.stats();
   const subs = subStore.list();
 
-  process.stdout.write(`total: ${s.total} | subscriptions: ${subs.length}\n`);
-  process.stdout.write(`by_source: ${JSON.stringify(s.bySource)}\n`);
-  process.stdout.write(`last_pull: ${s.lastPull ?? "never"}\n`);
+  process.stdout.write(`总数: ${s.total} | 订阅: ${subs.length}\n`);
+  process.stdout.write(`按来源: ${JSON.stringify(s.bySource)}\n`);
+  process.stdout.write(`上次拉取: ${s.lastPull ?? "尚未拉取"}\n`);
 }
 
 // wiki:subscriptions
@@ -184,12 +184,12 @@ export async function executeWikiSubscriptions(opts: WikiCommandOptions): Promis
   const subs = store.list();
 
   if (subs.length === 0) {
-    process.stdout.write("No subscriptions. Run `teamagent wiki:pull` to auto-subscribe.\n");
+    process.stdout.write("暂无订阅源。运行 `teamagent wiki:pull` 自动订阅默认源。\n");
     return;
   }
 
   for (const s of subs) {
-    const label = s.autoAdded ? "[auto]" : "[manual]";
+    const label = s.autoAdded ? "[自动]" : "[手动]";
     process.stdout.write(`${label} ${s.sourceType}: ${JSON.stringify(s.config)}\n`);
   }
 }
@@ -204,15 +204,15 @@ export async function executeWikiSubscribe(opts: WikiCommandOptions): Promise<vo
 
   if (opts.repo) {
     store.add("github_release", { repo: opts.repo });
-    process.stdout.write(`✓ Subscribed: github_release ${opts.repo}\n`);
+    process.stdout.write(`✓ 已订阅 github_release ${opts.repo}\n`);
   } else if (opts.rss) {
     store.add("rss", { url: opts.rss });
-    process.stdout.write(`✓ Subscribed: rss ${opts.rss}\n`);
+    process.stdout.write(`✓ 已订阅 rss ${opts.rss}\n`);
   } else if (opts.arxiv) {
     store.add("arxiv", { category: opts.arxiv });
-    process.stdout.write(`✓ Subscribed: arxiv ${opts.arxiv}\n`);
+    process.stdout.write(`✓ 已订阅 arxiv ${opts.arxiv}\n`);
   } else {
-    process.stderr.write("Usage: teamagent wiki:subscribe --repo owner/repo | --rss <url> | --arxiv <category>\n");
+    process.stderr.write("用法: teamagent wiki:subscribe --repo owner/repo | --rss <url> | --arxiv <category>\n");
     process.exit(1);
   }
 }
@@ -226,9 +226,9 @@ export async function executeWikiUnsubscribe(opts: WikiCommandOptions): Promise<
   const store = new WikiSubscriptionStore(db);
   const found = store.remove(opts.sourceId!);
   if (found) {
-    process.stdout.write(`✓ Unsubscribed ${opts.sourceId}\n`);
+    process.stdout.write(`✓ 已退订 ${opts.sourceId}\n`);
   } else {
-    process.stderr.write(`Not found: ${opts.sourceId}\n`);
+    process.stderr.write(`未找到订阅: ${opts.sourceId}\n`);
   }
 }
 
@@ -242,12 +242,12 @@ export async function executeWikiRejected(opts: WikiCommandOptions): Promise<voi
   const entries = store.listRejections({ limit: opts.limit ?? 20 });
 
   if (entries.length === 0) {
-    process.stdout.write("No rejections.\n");
+    process.stdout.write("暂无被拒绝的条目。\n");
     return;
   }
 
   for (const e of entries) {
-    process.stdout.write(`[${e.id.slice(0, 8)}] ${e.title ?? "(no title)"} | reason: ${e.reason}\n`);
+    process.stdout.write(`[${e.id.slice(0, 8)}] ${e.title ?? "(无标题)"} | 原因: ${e.reason}\n`);
   }
 }
 
@@ -260,9 +260,9 @@ export async function executeWikiDislike(knowledgeId: string, opts: WikiCommandO
   const store = new WikiStore(db);
   const found = store.dislike(knowledgeId);
   if (found) {
-    process.stdout.write(`✓ Disliked ${knowledgeId} — will be skipped in future injections\n`);
+    process.stdout.write(`✓ 已标记 ${knowledgeId} 为不喜欢，后续注入会跳过\n`);
   } else {
-    process.stderr.write(`Not found: ${knowledgeId}\n`);
+    process.stderr.write(`未找到条目: ${knowledgeId}\n`);
   }
 }
 

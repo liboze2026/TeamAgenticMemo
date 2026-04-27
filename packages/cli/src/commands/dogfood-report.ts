@@ -47,7 +47,11 @@ function readGitTimeline(cwd: string): Array<{ hash: string; date: string; messa
   try {
     const out = execSync(
       'git log --pretty=format:"%h|%ad|%s" --date=short -100',
-      { cwd, encoding: "utf-8", windowsHide: true },
+      // stdio: pipe stderr so a missing .git directory does not leak
+      // "fatal: not a git repository" to the user's terminal — the catch
+      // below already returns []. Without "ignore" / "pipe" stderr, the
+      // child writes directly to our stderr.
+      { cwd, encoding: "utf-8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
     );
     return out
       .split("\n")

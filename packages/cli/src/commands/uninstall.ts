@@ -90,8 +90,15 @@ export function uninstall(opts: UninstallOptions = {}): UninstallResult {
           fs.readFileSync(claudeMd, "utf-8"),
         );
         if (stripped.changed) {
-          fs.writeFileSync(claudeMd, stripped.content, "utf-8");
-          actions.push(`已从 CLAUDE.md 移除 TEAMAGENT 区块`);
+          // 如果剥掉 TEAMAGENT 区块后只剩空白（仅换行/空格），干脆删 CLAUDE.md：
+          // 留一个 1-byte 空文件给用户的工作区只是垃圾，且 init 会重建。
+          if (stripped.content.trim().length === 0) {
+            fs.unlinkSync(claudeMd);
+            actions.push(`已从 CLAUDE.md 移除 TEAMAGENT 区块（剩余空白，已删除空文件）`);
+          } else {
+            fs.writeFileSync(claudeMd, stripped.content, "utf-8");
+            actions.push(`已从 CLAUDE.md 移除 TEAMAGENT 区块`);
+          }
         } else {
           actions.push(`CLAUDE.md 无 TEAMAGENT 区块，跳过`);
         }

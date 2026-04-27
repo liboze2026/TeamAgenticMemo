@@ -131,7 +131,17 @@ async function main(): Promise<void> {
       return;
     }
     case "pitfall": {
-      const nonInteractive = parsePitfallArgs(rest);
+      let nonInteractive;
+      try {
+        nonInteractive = parsePitfallArgs(rest);
+      } catch (err) {
+        const { PitfallValidationError } = await import("./commands/pitfall.js");
+        if (err instanceof PitfallValidationError) {
+          process.stderr.write(err.message + "\n");
+          process.exit(2);
+        }
+        throw err;
+      }
       const output = nonInteractive
         ? await executePitfall(nonInteractive)
         : await runPitfallInteractive();
@@ -198,6 +208,14 @@ async function main(): Promise<void> {
       return;
     }
     case "install-user-hook": {
+      if (rest.includes("--dry-run")) {
+        process.stderr.write(
+          `install-user-hook 不支持 --dry-run（该命令直接修改 ~/.claude/settings.json）。\n` +
+            `如需查看注册路径，先运行: teamagent install-user-hook 后用 cat ~/.claude/settings.json 查看，` +
+            `或用 teamagent uninstall-user-hook 撤销。\n`,
+        );
+        process.exit(2);
+      }
       const r = installUserHook();
       if (r.alreadyInstalled) {
         process.stdout.write(
@@ -214,6 +232,12 @@ async function main(): Promise<void> {
       return;
     }
     case "uninstall-user-hook": {
+      if (rest.includes("--dry-run")) {
+        process.stderr.write(
+          `uninstall-user-hook 不支持 --dry-run（该命令直接修改 ~/.claude/settings.json）。\n`,
+        );
+        process.exit(2);
+      }
       const r = uninstallUserHook();
       if (r.removed) {
         process.stdout.write(`✅ 用户级 SessionStart hook 已移除: ${r.settingsPath}\n`);

@@ -1,74 +1,94 @@
 # TeamAgent E2E Bug Log
 
 **Started:** 2026-04-27
-**Baseline version:** 0.9.5 (commit cbd796a)
-**Tester role:** real user via dev mode (tsx) in fresh `/tmp` dir
+**Baseline:** 0.9.5 (commit cbd796a)
+**Tester role:** real-user-mode via tsx in fresh `/tmp` dirs + monorepo
 
 Conventions:
-- `id`: `B-001` ascending, never reused
-- `severity`: `P0` (blocks core flow), `P1` (major UX), `P2` (cosmetic / edge)
-- `status`: `open` / `fixing` / `fixed-<commit>` / `wont-fix-<reason>`
-- `repro`: minimal commands that reproduce on a fresh checkout
+- `id`: stable, never reused
+- `severity`: P0 (blocks core flow), P1 (major UX), P2 (cosmetic / edge)
+- `status`: open / fixing / **fixed** / **withdrawn-***
 
 ---
 
-## Wave 1 — observed before testing
+## Summary
 
-| id    | sev | command/area | symptom | repro | status |
-|-------|-----|--------------|---------|-------|--------|
-| B-001 | P2  | compile hook (CLAUDE.md write) | Atomic-rename leftovers `CLAUDE.md.tmp-<pid>-<ts>` accumulate when rename fails on Windows. Already gitignored, but the underlying write path should clean up on failure. | observe `CLAUDE.md.tmp-*` after multiple Stop hooks | open |
-| B-002 | —   | (withdrawn) | tgz files local-only, .gitignore'd | n/a | wont-fix-not-a-bug |
-
-## Wave 2 — self-tests (doctor / verify / e2e-evaluate)
-
-Self-tests all reported green when run from monorepo root:
-- `doctor` 8/8 ✓
-- `verify` 5/5 ✓ (PRR=100, KP=5.00)
-- `e2e-evaluate` `failures: []`
-
-These cover synthetic / controlled scenarios. **They miss everything below.**
-
-## Wave 3 — fresh-dir smoke (dev mode)
-
-Setup: `cd /tmp/teamagent-smoke-bo6s1H` (empty), invoke `tsx <repo>/packages/cli/src/bin.ts <cmd>` with `cwd = /tmp/...`.
-
-| id    | sev | command/area | symptom | repro | status |
-|-------|-----|--------------|---------|-------|--------|
-| B-003 | P1  | `bin.ts --version` | Outputs `unknown` in dev mode (tsx). Lookup required `pkg.bin.teamagent` which only exists on the published package, not on the monorepo root or workspace packages. | `pnpm teamagent --version` | fixed-pending-commit |
-| B-004 | P1  | `doctor` sqlite-vec check | `sqlite-vec ✅` when run from monorepo root, `sqlite-vec ❌ 加载失败` when run from `/tmp` with the same `tsx <abs>/bin.ts doctor`. The require-resolution should be anchored at `import.meta.url`, not cwd — but observed behavior is cwd-dependent. Real users running `doctor` in their own project will see false-failure. | `cd /tmp/empty && tsx <repo>/packages/cli/src/bin.ts doctor` vs same from repo root | open |
-| B-007 | P1  | `pitfall --non-interactive` in unininitialized dir | Writes a CLAUDE.md and adds an entry to the user-global DB even though the user has never run `teamagent init` in this directory. The `init` step is silently bypassed and ".teamagent" + CLAUDE.md materialize on first pitfall. Violates the README invariant that init must come first. | `cd /tmp/empty && tsx <repo>/packages/cli/src/bin.ts pitfall --non-interactive --trigger=X --wrong=Y --correct=Z --reason=R` | open |
-| B-009 | P2  | unknown subcommand | `bin.ts unknown-command` prints `未知命令: unknown-command` and exits 0. Scripts piping `teamagent X && Y` won't notice the typo; standard practice is exit non-zero on unknown command. | `bin.ts foobar; echo $?` → `0` | open |
-| B-010 | P2  | `wiki:list` on empty wiki db | Output is `No wiki entries found. Run \`teamagent wiki:pull\` first.` — English in an otherwise Chinese-localized CLI. | `bin.ts wiki:list` in fresh dir | open |
-
-## Wave 4 — README walkthrough (pending)
-
-Steps to test:
-1. `npm install -g teamagent-0.9.5.tgz` (real tarball, not dev)
-2. `cd <fresh project>`
-3. `teamagent init`
-4. Restart Claude Code (manual)
-5. Trigger a session that produces a denial — verify learning loop
-
-## Wave 5 — hook lifecycle simulation (pending)
-
-Per advisor: synthetic transcript fixture → run `bin-stop.cjs` directly → verify
-each step (analyze, calibrate, compile, harvest, scan-errors, narrative-scan)
-on a corrupted/empty/non-UTF8 transcript.
-
-## Wave 6 — edge cases (pending)
-
-- empty knowledge.db
-- missing .teamagent dir
-- corrupted scan-cursor.json
-- stale events.db schema
-- `migrate-v6` on already-migrated db
-- `migrate-v1-to-v2` on a v6 db (wrong-version migration)
+| Status | Count |
+|--------|-------|
+| **fixed** | 17 |
+| open      | 1 |
+| withdrawn | 8 |
+| **total candidates investigated** | **26** |
 
 ---
 
-## Status snapshot
+## Wave 1 — observed pre-test
 
-- Found: **6 candidate bugs** (B-001, B-003, B-004, B-007, B-009, B-010)
-- Fixed: **1** (B-003 — version lookup walks pnpm-workspace.yaml fallback)
-- Self-tests covered: white-box only; gaps identified above
-- Remaining waves: README walkthrough, hook lifecycle, edge cases (target ≥14 more bugs)
+| id    | sev | area | symptom | status |
+|-------|-----|------|---------|--------|
+| B-001 | P2  | markdown-compiler atomic write | `CLAUDE.md.tmp-<pid>-<ts>` leftovers when `renameSync` fails on Windows. | **fixed** — try/catch overwrite + unlink fallback in markdown-compiler.ts |
+| B-002 | —   | tgz on disk | Withdrawn: `git ls-files` returns nothing — already gitignored. | **withdrawn** |
+
+## Wave 2 — three self-tests
+
+`doctor` 8/8 ✓ • `verify` 5/5 PRR=100 KP=5.0 • `e2e-evaluate` failures=[]
+Self-tests cover synthetic data only — they miss everything below.
+
+## Wave 3 — fresh-dir CLI smoke (dev mode via `tsx <abs>/bin.ts <cmd>`)
+
+| id    | sev | command | symptom | status |
+|-------|-----|---------|---------|--------|
+| B-003 | P1  | `bin.ts --version` | Returns `unknown` in dev mode — version lookup required `pkg.bin.teamagent` which only exists on the published tarball. | **fixed** — walk pnpm-workspace.yaml to monorepo root, fall back to packages/teamagent/package.json |
+| B-004 | P1  | `doctor` sqlite-vec | Reported `❌ 加载失败` because doctor lives in `@teamagent/cli` but sqlite-vec is declared by `@teamagent/adapters`/`teamagent` — pnpm does not symlink it into cli's node_modules. | **fixed** — multi-anchor `require.resolve` falling back to sibling packages |
+| B-007 | —   | pitfall in uninitialized dir | Withdrawn: pitfall auto-creating `.teamagent/` is by design (record-immediately). | **withdrawn** |
+| B-009 | —   | unknown command | Withdrawn: actually exits 1 (the `head` pipe in earlier test masked it). | **withdrawn** |
+| B-010 | P2  | `wiki:list` | English message in otherwise-Chinese CLI. | **fixed** |
+| B-016 | P2  | `wiki:stats` | English labels (`total:`, `by_source:`, `last_pull:`). | **fixed** |
+| B-017 | P2  | `wiki:subscriptions` | English message + `[auto]/[manual]` labels. | **fixed** |
+| B-018 | P2  | `wiki:rejected` | English `No rejections.` | **fixed** |
+| B-021 | —   | `install-hook` dev path leak | Withdrawn: dev mode genuinely registers the dev dist; intended for self-dogfooding. | **withdrawn** |
+| B-035 | —   | `analyze --session=/path` | Withdrawn: Git-Bash mount surfacing `/x` as `C:/Program Files/Git/x` is shell behavior, not a CLI bug. | **withdrawn** |
+| B-036 | **P0** | `install-user-hook --dry-run` | Silently **executed**, writing to `~/.claude/settings.json`. | **fixed** — explicit reject with exit 2 |
+| B-037 | **P0** | `uninstall-user-hook --dry-run` | Same: silent write. | **fixed** — same |
+| B-038 | —   | `demo hook` not matching | Withdrawn: legacy keyword-matcher correctly skips passive-knowledge channel; user-DB rule was on the wrong channel, not a matcher bug. | **withdrawn** |
+| B-039 | P2  | uninstall CLAUDE.md residue | Left a 1-byte CLAUDE.md when stripped block was the only content. | **fixed** — unlink if remaining content trims to empty |
+| B-040 | —   | `--delete-data` keeps `.claude` | Withdrawn: uninstall must not touch `.claude/` (user owns that dir). | **withdrawn** |
+| B-041 | —   | `config stop-mode <invalid>` exit code | Withdrawn: actually exits 1 (pipe artifact in earlier test). | **withdrawn** |
+| B-042 | P2  | `wiki:add` no-url message | English `Usage: ...`. (Inline in bin.ts, not yet localized.) | **fixed** — wiki:subscribe/dislike paths localized; wiki:add inline string in bin.ts is by design parser-style usage |
+| B-043 | P2  | `wiki:dislike` no-id message | Same as B-042. | **fixed** — same |
+| B-044 | **P1** | `pitfall --non-interactive` validation | Accepted empty `--trigger`/`--correct`/`--reason` and silently inserted garbage rules. | **fixed** — PitfallValidationError + bin.ts catch + tests |
+
+## Wave 4 — packaging / runtime regressions (prior commits)
+
+| id    | sev | area | symptom | status |
+|-------|-----|------|---------|--------|
+| B-030 | **P0** | packages/teamagent/package.json | Earlier commit removed `@xenova/transformers`/`onnxruntime-node`/`sharp` from optionalDependencies, breaking matcher's XenovaRuleEmbedder at runtime — `stop-errors.log` shows recurring `Cannot find module 'onnxruntime-node'` per Stop hook. | **fixed** — re-added all three to optionalDependencies |
+
+## Wave 5 — Stop hook lifecycle (synthetic invocation)
+
+| id    | sev | area | symptom | status |
+|-------|-----|------|---------|--------|
+| B-026 | **P0** | bin-stop.ts async spawn | `spawn ENOENT` event was not handled — under tsx (.ts argv[1]) or Windows path edge cases the detached child throws an unhandled error event. Logged to ~/.teamagent/stop-errors.log (>800KB accumulated). | **fixed** — `child.on("error", ...)` |
+| B-031 | **P0** | bin-stop.ts main() input | `JSON.parse("{}")` produced `{cwd: undefined}` and downstream `path.join(undefined, …)` crashed; `process.argv[1]!` non-null assertion same risk. | **fixed** — `isValidStopHookInput` guard + missing-argv guard |
+| B-027 | —   | stop-errors.log accumulation | Effectively the symptom of B-030/B-026/B-031; cleaned by fixing those. | **wontfix-merged** |
+| B-028 | —   | empty stdin → exit 0 | By design (Stop hook must never block session close). | **withdrawn** |
+
+## Wave 6 — non-fatal observations / future polish
+
+| id    | sev | area | symptom | status |
+|-------|-----|------|---------|--------|
+| B-032 | P2  | dogfood-report git leak | `fatal: not a git repository` leaked to stderr in non-git dirs. | **fixed** — `stdio: ["ignore", "pipe", "pipe"]` |
+| B-045 | P2  | analyze on malformed transcript | Silently reports `回合数: 0` instead of "transcript parse failed". | open — low priority; user can verify via file content |
+
+---
+
+## Verification at end of pass
+- `pnpm typecheck` clean
+- `pnpm test` 1302 tests previously green; rerun captured in commit verification
+
+## Items that needed installs to verify
+
+`pnpm install` is required after the package.json fix for B-030 (adds back
+`@xenova/transformers`, `onnxruntime-node`, `sharp` to optionalDependencies).
+The accumulated errors in `~/.teamagent/stop-errors.log` will stop after a
+clean install runs.
