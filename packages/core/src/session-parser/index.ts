@@ -61,7 +61,9 @@ function extractToolResults(
       id: block.tool_use_id,
       payload: {
         content: c,
-        succeeded: !/\b(error|err!|failed|not found|exit code [1-9])/i.test(c),
+        // B-052: added errno to catch Node.js system error objects like {"errno":-13}
+        // Note: closing \b omitted because err! ends in a non-word char and would break matching.
+        succeeded: !/\b(error|err!|failed|not found|exit code [1-9]|errno)/i.test(c),
       },
     });
   }

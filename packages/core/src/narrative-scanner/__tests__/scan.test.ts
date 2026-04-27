@@ -178,3 +178,29 @@ describe("scanNarrative", () => {
     expect(elapsed).toBeLessThan(50);
   });
 });
+
+describe("B-054: scanNarrative.splitPatterns single-pattern length check", () => {
+  it("B-054: single 1-char wrong_pattern 'a' (no pipe) does NOT match", () => {
+    const rule = makeRule({ wrong_pattern: "a" });
+    const hits = scanNarrative("This AI response contains the letter a many times.", [rule]);
+    expect(hits).toHaveLength(0);
+  });
+
+  it("B-054: single 2-char ASCII 'rm' (no pipe) does NOT match", () => {
+    const rule = makeRule({ wrong_pattern: "rm" });
+    const hits = scanNarrative("rm -rf is dangerous", [rule]);
+    expect(hits).toHaveLength(0);
+  });
+
+  it("B-054: single-pattern length >= 3 still fires", () => {
+    const rule = makeRule({ wrong_pattern: "axios" });
+    const hits = scanNarrative("I will use axios for the request.", [rule]);
+    expect(hits).toHaveLength(1);
+  });
+
+  it("B-054: pipe-separated 'rm|rf' also returns empty (both < 3 chars)", () => {
+    const rule = makeRule({ wrong_pattern: "rm|rf" });
+    const hits = scanNarrative("rm -rf is dangerous", [rule]);
+    expect(hits).toHaveLength(0);
+  });
+});
