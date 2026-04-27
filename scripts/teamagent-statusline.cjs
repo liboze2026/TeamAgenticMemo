@@ -19,7 +19,6 @@ try {
 const fs = require("node:fs");
 const PROJECT_DB = path.resolve(process.cwd(), ".teamagent/knowledge.db");
 const GLOBAL_DB = path.join(os.homedir(), ".teamagent", "global.db");
-const GLOBAL_EVENTS_DB = path.join(os.homedir(), ".teamagent", "events.db");
 
 const PROJECT_MARKERS = [
   ".git",
@@ -112,41 +111,6 @@ function getLastLearnedDate(db) {
   }
 }
 
-function getTodayBlockCount(db) {
-  try {
-    const row = db
-      .prepare(
-        "SELECT COUNT(*) AS n FROM events WHERE kind LIKE 'hook-pre.blocked%' AND date(timestamp) = date('now')"
-      )
-      .get();
-    return row ? row.n : 0;
-  } catch {
-    try {
-      const row2 = db
-        .prepare(
-          "SELECT COUNT(*) AS n FROM events WHERE event_type LIKE 'hook-pre.blocked%' AND date(created_at) = date('now')"
-        )
-        .get();
-      return row2 ? row2.n : 0;
-    } catch {
-      return null;
-    }
-  }
-}
-
-function getTodayPassCount(db) {
-  try {
-    const row = db
-      .prepare(
-        "SELECT COUNT(*) AS n FROM events WHERE kind = 'hook-pre.passed' AND date(timestamp) = date('now')"
-      )
-      .get();
-    return row ? row.n : 0;
-  } catch {
-    return null;
-  }
-}
-
 function main() {
   // 未 init 且像项目 → 显眼提醒 (此路径在 --dangerously-skip-permissions 下也触发,
   // 因为 statusline 不经过 hook 系统)
@@ -184,23 +148,9 @@ function main() {
     }
   }
 
-  const eventsDb = tryOpenDb(GLOBAL_EVENTS_DB);
-  let todayBlocks = null;
-  let todayPassed = null;
-  if (eventsDb) {
-    try {
-      todayBlocks = getTodayBlockCount(eventsDb);
-      todayPassed = getTodayPassCount(eventsDb);
-    } finally {
-      eventsDb.close();
-    }
-  }
-
   const parts = ["TeamAgent正在运行"];
   parts.push(`规则库：${count !== null ? count : "-"}条`);
   parts.push(`wiki：${wikiCount}条${lastWikiDate ? ` (${lastWikiDate})` : ""}`);
-  parts.push(todayBlocks !== null ? `今日已拦截：${todayBlocks}` : "今日已拦截：-");
-  parts.push(todayPassed !== null ? `今日放行：${todayPassed}` : "今日放行：-");
   if (lastDate) parts.push(`最近全局解析：${lastDate}`);
 
   process.stdout.write(parts.join(" · "));
