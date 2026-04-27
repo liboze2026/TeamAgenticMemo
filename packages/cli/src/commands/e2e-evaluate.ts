@@ -387,7 +387,7 @@ export async function executeE2EEvaluate(
     if (metrics.onboardingCoverage < 1) failures.push(`Onboarding coverage ${fmtPct(metrics.onboardingCoverage)} is below 100%.`);
 
     const shouldClean = !opts.keepTemp && !opts.cwd && !opts.homeDir;
-    if (shouldClean) fs.rmSync(tempRoot, { recursive: true, force: true });
+    if (shouldClean) cleanupTempRoot(tempRoot);
 
     return {
       ok: failures.length === 0,
@@ -405,9 +405,7 @@ export async function executeE2EEvaluate(
     };
   } catch (err) {
     failures.push(err instanceof Error ? err.message : String(err));
-    if (!opts.keepTemp && !opts.cwd && !opts.homeDir) {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
-    }
+    if (!opts.keepTemp && !opts.cwd && !opts.homeDir) cleanupTempRoot(tempRoot);
     return {
       ok: false,
       workspaceDir,
@@ -521,4 +519,18 @@ function rate(n: number, d: number): number {
 
 function fmtPct(v: number): string {
   return `${Math.round(v * 1000) / 10}%`;
+}
+
+function cleanupTempRoot(tempRoot: string): void {
+  try {
+    fs.rmSync(tempRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
+  } catch {
+    // Best effort: a just-closed SQLite handle can stay briefly locked on
+    // Windows. Cleanup failure should not turn a passed E2E into a failure.
+  }
 }
