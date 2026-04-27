@@ -86,6 +86,9 @@ describe("parseCompileArgs", () => {
   it("parses --force", () => {
     expect(parseCompileArgs(["--force"])).toMatchObject({ force: true });
   });
+  it("parses --preset-only", () => {
+    expect(parseCompileArgs(["--preset-only"])).toMatchObject({ presetOnly: true });
+  });
   it("no flags → all false", () => {
     const opts = parseCompileArgs([]);
     expect(opts.dryRun).toBeFalsy();

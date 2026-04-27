@@ -54,6 +54,12 @@ export interface CompileMarkdownOptions {
    * - 1.0：等价于只跳过完全相同字符串（几乎不起作用，dedup 脚本已处理）
    */
   diversityThreshold?: number;
+
+  /**
+   * 只编译 source='preset' 的条目（元原则模式）。
+   * 启用时输出 "TeamAgent 元原则" 头，忽略 limit/tokenBudget/tierFilter。
+   */
+  presetOnly?: boolean;
 }
 
 /** 字符 3-gram 集合。纯函数。 */
@@ -122,6 +128,15 @@ export function compileMarkdownBlock(
 ): string {
   const limit = Math.max(1, options.limit ?? DEFAULT_CONTENT_BUDGET);
   const active = entries.filter((e) => e.status === "active");
+
+  if (options.presetOnly) {
+    const presets = active.filter((e) => e.source === "preset");
+    if (presets.length === 0) {
+      return [BLOCK_START, "## TeamAgent 元原则", "（无元原则）", BLOCK_END].join("\n");
+    }
+    const lines = presets.map((e) => formatEntry(e));
+    return [BLOCK_START, "## TeamAgent 元原则", ...lines, BLOCK_END].join("\n");
+  }
 
   const tierFiltered = options.tierFilter
     ? active.filter((e) => (options.tierFilter as ReadonlyArray<string>).includes(e.current_tier))

@@ -18,6 +18,8 @@ export interface CompileOptions {
   skillsOnly?: boolean;
   /** 强制重写（当前实现：默认就是幂等重写，此 flag 预留） */
   force?: boolean;
+  /** 编译元原则模式：只输出 source='preset' 的条目 */
+  presetOnly?: boolean;
   // 路径注入，供测试使用
   cwd?: string;
   homeDir?: string;
@@ -80,7 +82,9 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
 
   const markdownCompiler = opts.skillsOnly
     ? makeNoopMarkdownCompiler()
-    : new MarkdownCompiler(paths.claudeMdPath);
+    : new MarkdownCompiler(paths.claudeMdPath, {
+        compileOptions: { presetOnly: opts.presetOnly },
+      });
 
   const skillCompiler = opts.markdownOnly
     ? makeNoopSkillCompiler()
@@ -106,6 +110,7 @@ export function parseCompileArgs(argv: string[]): CompileOptions {
     else if (a === "--skills-only") opts.skillsOnly = true;
     else if (a === "--markdown-only") opts.markdownOnly = true;
     else if (a === "--force") opts.force = true;
+    else if (a === "--preset-only") opts.presetOnly = true;
   }
   return opts;
 }

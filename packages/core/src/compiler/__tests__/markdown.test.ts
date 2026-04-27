@@ -390,3 +390,68 @@ describe("B-062: TEAMAGENT:END injection in entry content", () => {
     expect(afterLines.join("\n").trim()).toBe("");
   });
 });
+
+describe("compileMarkdownBlock — presetOnly", () => {
+  const NOW = "2026-01-01T00:00:00Z";
+
+  function makeTestEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
+    return {
+      id: "e1",
+      scope: { level: "personal" },
+      category: "S" as const,
+      tags: [],
+      type: "practice" as const,
+      nature: "subjective" as const,
+      trigger: "some trigger",
+      wrong_pattern: "",
+      correct_pattern: "do the right thing",
+      reasoning: "because",
+      confidence: 0.8,
+      enforcement: "suggest" as const,
+      status: "active" as const,
+      hit_count: 0,
+      success_count: 0,
+      override_count: 0,
+      evidence: { success_sessions: 0, success_users: 0, correction_sessions: 0 },
+      created_at: NOW,
+      last_hit_at: "",
+      last_validated_at: NOW,
+      source: "user",
+      conflict_with: [],
+      current_tier: "experimental" as const,
+      max_tier_ever: "experimental" as const,
+      tier_entered_at: "",
+      demerit: 0,
+      demerit_last_updated: "",
+      resurrect_count: 0,
+      channel: "passive-knowledge" as const,
+      ...overrides,
+    };
+  }
+
+  it("with presetOnly=true, only includes source=preset entries", () => {
+    const entries = [
+      makeTestEntry({ id: "user-rule", source: "user", correct_pattern: "user rule" }),
+      makeTestEntry({ id: "preset-rule", source: "preset", correct_pattern: "preset rule" }),
+    ];
+    const block = compileMarkdownBlock(entries, NOW, { presetOnly: true });
+    expect(block).toContain("preset rule");
+    expect(block).not.toContain("user rule");
+  });
+
+  it("with presetOnly=true, header says TeamAgent 元原则", () => {
+    const entries = [makeTestEntry({ source: "preset" })];
+    const block = compileMarkdownBlock(entries, NOW, { presetOnly: true });
+    expect(block).toContain("## TeamAgent 元原则");
+  });
+
+  it("without presetOnly, includes all active entries (existing behavior)", () => {
+    const entries = [
+      makeTestEntry({ id: "user-rule", source: "user", correct_pattern: "user rule" }),
+      makeTestEntry({ id: "preset-rule", source: "preset", correct_pattern: "preset rule" }),
+    ];
+    const block = compileMarkdownBlock(entries, NOW);
+    expect(block).toContain("user rule");
+    expect(block).toContain("preset rule");
+  });
+});
