@@ -70,7 +70,17 @@ import {
 
 function findPackageVersion(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 6; i++) {
+  let workspaceRoot: string | null = null;
+  for (let i = 0; i < 8; i++) {
+    // Detect monorepo root for dev-mode fallback (pnpm uses pnpm-workspace.yaml,
+    // not package.json's "workspaces" field).
+    if (
+      !workspaceRoot &&
+      (fs.existsSync(path.join(dir, "pnpm-workspace.yaml")) ||
+        fs.existsSync(path.join(dir, "packages", "teamagent", "package.json")))
+    ) {
+      workspaceRoot = dir;
+    }
     const pkgPath = path.join(dir, "package.json");
     if (fs.existsSync(pkgPath)) {
       try {
@@ -79,6 +89,7 @@ function findPackageVersion(): string {
           version?: string;
           bin?: Record<string, string>;
         };
+        // Installed tarball: name=teamagent + bin.teamagent + version.
         if (pkg.name === "teamagent" && pkg.bin?.["teamagent"] && pkg.version) {
           return pkg.version;
         }
@@ -89,6 +100,16 @@ function findPackageVersion(): string {
     const next = path.dirname(dir);
     if (next === dir) break;
     dir = next;
+  }
+  // Dev fallback: read the publishable package.json directly.
+  if (workspaceRoot) {
+    try {
+      const tpkgPath = path.join(workspaceRoot, "packages", "teamagent", "package.json");
+      const tpkg = JSON.parse(fs.readFileSync(tpkgPath, "utf-8")) as { version?: string };
+      if (tpkg.version) return tpkg.version;
+    } catch {
+      // fall through
+    }
   }
   return "unknown";
 }
