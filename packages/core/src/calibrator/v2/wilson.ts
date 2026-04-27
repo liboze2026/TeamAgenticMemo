@@ -37,7 +37,10 @@ export function computeConfidence(
   let weightedFailure = 0;
 
   for (const o of observations) {
-    const daysAgo = (now.getTime() - new Date(o.timestamp).getTime()) / DAY_MS;
+    const tsMs = new Date(o.timestamp).getTime();
+    // B-059: skip observations with invalid timestamps to prevent NaN propagation
+    if (!Number.isFinite(tsMs)) continue;
+    const daysAgo = (now.getTime() - tsMs) / DAY_MS;
     const w = Math.exp(-lambda * Math.max(0, daysAgo));
     if (o.outcome === "success") weightedSuccess += w;
     else weightedFailure += w;
