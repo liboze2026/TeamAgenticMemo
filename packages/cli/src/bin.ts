@@ -374,6 +374,16 @@ async function main(): Promise<void> {
       process.stdout.write(`migrated=${result.migrated} resurrected=${result.resurrected} skipped=${result.skipped}\n`);
       return;
     }
+    case "migrate-v7": {
+      const dryRun = rest.includes("--dry-run");
+      const limitArg = rest.find((a) => a.startsWith("--limit="));
+      const limit = limitArg ? parseInt(limitArg.split("=")[1]!, 10) : undefined;
+      const dbArg = rest.find((a) => a.startsWith("--db="));
+      const dbPath = dbArg ? dbArg.split("=").slice(1).join("=") : undefined;
+      const { executeMigrateV7 } = await import("./commands/migrate-v7.js");
+      await executeMigrateV7({ dryRun, dbPath, limit, cwd: process.cwd() });
+      return;
+    }
     case "migrate": {
       const dryRun = rest.includes("--dry-run");
       const { executeMigrate } = await import("./commands/migrate-v1-to-v2.js");
@@ -606,6 +616,8 @@ async function main(): Promise<void> {
           "  teamagent wiki:dislike <id>      标记条目为不喜欢（M2.7 注入时跳过）",
           "  teamagent migrate-v6 [--dry-run] [--limit=N] [--db=<path>]",
           "                                   迁移旧规则（trigger_description 为空）通过 LLM 生成双描述，并写入 vec0 和 FTS5",
+          "  teamagent migrate-v7 [--dry-run] [--limit=N] [--db=<path>]",
+          "                                   批量为存量规则生成 tool_context_description，并写入 knowledge_tool_vec",
           "  teamagent ingest --from-insights <path> | --from-audit | --from-pr <n>",
           "                   | --from-git [--since=30d] | --from-ci [--since=30d] | --from-candidates <path>",
           "                                   多源摄入：Claude /insights / npm audit / PR review / git hotspot / CI failure",
