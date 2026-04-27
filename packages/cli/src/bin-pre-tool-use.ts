@@ -25,6 +25,8 @@ import {
 import { matchRulesAsync, semanticMatch } from "@teamagent/core";
 import type { KnowledgeEntry } from "@teamagent/types";
 import { mergeSemanticAndLegacyMatches } from "./pre-tool-use-merge.js";
+import { SqliteToolRetriever } from "@teamagent/adapters";
+import { buildToolActionSummary } from "./pre-tool-use-context.js";
 
 // ---- Lazy singletons for semantic path (per-process, reused if process is long-lived) ----
 let _embedder: XenovaRuleEmbedder | null = null;
@@ -84,7 +86,7 @@ async function main(): Promise<void> {
         if (!useLegacy) {
           // --- Semantic path ---
           try {
-            const actionText = `tool=${tool_name}\n${JSON.stringify(tool_input).slice(0, 500)}`;
+            const actionText = buildToolActionSummary(tool_name, tool_input);
             const contextText = actionText; // No AI message context in PreToolUse stdin
 
             const embedder = getEmbedder();
@@ -127,13 +129,56 @@ async function main(): Promise<void> {
               try { globalDb.close(); } catch { /* ok */ }
             }
 
+            const allSemanticMatches = [...projectPersonalResults, ...projectTeamResults, ...globalResults];
+
+            // 工具操作语义检索（查 knowledge_tool_vec）
+            let toolResults: import("@teamagent/core").SemanticMatch[] = [];
+            try {
+              const toolProjectDb = openDb(projectDbPath);
+              const toolGlobalDb = openDb(globalDbPath);
+              const toolProjectRetriever = new SqliteToolRetriever(toolProjectDb);
+              const toolGlobalRetriever = new SqliteToolRetriever(toolGlobalDb);
+              try {
+                const [tpRes, tgRes] = await Promise.all([
+                  semanticMatch({
+                    contextText,
+                    actionText,
+                    embedder,
+                    retriever: toolProjectRetriever,
+                    scope: { level: "personal" },
+                  }),
+                  semanticMatch({
+                    contextText,
+                    actionText,
+                    embedder,
+                    retriever: toolGlobalRetriever,
+                    scope: { level: "global" },
+                  }),
+                ]);
+                toolResults = [...tpRes, ...tgRes];
+              } finally {
+                try { toolProjectDb.close(); } catch { /* ok */ }
+                try { toolGlobalDb.close(); } catch { /* ok */ }
+              }
+            } catch { /* tool retrieval best-effort */ }
+
             // Keyword matches are always preserved so non-migrated rules still fire.
             const merged = mergeSemanticAndLegacyMatches(
-              [...projectPersonalResults, ...projectTeamResults, ...globalResults],
+              [...allSemanticMatches, ...toolResults],
               legacyMatches,
             );
 
-            return { matched: merged };
+            // 传回原始语义命中（按分数降序，最多 5 条），供 verbose pass 消息展示
+            const semanticHits = [...allSemanticMatches, ...toolResults]
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 5)
+              .map((m) => ({
+                id: m.rule.id,
+                trigger: (m.rule.trigger ?? "").slice(0, 60),
+                score: m.score,
+              }));
+
+            return { matched: merged, semanticHits };
           } catch (_semErr) {
             // Silent fallback to legacy on any semantic error
             process.stderr.write(`teamagent pre-hook: semantic match failed, falling back to legacy: ${String(_semErr)}\n`);
