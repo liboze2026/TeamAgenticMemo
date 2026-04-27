@@ -344,7 +344,7 @@ describe("runExtractPipeline", () => {
     });
   });
 
-  it("adds default code-file scope.file_types when scope has no range", async () => {
+  it("adds default code-file scope when scope has no range", async () => {
     const deps = makeDeps({
       detector: new StubDetector([makeMoment()]),
       extractor: new QueuedExtractor([
@@ -365,6 +365,7 @@ describe("runExtractPipeline", () => {
     });
     const r = await runExtractPipeline(makeSession(), deps);
     const entry = r.extracted[0]!;
+    expect(entry.scope.paths).toEqual(["**/*"]);
     expect(entry.scope.file_types).toBeDefined();
     expect(entry.scope.file_types).toContain("*.ts");
     expect(entry.scope.file_types).toContain("*.py");

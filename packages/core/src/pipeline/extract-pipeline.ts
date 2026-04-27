@@ -298,7 +298,7 @@ function assembleEntry(
     (deps.scope.file_types && deps.scope.file_types.length > 0);
   const scope = scopeHasExplicitRange
     ? deps.scope
-    : { ...deps.scope, file_types: [...DEFAULT_CODE_FILE_TYPES] };
+    : { ...deps.scope, paths: ["**/*"], file_types: [...DEFAULT_CODE_FILE_TYPES] };
 
   return {
     id: deps.idGen(),
