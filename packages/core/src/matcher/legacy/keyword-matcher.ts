@@ -30,6 +30,7 @@ export function matchRules(
   rules: KnowledgeEntry[],
 ): KnowledgeEntry[] {
   const inputText = extractInputText(ctx);
+  const inputTextLower = inputText.toLowerCase();
   const filePath = stringField(ctx.input, "file_path");
 
   const matches: KnowledgeEntry[] = [];
@@ -52,7 +53,7 @@ export function matchRules(
     if (!checkScope(rule, filePath)) continue;
 
     const patterns = splitPatterns(rule.wrong_pattern);
-    const matched = patterns.some((p) => patternMatches(inputText, p));
+    const matched = patterns.some((p) => patternMatches(inputText, inputTextLower, p));
     if (matched) matches.push(rule);
   }
 
@@ -103,7 +104,7 @@ function splitPatterns(raw: string): string[] {
   return tokens.length > 0 ? tokens : [raw.trim()];
 }
 
-function patternMatches(inputText: string, pattern: string): boolean {
+function patternMatches(inputText: string, inputTextLower: string, pattern: string): boolean {
   const token = pattern.trim();
   if (!token) return false;
 
@@ -111,16 +112,33 @@ function patternMatches(inputText: string, pattern: string): boolean {
   // `moment` matching `momentum`. Punctuation-heavy patterns keep substring
   // semantics because they are usually paths, scoped packages, or code snippets.
   if (/^[a-z0-9_-]+$/i.test(token)) {
-    const escaped = escapeRegExp(token);
-    const re = new RegExp(`(^|[^a-z0-9_-])${escaped}([^a-z0-9_-]|$)`, "i");
-    return re.test(inputText);
+    return plainTokenMatches(inputTextLower, token.toLowerCase());
   }
 
-  return inputText.toLowerCase().includes(token.toLowerCase());
+  return inputTextLower.includes(token.toLowerCase());
 }
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function plainTokenMatches(inputTextLower: string, tokenLower: string): boolean {
+  let idx = inputTextLower.indexOf(tokenLower);
+  while (idx !== -1) {
+    const before = idx === 0 ? "" : inputTextLower[idx - 1]!;
+    const afterIdx = idx + tokenLower.length;
+    const after = afterIdx >= inputTextLower.length ? "" : inputTextLower[afterIdx]!;
+    if (!isPlainTokenChar(before) && !isPlainTokenChar(after)) return true;
+    idx = inputTextLower.indexOf(tokenLower, idx + 1);
+  }
+  return false;
+}
+
+function isPlainTokenChar(ch: string): boolean {
+  if (!ch) return false;
+  const code = ch.charCodeAt(0);
+  return (
+    (code >= 97 && code <= 122) ||
+    (code >= 48 && code <= 57) ||
+    ch === "_" ||
+    ch === "-"
+  );
 }
 
 /**
