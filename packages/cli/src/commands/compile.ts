@@ -82,9 +82,10 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
 
   const markdownCompiler = opts.skillsOnly
     ? makeNoopMarkdownCompiler()
-    : new MarkdownCompiler(paths.claudeMdPath, {
-        compileOptions: { presetOnly: opts.presetOnly },
-      });
+    : new MarkdownCompiler(
+        paths.claudeMdPath,
+        opts.presetOnly ? { compileOptions: { presetOnly: true } } : undefined,
+      );
 
   const skillCompiler = opts.markdownOnly
     ? makeNoopSkillCompiler()
