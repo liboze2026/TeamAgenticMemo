@@ -60,7 +60,15 @@ export class SqliteEventLog {
   }
 
   private hydrate = (row: any): PersistedEvent => {
-    const extra = row.payload ? JSON.parse(row.payload) : {};
+    // B-056: guard against malformed payload JSON (DB corruption / external writes)
+    let extra: Record<string, unknown> = {};
+    if (row.payload) {
+      try {
+        extra = JSON.parse(row.payload) as Record<string, unknown>;
+      } catch {
+        // malformed payload — silently treat as no extra fields
+      }
+    }
     return {
       id: row.id,
       kind: row.kind,

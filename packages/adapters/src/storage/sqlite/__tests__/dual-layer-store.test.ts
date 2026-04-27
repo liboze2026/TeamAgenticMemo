@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DualLayerStore } from "../dual-layer-store.js";
+import type { KnowledgeEntry } from "@teamagent/types";
 
 let tmpDir: string;
 let store: DualLayerStore;
@@ -65,5 +66,65 @@ describe("DualLayerStore", () => {
 
   it("throws when team-scoped entry added (Phase 4 only)", () => {
     expect(() => store.add(mkEntry("t1", "team" as any))).toThrow(/team.*phase 4|not supported/i);
+  });
+});
+
+describe("B-063: DualLayerStore implements full KnowledgeStore contract", () => {
+  const entry: KnowledgeEntry = {
+    id: "b063-test",
+    scope: { level: "personal" },
+    category: "C", tags: [], type: "avoidance", nature: "objective",
+    trigger: "t", wrong_pattern: "bad", correct_pattern: "good", reasoning: "r",
+    confidence: 0.7, enforcement: "warn", status: "active",
+    hit_count: 0, success_count: 0, override_count: 0,
+    evidence: { success_sessions: 0, success_users: 0, correction_sessions: 0 },
+    created_at: "2026-04-27T00:00:00Z", last_hit_at: "", last_validated_at: "",
+    source: "accumulated", conflict_with: [],
+    current_tier: "experimental", max_tier_ever: "experimental",
+    tier_entered_at: "", demerit: 0, demerit_last_updated: "", resurrect_count: 0,
+  };
+
+  function makeStore() {
+    return new DualLayerStore({
+      projectDbPath: ":memory:",
+      userGlobalDbPath: ":memory:",
+    });
+  }
+
+  it("update() patches a personal entry", () => {
+    const store = makeStore();
+    store.add(entry);
+    store.update("b063-test", { confidence: 0.9 });
+    const updated = store.getById("b063-test");
+    expect(updated?.confidence).toBe(0.9);
+    store.close();
+  });
+
+  it("delete() removes a personal entry", () => {
+    const store = makeStore();
+    store.add(entry);
+    store.delete("b063-test");
+    expect(store.getById("b063-test")).toBeUndefined();
+    store.close();
+  });
+
+  it("count() returns total entries across both layers", () => {
+    const store = makeStore();
+    store.add(entry);
+    const globalEntry = { ...entry, id: "b063-global", scope: { level: "global" as const } };
+    store.add(globalEntry);
+    expect(store.count()).toBe(2);
+    store.close();
+  });
+
+  it("findByScopeLevel() returns only matching scope", () => {
+    const store = makeStore();
+    store.add(entry);
+    const globalEntry = { ...entry, id: "b063-global", scope: { level: "global" as const } };
+    store.add(globalEntry);
+    const personal = store.findByScopeLevel("personal");
+    expect(personal).toHaveLength(1);
+    expect(personal[0]?.id).toBe("b063-test");
+    store.close();
   });
 });
