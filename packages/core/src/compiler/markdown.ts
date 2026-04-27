@@ -79,6 +79,18 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 }
 
 /**
+ * B-062: escape TEAMAGENT block marker sequences in user-supplied entry text.
+ * Prevents an entry whose trigger/correct_pattern/reasoning contains
+ * "<!-- TEAMAGENT:END -->" from creating a false block-end marker in CLAUDE.md,
+ * which would corrupt the document structure on the next compile pass.
+ *
+ * Uses a zero-width space (U+200B) to break the pattern invisibly.
+ */
+function sanitizeBlockMarkers(text: string): string {
+  return text.replace(/TEAMAGENT:(START|END)/g, "TEAMAGENT​:$1");
+}
+
+/**
  * 把一条 KnowledgeEntry 渲染为一行 markdown bullet。纯函数。
  */
 function formatEntry(entry: KnowledgeEntry): string {
@@ -86,11 +98,15 @@ function formatEntry(entry: KnowledgeEntry): string {
   const hits = entry.hit_count > 0 ? `, ${entry.hit_count}次命中` : "";
   const sourceTag =
     entry.source === "team-shared" ? " [团队]" : entry.source === "preset" ? " [预置]" : "";
+  // B-062: sanitize all user-controlled text fields to prevent TEAMAGENT block-marker injection
+  const correct = sanitizeBlockMarkers(entry.correct_pattern);
+  const wrong = sanitizeBlockMarkers(entry.wrong_pattern ?? "");
+  const reason = sanitizeBlockMarkers(entry.reasoning);
 
-  if (entry.type === "avoidance" && entry.wrong_pattern) {
-    return `- 使用 ${entry.correct_pattern} 而非 ${entry.wrong_pattern}——${entry.reasoning} [${conf}${hits}]${sourceTag}`;
+  if (entry.type === "avoidance" && wrong) {
+    return `- 使用 ${correct} 而非 ${wrong}——${reason} [${conf}${hits}]${sourceTag}`;
   }
-  return `- ${entry.correct_pattern}——${entry.reasoning} [${conf}${hits}]${sourceTag}`;
+  return `- ${correct}——${reason} [${conf}${hits}]${sourceTag}`;
 }
 
 /**

@@ -348,3 +348,45 @@ describe("injectBlockIntoDoc", () => {
     expect(out.endsWith("\n")).toBe(true);
   });
 });
+
+describe("B-062: TEAMAGENT:END injection in entry content", () => {
+  it("entry containing TEAMAGENT:END does not corrupt injectBlockIntoDoc on re-compile", () => {
+    // The evil entry's correct_pattern contains the full HTML comment that matches BLOCK_END.
+    // When formatEntry embeds it in a bullet, the compiled block will contain
+    // "<!-- TEAMAGENT:END -->" inside the entry text — creating a false end marker.
+    // On the second inject, injectBlockIntoDoc finds that false marker instead of the real
+    // BLOCK_END, causing the text after it to leak into the document body.
+    const evilEntry = makeEntry({
+      trigger: "never use TEAMAGENT markers",
+      correct_pattern: "<!-- TEAMAGENT:END --> must not appear in entry text",
+      wrong_pattern: "moment",
+    });
+
+    const header = "# My Project\n\nSome docs.";
+
+    // First compile — block contains the evil entry
+    const block1 = compileMarkdownBlock([evilEntry], "2026-04-27T00:00:00Z");
+    const doc1 = injectBlockIntoDoc(header, block1);
+
+    // Second compile with a clean entry — should replace the block cleanly
+    const cleanEntry = makeEntry({ trigger: "use dayjs", correct_pattern: "dayjs" });
+    const block2 = compileMarkdownBlock([cleanEntry], "2026-04-27T00:01:00Z");
+    const doc2 = injectBlockIntoDoc(doc1, block2);
+
+    // The leaked fragment: after the premature BLOCK_END match, the rest of the
+    // evil bullet text ("must not appear in entry text 而非 moment——lighter [0.80]")
+    // gets appended to block2, surfacing right after the injected BLOCK_END tag.
+    // A corrupted doc2 looks like:
+    //   <!-- TEAMAGENT:END --> must not appear in entry text 而非 moment——lighter [0.80]
+    //   <!-- TEAMAGENT:END -->
+    // The BLOCK_END tag must not be followed by non-whitespace on the same line.
+    const lines = doc2.split("\n");
+    const blockEndLineIdx = lines.findIndex((l) => l.startsWith(BLOCK_END));
+    expect(blockEndLineIdx).toBeGreaterThanOrEqual(0);
+    // The line containing BLOCK_END must be exactly BLOCK_END with no trailing content
+    expect(lines[blockEndLineIdx]).toBe(BLOCK_END);
+    // No lines after BLOCK_END should contain leaked entry content
+    const afterLines = lines.slice(blockEndLineIdx + 1);
+    expect(afterLines.join("\n").trim()).toBe("");
+  });
+});
