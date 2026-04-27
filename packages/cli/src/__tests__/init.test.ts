@@ -87,11 +87,11 @@ describe("executeInit", () => {
     });
 
     expect(r.ok).toBe(true);
-    // 6 presets written to global DB (4 base meta + 2 canonical team rules)
+    // 8 presets written to global DB (4 base meta + 4 canonical team rules)
     const globalStore = new SqliteKnowledgeStore(openDb(tmp.userGlobalDbPath));
     const globalCount = globalStore.count();
     globalStore.close();
-    expect(globalCount).toBe(6);
+    expect(globalCount).toBe(8);
 
     // 2 imported rules in project DB (both CLAUDE.md bullets)
     const projectStore = new SqliteKnowledgeStore(openDb(tmp.projectDbPath));
@@ -104,9 +104,9 @@ describe("executeInit", () => {
     expect(md).toContain("TEAMAGENT:START");
     expect(md).toContain("TEAMAGENT:END");
 
-    expect(r.summary.presetAdded).toBe(6);
+    expect(r.summary.presetAdded).toBe(8);
     expect(r.summary.importedRules).toBe(2);
-    expect(r.summary.totalActiveEntries).toBeGreaterThanOrEqual(8);
+    expect(r.summary.totalActiveEntries).toBeGreaterThanOrEqual(10);
   });
 
   it("idempotent: running init twice doesn't duplicate presets", async () => {
@@ -119,12 +119,12 @@ describe("executeInit", () => {
       llmClient: stubLLM(OK_LLM_RESPONSE),
     });
     expect(r2.ok).toBe(true);
-    // Second run should add 0 new presets (all 6 already present)
+    // Second run should add 0 new presets (all 8 already present)
     expect(r2.summary.presetAdded).toBe(0);
     const globalStore = new SqliteKnowledgeStore(openDb(tmp.userGlobalDbPath));
     const globalCount = globalStore.count();
     globalStore.close();
-    expect(globalCount).toBe(6); // still 6
+    expect(globalCount).toBe(8); // still 8
   });
 
   it("no CLAUDE.md + no .cursorrules → import step reports '无规则可导入'", async () => {
@@ -158,7 +158,7 @@ describe("executeInit", () => {
       llmClient: stubLLM(OK_LLM_RESPONSE),
     });
     expect(r.ok).toBe(true);
-    expect(r.summary.presetAdded).toBe(6);
+    expect(r.summary.presetAdded).toBe(8);
     expect(r.summary.importedRules).toBe(0);
     const structureStep = r.steps.find((s) => s.step === "structure-rules")!;
     expect(structureStep.detail).toContain("skipImport");
@@ -251,7 +251,7 @@ describe("executeInit", () => {
     expect(r.summary.seedAdded).toBe(1);
     const globalStore = new SqliteKnowledgeStore(openDb(tmp.userGlobalDbPath));
     expect(globalStore.getById("seed-demo-1")).toBeDefined();
-    expect(globalStore.count()).toBe(7); // 6 presets + 1 seed
+    expect(globalStore.count()).toBe(9); // 8 presets + 1 seed
     globalStore.close();
 
     // idempotent second run

@@ -416,7 +416,7 @@ describe("compileMarkdownBlock — presetOnly", () => {
       created_at: NOW,
       last_hit_at: "",
       last_validated_at: NOW,
-      source: "user",
+      source: "accumulated",
       conflict_with: [],
       current_tier: "experimental" as const,
       max_tier_ever: "experimental" as const,
@@ -431,7 +431,7 @@ describe("compileMarkdownBlock — presetOnly", () => {
 
   it("with presetOnly=true, only includes source=preset entries", () => {
     const entries = [
-      makeTestEntry({ id: "user-rule", source: "user", correct_pattern: "user rule" }),
+      makeTestEntry({ id: "user-rule", source: "accumulated", correct_pattern: "user rule" }),
       makeTestEntry({ id: "preset-rule", source: "preset", correct_pattern: "preset rule" }),
     ];
     const block = compileMarkdownBlock(entries, NOW, { presetOnly: true });
@@ -447,7 +447,7 @@ describe("compileMarkdownBlock — presetOnly", () => {
 
   it("without presetOnly, includes all active entries (existing behavior)", () => {
     const entries = [
-      makeTestEntry({ id: "user-rule", source: "user", correct_pattern: "user rule" }),
+      makeTestEntry({ id: "user-rule", source: "accumulated", correct_pattern: "user rule" }),
       makeTestEntry({ id: "preset-rule", source: "preset", correct_pattern: "preset rule" }),
     ];
     const block = compileMarkdownBlock(entries, NOW);
