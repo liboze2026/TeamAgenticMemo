@@ -1,7 +1,7 @@
 import path from "node:path";
 import os from "node:os";
-import { openDb, syncToolVector, XenovaRuleEmbedder } from "@teamagent/adapters";
-import type { LLMClient } from "@teamagent/ports";
+import { openDb, syncToolVector } from "@teamagent/adapters";
+import type { LLMClient, RuleEmbedder } from "@teamagent/ports";
 
 export function buildToolContextPrompt(r: {
   trigger: string;
@@ -28,6 +28,8 @@ export async function executeMigrateV7(opts: {
   dbPath?: string;
   limit?: number;
   llmClient?: LLMClient;
+  /** 注入 embedder（测试用）；缺省用 XenovaRuleEmbedder */
+  embedder?: RuleEmbedder;
   cwd?: string;
 }): Promise<void> {
   const home = os.homedir();
@@ -57,9 +59,9 @@ export async function executeMigrateV7(opts: {
     return;
   }
 
-  const { ClaudeCodeLLMClient } = await import("@teamagent/adapters");
+  const { ClaudeCodeLLMClient, XenovaRuleEmbedder } = await import("@teamagent/adapters");
   const llm: LLMClient = opts.llmClient ?? new ClaudeCodeLLMClient({ model: "haiku" });
-  const embedder = new XenovaRuleEmbedder();
+  const embedder: RuleEmbedder = opts.embedder ?? new XenovaRuleEmbedder();
   let migrated = 0;
 
   for (const row of rows) {
