@@ -19,12 +19,16 @@ export function validateLevel0(input: ValidateL0Input): ValidationL0Result {
   const { entry, sourceText, existingRules, projectStack } = input;
 
   // 1. wrong_pattern 在源文里真存在
+  // B-049: align minimum token length with keyword-matcher's MIN_TOKEN_LENGTH=3
+  // to prevent single-char patterns (e.g. "a") from trivially passing this check.
+  const L0_MIN_TOKEN = 3;
   if (entry.type === "avoidance" && entry.wrong_pattern) {
     const patterns = entry.wrong_pattern
       .split("|")
       .map((s) => s.trim())
-      .filter(Boolean);
-    const hit = patterns.some((p) => sourceText.includes(p));
+      .filter((s) => s.length >= L0_MIN_TOKEN);
+    // If all tokens are shorter than minimum, treat as not-found (pattern is too vague)
+    const hit = patterns.length > 0 && patterns.some((p) => sourceText.includes(p));
     if (!hit) failed.push("wrong_pattern_not_in_source");
   }
 

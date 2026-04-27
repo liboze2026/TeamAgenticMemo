@@ -60,6 +60,36 @@ describe("validateLevel0 — check 1: wrong_pattern in source", () => {
     );
     expect(r.failed_checks).not.toContain("wrong_pattern_not_in_source");
   });
+
+  it("B-049: single 1-char wrong_pattern fails check-1 (too short)", () => {
+    const r = validateLevel0(
+      baseInput({
+        entry: { ...baseAvoidance, wrong_pattern: "a", scope: { level: "team", paths: ["src/"] } },
+        sourceText: "arbitrary text containing the letter a",
+      }),
+    );
+    expect(r.failed_checks).toContain("wrong_pattern_not_in_source");
+  });
+
+  it("B-049: pipe-separated all-short tokens 'a|b' fails check-1", () => {
+    const r = validateLevel0(
+      baseInput({
+        entry: { ...baseAvoidance, wrong_pattern: "a|b", scope: { level: "team", paths: ["src/"] } },
+        sourceText: "import a from 'b'",
+      }),
+    );
+    expect(r.failed_checks).toContain("wrong_pattern_not_in_source");
+  });
+
+  it("B-049: mixed 'a|axios' passes — long token 'axios' is in sourceText", () => {
+    const r = validateLevel0(
+      baseInput({
+        entry: { ...baseAvoidance, wrong_pattern: "a|axios", scope: { level: "team", paths: ["src/"] } },
+        sourceText: "import axios from 'axios'",
+      }),
+    );
+    expect(r.failed_checks).not.toContain("wrong_pattern_not_in_source");
+  });
 });
 
 describe("validateLevel0 — check 2: import_path format", () => {
