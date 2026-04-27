@@ -25,6 +25,10 @@ export {
   type SemanticMatch,
 } from "./matcher/semantic-matcher.js";
 export {
+  rerankByConfidence,
+  confidenceWeight,
+} from "./ranking/confidence-rank.js";
+export {
   accumulateHardNegative,
   MAX_HARD_NEG,
 } from "./matcher/hard-negative-accumulator.js";
