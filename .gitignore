@@ -18,3 +18,7 @@ packages/benchmark/bench-*.md
 .claude/scheduled_tasks.lock
 # pnpm pack build artifacts
 packages/*/*.tgz
+# reclassify command outputs (timestamped, regenerated per run)
+scripts/out/reclassify-*
+# CLAUDE.md compile-hook write-failure leftovers
+CLAUDE.md.tmp-*
