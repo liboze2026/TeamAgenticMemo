@@ -102,3 +102,24 @@ export function writeSeen(
   };
   saveFile(cwd, data);
 }
+
+/**
+ * B-051: atomic combined write of cursor + seen in a single read→modify→write cycle.
+ * Replaces calling writeCursor() then writeSeen() separately, which created a TOCTOU
+ * race in async-mode concurrent Stop processes.
+ */
+export function writeCursorAndSeen(
+  cwd: string,
+  sessionId: string,
+  lastScannedTurn: number,
+  seen: Set<string>,
+): void {
+  const data = loadFile(cwd);
+  const arr = Array.from(seen).slice(-MAX_SEEN_PER_SESSION);
+  data.sessions[sessionId] = {
+    last_scanned_turn: lastScannedTurn,
+    updated_at: new Date().toISOString(),
+    seen: arr,
+  };
+  saveFile(cwd, data);
+}

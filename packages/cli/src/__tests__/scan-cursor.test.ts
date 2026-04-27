@@ -8,6 +8,9 @@ import {
   clearCursor,
   getCursorFilePath,
   CURSOR_FILE_RELATIVE,
+  readSeen,
+  writeSeen,
+  writeCursorAndSeen,
 } from "../scan-cursor.js";
 
 function makeTmpCwd(): string {
@@ -97,5 +100,27 @@ describe("scan-cursor", () => {
       const freshCwd = makeTmpCwd();
       expect(() => clearCursor(freshCwd, "nope")).not.toThrow();
     });
+  });
+});
+
+describe("B-051: atomic writeCursorAndSeen", () => {
+  it("writeCursorAndSeen writes both cursor and seen atomically", () => {
+    const dir = makeTmpCwd();
+    writeCursorAndSeen(dir, "sess-b051", 7, new Set(["sig1", "sig2"]));
+    expect(readCursor(dir, "sess-b051")).toBe(7);
+    const seen = readSeen(dir, "sess-b051");
+    expect(seen.has("sig1")).toBe(true);
+    expect(seen.has("sig2")).toBe(true);
+  });
+
+  it("writeCursorAndSeen overwrites previous cursor+seen atomically", () => {
+    const dir = makeTmpCwd();
+    writeCursor(dir, "sess-b051b", 3);
+    writeSeen(dir, "sess-b051b", new Set(["old"]));
+    writeCursorAndSeen(dir, "sess-b051b", 5, new Set(["new1"]));
+    expect(readCursor(dir, "sess-b051b")).toBe(5);
+    const seen = readSeen(dir, "sess-b051b");
+    expect(seen.has("new1")).toBe(true);
+    expect(seen.has("old")).toBe(false);
   });
 });

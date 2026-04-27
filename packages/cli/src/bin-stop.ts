@@ -33,7 +33,7 @@ import { executeCalibrate } from "./commands/calibrate.js";
 import { executeCompile } from "./commands/compile.js";
 import { executeScanErrors } from "./commands/scan-errors.js";
 import { readTeamAgentConfig } from "./commands/config.js";
-import { readCursor, writeCursor, clearCursor, readSeen, writeSeen } from "./scan-cursor.js";
+import { readCursor, writeCursorAndSeen, clearCursor, readSeen } from "./scan-cursor.js";
 import { appendHarvest } from "./harvest-writer.js";
 import { makeFallbackLLMClient } from "./llm-with-fallback.js";
 import { runStopNarrativeScan, readLastInjected, lastInjectedFilePath } from "./stop-narrative-scan.js";
@@ -171,11 +171,9 @@ export async function runStopPipeline(
   // Persist cursor + seen so next incremental Stop can skip
   if (analyzeMeta) {
     try {
-      if (analyzeMeta.lastTurnIndex >= 0) {
-        writeCursor(cwd, sessionId, analyzeMeta.lastTurnIndex);
-      }
-      if (newlySeen.size > 0 || seen.size > 0) {
-        writeSeen(cwd, sessionId, seen);
+      // B-051: use atomic combined write to prevent TOCTOU race in async mode
+      if (analyzeMeta.lastTurnIndex >= 0 || seen.size > 0 || newlySeen.size > 0) {
+        writeCursorAndSeen(cwd, sessionId, analyzeMeta.lastTurnIndex, seen);
       }
     } catch (e) {
       logError(cwd, "persist-cursor", e);
@@ -432,7 +430,14 @@ async function main(): Promise<void> {
   const raw = Buffer.concat(chunks).toString("utf-8").trim();
   if (!raw) return;
 
-  const parsed = JSON.parse(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    // B-053: malformed stdin JSON — log and exit cleanly (never block session close)
+    logError(process.cwd(), "stdin-json-parse", e);
+    return;
+  }
   if (!isValidStopHookInput(parsed)) {
     logError(
       process.cwd(),
