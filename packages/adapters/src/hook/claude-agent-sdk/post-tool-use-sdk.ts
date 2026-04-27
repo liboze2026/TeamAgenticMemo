@@ -79,7 +79,8 @@ export function inferToolSuccess(toolResponse: unknown): boolean {
   if (toolResponse === null || toolResponse === undefined) return true;
   if (typeof toolResponse !== "object") return true;
   const r = toolResponse as Record<string, unknown>;
-  if (r.is_error === true) return false;
+  // B-057: use truthy check instead of === true to catch is_error="true" or is_error=1
+  if (r.is_error && r.is_error !== false && r.is_error !== 0) return false;
   if (r.error) return false;
   if (typeof r.exit_code === "number" && r.exit_code !== 0) return false;
   return true;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createPostToolUseHandler } from "../post-tool-use-sdk.js";
+import { createPostToolUseHandler, inferToolSuccess } from "../post-tool-use-sdk.js";
 
 describe("createPostToolUseHandler (SDK)", () => {
   it("emits hook-post.result events for each rule that fired in Pre", async () => {
@@ -175,5 +175,23 @@ describe("createPostToolUseHandler (SDK)", () => {
       tool_response: { is_error: false },
     } as any);
     expect(appended.filter((e: any) => e.kind === "ai.override.blocked_circumvented")).toHaveLength(0);
+  });
+});
+
+describe("B-057: inferToolSuccess non-boolean is_error", () => {
+  it('is_error = "true" (string) → returns false', () => {
+    expect(inferToolSuccess({ is_error: "true" })).toBe(false);
+  });
+
+  it("is_error = 1 (number) → returns false", () => {
+    expect(inferToolSuccess({ is_error: 1 })).toBe(false);
+  });
+
+  it("is_error = false (bool) → returns true (not an error)", () => {
+    expect(inferToolSuccess({ is_error: false })).toBe(true);
+  });
+
+  it("is_error = 0 (falsy number) → returns true (not an error)", () => {
+    expect(inferToolSuccess({ is_error: 0 })).toBe(true);
   });
 });

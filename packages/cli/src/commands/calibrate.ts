@@ -77,7 +77,9 @@ function synthesizeObservations(events: PersistedEvent[]): Observation[] {
       id: `obs-${e.id}`,
       knowledge_id: e.knowledge_id!,
       timestamp: e.timestamp,
-      outcome: ((e as any).payload?.success === false) ? "failure" : "success",
+      // B-055: use !== true so null/undefined/0 payload.success is treated as "failure"
+      // (conservative; aligns with the closed-world assumption: unknown = not confirmed success)
+      outcome: ((e as any).payload?.success !== true) ? "failure" : "success",
       source_event: e.id,
       tool_use_id: e.tool_use_id,
     } satisfies Observation));
