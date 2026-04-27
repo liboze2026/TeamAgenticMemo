@@ -69,4 +69,31 @@ describe("SqliteEventLog", () => {
     expect(got.confidence_before).toBe(0.5);
     expect(got.confidence_after).toBe(0.6);
   });
+
+  it("B-056: readAll does not throw when one row has malformed JSON payload", () => {
+    const db = openDb(":memory:");
+    const log = new SqliteEventLog(db);
+
+    log.append({
+      id: "e-good",
+      kind: "hook-pre.blocked",
+      knowledge_id: "k1",
+      timestamp: "2026-04-27T00:00:00Z",
+      schema_version: 1,
+    });
+
+    // Inject a row with malformed payload directly via SQL
+    db.prepare(
+      "INSERT INTO events (id, kind, knowledge_id, tool_use_id, timestamp, payload) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run("e-bad", "hook-pre.blocked", "k2", null, "2026-04-27T00:01:00Z", "{malformed");
+
+    expect(() => log.readAll()).not.toThrow();
+    const events = log.readAll();
+    expect(events.length).toBe(2);
+    const badEvent = events.find(e => e.id === "e-bad");
+    expect(badEvent).toBeDefined();
+    expect(badEvent?.kind).toBe("hook-pre.blocked");
+
+    db.close();
+  });
 });

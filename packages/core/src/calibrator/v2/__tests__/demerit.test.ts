@@ -101,4 +101,35 @@ describe("Demerit computeDemerit", () => {
     expect(DEMERIT_HALF_LIFE_DAYS.canonical).toBe(21);
     expect(DEMERIT_HALF_LIFE_DAYS.enforced).toBe(28);
   });
+
+  it("B-060: multiplier is monotone — confidence=0.5 gives ≤ demerit than confidence=0.51", () => {
+    const events: DemeritEvent[] = [
+      { source: "ai_override_ignored", timestamp: now.toISOString() },
+    ];
+    const res5 = computeDemerit(
+      { current: 0, last_updated: "", current_tier: "stable", confidence: 0.5 },
+      events, now,
+    );
+    const res51 = computeDemerit(
+      { current: 0, last_updated: "", current_tier: "stable", confidence: 0.51 },
+      events, now,
+    );
+    const res7 = computeDemerit(
+      { current: 0, last_updated: "", current_tier: "stable", confidence: 0.7 },
+      events, now,
+    );
+    // monotone: demerit(0.5) ≤ demerit(0.51) ≤ demerit(0.7)
+    expect(res51.demerit).toBeGreaterThanOrEqual(res5.demerit);
+    expect(res7.demerit).toBeGreaterThanOrEqual(res51.demerit);
+  });
+
+  it("B-061: future last_updated is handled gracefully (no NaN, demerit preserved)", () => {
+    const futureTs = new Date(now.getTime() + 30 * 24 * 3600 * 1000).toISOString();
+    const result = computeDemerit(
+      { current: 10, last_updated: futureTs, current_tier: "stable", confidence: 0.7 },
+      [], now,
+    );
+    expect(Number.isFinite(result.demerit)).toBe(true);
+    expect(result.demerit).toBeCloseTo(10, 1); // no decay for future timestamp
+  });
 });

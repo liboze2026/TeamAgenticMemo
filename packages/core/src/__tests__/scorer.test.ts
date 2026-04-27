@@ -97,4 +97,25 @@ describe("scoreEntry", () => {
     expect(warn).toBeGreaterThan(suggest);
     expect(suggest).toBeGreaterThan(passive);
   });
+
+  it("B-046: invalid now string → finite score (no NaN)", () => {
+    const e = makeEntry({
+      confidence: 0.8,
+      enforcement: "warn",
+      last_hit_at: "2026-01-01T00:00:00Z",
+    });
+    expect(Number.isFinite(scoreEntry(e, 10, "not-a-date"))).toBe(true);
+    expect(Number.isFinite(scoreEntry(e, 10, ""))).toBe(true);
+  });
+
+  it("B-058: hit_count > maxHitCount → score clamped to ≤ 1.0", () => {
+    const e = makeEntry({
+      confidence: 1.0,
+      hit_count: 1000,
+      enforcement: "block",
+      last_hit_at: "2026-04-27T00:00:00Z",
+    });
+    const score = scoreEntry(e, 10, "2026-04-27T00:00:00Z");
+    expect(score).toBeLessThanOrEqual(1.0);
+  });
 });

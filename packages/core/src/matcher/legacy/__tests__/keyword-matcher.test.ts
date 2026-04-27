@@ -494,3 +494,41 @@ describe("matchRules — channel gate (M4-A)", () => {
     expect(result[0]!.id).toBe("t");
   });
 });
+
+describe("matchRules — B-047 glob scope bypass", () => {
+  it("scope.paths 'src/**/*.ts' does NOT match /evil/src/foo.ts (unanchored bypass fixed)", () => {
+    const rule = makeRule({
+      wrong_pattern: "moment",
+      scope: { level: "personal", paths: ["src/**/*.ts"] },
+    });
+    const ctx = {
+      toolName: "Write",
+      input: { file_path: "/home/user/evil/src/foo.ts", content: "import moment from 'moment'" },
+    };
+    expect(matchRules(ctx, [rule])).toHaveLength(0);
+  });
+
+  it("scope.paths 'src/**/*.ts' still matches src/components/Foo.ts (relative path)", () => {
+    const rule = makeRule({
+      wrong_pattern: "moment",
+      scope: { level: "personal", paths: ["src/**/*.ts"] },
+    });
+    const ctx = {
+      toolName: "Write",
+      input: { file_path: "src/components/Foo.ts", content: "import moment from 'moment'" },
+    };
+    expect(matchRules(ctx, [rule])).toHaveLength(1);
+  });
+});
+
+describe("matchRules — B-050 invalid enforcement sort", () => {
+  it("invalid enforcement value does not crash matchRules", () => {
+    const rule = makeRule({
+      wrong_pattern: "moment",
+      enforcement: "BLOCK" as any,   // simulates DB corruption
+    });
+    const ctx = { toolName: "Bash", input: { command: "npm install moment" } };
+    expect(() => matchRules(ctx, [rule])).not.toThrow();
+    expect(matchRules(ctx, [rule])).toHaveLength(1);
+  });
+});

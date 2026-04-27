@@ -32,10 +32,9 @@ const MIN_CJK_TOKEN_LENGTH = 2;
  *  - 全部被过滤时返回空数组（不 fallback 到原始 pipe 串——那样永远匹配不到）
  */
 function splitPatterns(raw: string): string[] {
-  if (!raw.includes("|")) {
-    const t = raw.trim();
-    return t.length > 0 ? [t] : [];
-  }
+  // B-054: apply minimum length filter for BOTH single-pattern and pipe-separated cases.
+  // Previously the no-pipe branch returned the full string without a length check,
+  // meaning "a" (1 char) would match every AI response.
   const tokens: string[] = [];
   for (const piece of raw.split("|")) {
     const t = piece.trim();

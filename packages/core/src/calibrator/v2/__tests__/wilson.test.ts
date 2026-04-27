@@ -72,4 +72,22 @@ describe("Wilson LB computeConfidence", () => {
     expect(HALF_LIFE_DAYS.canonical).toBe(75);
     expect(HALF_LIFE_DAYS.enforced).toBe(90);
   });
+
+  it("B-059: observation with invalid timestamp is skipped — no NaN result", () => {
+    const obsList: Observation[] = [
+      { id: "o1", knowledge_id: "k", timestamp: "2026-04-27T00:00:00Z", outcome: "success" },
+      { id: "o2", knowledge_id: "k", timestamp: "not-a-date",            outcome: "success" },
+    ];
+    const result = computeConfidence(obsList, "experimental", new Date("2026-04-27T12:00:00Z"));
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBeGreaterThan(0); // valid obs still contributes
+  });
+
+  it("B-059: all-invalid timestamps → returns 0 (n=0 path)", () => {
+    const obsList: Observation[] = [
+      { id: "o1", knowledge_id: "k", timestamp: "", outcome: "success" },
+    ];
+    const result = computeConfidence(obsList, "experimental", new Date("2026-04-27T12:00:00Z"));
+    expect(result).toBe(0);
+  });
 });

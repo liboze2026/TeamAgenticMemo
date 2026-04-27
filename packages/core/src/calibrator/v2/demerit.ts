@@ -50,7 +50,8 @@ export function computeDemerit(
   // 1. Decay existing demerit
   let d = input.current;
   if (d > 0 && input.last_updated) {
-    const daysSince = (now.getTime() - new Date(input.last_updated).getTime()) / DAY_MS;
+    // B-061: clamp to 0 so future timestamps don't produce negative daysSince
+    const daysSince = Math.max(0, (now.getTime() - new Date(input.last_updated).getTime()) / DAY_MS);
     if (daysSince > 0) {
       const lambda = Math.LN2 / DEMERIT_HALF_LIFE_DAYS[tier];
       const decayed = d * Math.exp(-lambda * daysSince);
@@ -70,7 +71,10 @@ export function computeDemerit(
     // Cap confidence at 0.99 to prevent -log(0) = Infinity when conf = 1.0.
     // At conf=0.99 the multiplier is already ~4.6x, which is a strong signal.
     const cappedConf = Math.min(input.confidence, 0.99);
-    const multiplier = cappedConf > 0.5 ? -Math.log(1 - cappedConf) : 1.0;
+    // B-060: use Math.max(1.0, ...) so multiplier is monotone.
+    // Previously cappedConf > 0.5 switched to log formula which gives < 1.0 near 0.5,
+    // creating a non-monotone jump (conf=0.5 → 1.0, conf=0.51 → 0.713).
+    const multiplier = Math.max(1.0, -Math.log(1 - cappedConf));
     const userOverride = e.source === "user_reject" ? 10 : 0;
     const delta = base * multiplier + userOverride;
     breakdown.push({

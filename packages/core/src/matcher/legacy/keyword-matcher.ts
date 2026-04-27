@@ -58,7 +58,8 @@ export function matchRules(
   }
 
   matches.sort(
-    (a, b) => ENFORCEMENT_RANK[b.enforcement] - ENFORCEMENT_RANK[a.enforcement],
+    (a, b) =>
+      (ENFORCEMENT_RANK[b.enforcement] ?? 0) - (ENFORCEMENT_RANK[a.enforcement] ?? 0),
   );
   return matches;
 }
@@ -169,11 +170,21 @@ function checkScope(rule: KnowledgeEntry, filePath: string | undefined): boolean
 
 /** Phase 1 简化 glob：仅支持 `*` (除 / 外任意) 和 `**` (任意路径) */
 function matchesGlob(pattern: string, target: string): boolean {
-  // 转义正则特殊字符（除 *）
+  const SPECIAL_RE = /[.+?^${}()|[\]\\]/g;
   const escaped = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(SPECIAL_RE, "\\$&")
     .replace(/\*\*/g, "{{DSTAR}}")
     .replace(/\*/g, "[^/]*")
     .replace(/{{DSTAR}}/g, ".*");
-  return new RegExp(`^${escaped}$`).test(target) || new RegExp(escaped).test(target);
+  const re = new RegExp(`^${escaped}$`);
+  if (re.test(target)) return true;
+  // B-047: patterns without `/` (e.g. "*.css") are basename-only globs;
+  // match against the file's basename so file_types still work, without
+  // re-introducing the substring bypass for path globs like "src/**/*.ts".
+  if (!pattern.includes("/")) {
+    const slash = target.lastIndexOf("/");
+    const basename = slash >= 0 ? target.slice(slash + 1) : target;
+    return re.test(basename);
+  }
+  return false;
 }

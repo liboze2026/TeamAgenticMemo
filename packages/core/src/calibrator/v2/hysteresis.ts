@@ -65,7 +65,11 @@ export function applyHysteresis(input: HysteresisInput): HysteresisResult {
 
   // Demotion (non-dormant)
   if (input.demerit >= 30) return { final_tier: cand }; // death chain bypass
-  const enteredMs = input.tier_entered_at ? new Date(input.tier_entered_at).getTime() : 0;
+  // B-048: empty tier_entered_at is falsy → was treated as epoch (20 000+ days ago),
+  // bypassing the 7-day guard. Treat missing value as "just entered now" instead.
+  const enteredMs = input.tier_entered_at
+    ? new Date(input.tier_entered_at).getTime()
+    : input.now.getTime();
   const daysSince = (input.now.getTime() - enteredMs) / DAY_MS;
   if (daysSince < MIN_DAYS_FOR_DEMOTION) {
     return {

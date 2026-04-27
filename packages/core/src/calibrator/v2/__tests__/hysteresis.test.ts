@@ -66,4 +66,14 @@ describe("applyHysteresis", () => {
     expect(r.final_tier).toBe("probation");
     expect(r.blocked_reason).toBeUndefined();
   });
+
+  it("B-048: empty tier_entered_at → demotion blocked (treated as 'just entered')", () => {
+    const r = applyHysteresis({
+      ...base,
+      candidate_tier: "experimental",
+      tier_entered_at: "",   // falsy default from schema
+    });
+    expect(r.final_tier).toBe("probation");    // blocked, not demoted
+    expect(r.blocked_reason).toMatch(/7 days/);
+  });
 });
