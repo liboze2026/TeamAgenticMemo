@@ -8,6 +8,9 @@ import {
   StdoutRenderer,
   makeSkillCompiler,
   openDb,
+  syncRuleVectors,
+  syncToolVector,
+  XenovaRuleEmbedder,
 } from "@teamagent/adapters";
 import { runCompile } from "@teamagent/core";
 import {
@@ -15,6 +18,7 @@ import {
   parseVisibilityMode,
   type KnowledgeEntry,
 } from "@teamagent/types";
+import { buildFallbackDescriptions } from "./migrate-v6.js";
 
 /** pitfall 的非 IO 参数——便于测试 */
 export interface PitfallInput {
@@ -45,6 +49,8 @@ export interface PitfallOptions {
   homeDir?: string;
   now?: () => string;
   env?: Record<string, string | undefined>;
+  /** 向量 embedder，可注入 stub（生产时默认 XenovaRuleEmbedder） */
+  embedder?: { embed(texts: string[]): Promise<number[][]> };
 }
 
 function resolvePaths(opts: PitfallOptions) {
@@ -149,6 +155,29 @@ export async function executePitfall(
   const after = store.getAll().length;
   store.close();
 
+  // 向量同步（best-effort，失败不阻塞主流程）
+  try {
+    const desc = buildFallbackDescriptions({
+      trigger: entry.trigger,
+      wrong_pattern: entry.wrong_pattern,
+      correct_pattern: entry.correct_pattern,
+      reasoning: entry.reasoning,
+    });
+    const embedder = opts.embedder ?? new XenovaRuleEmbedder();
+    const [tv, pv] = await embedder.embed([desc.trigger_description, desc.pattern_description]);
+    if (tv && pv) {
+      const vdb = openDb(paths.projectDbPath);
+      vdb.prepare(
+        "UPDATE knowledge SET trigger_description=?, pattern_description=?, embedder_model_id=? WHERE id=?",
+      ).run(desc.trigger_description, desc.pattern_description, "Xenova/multilingual-e5-small", entry.id);
+      syncRuleVectors(vdb, entry.id, new Float32Array(tv), new Float32Array(pv));
+      vdb.close();
+    }
+  } catch { /* 向量同步失败不阻断 pitfall */ }
+
+  // 异步生成 tool_context_description（不阻塞，后台写入）
+  generateToolContextAsync(entry, paths.projectDbPath).catch(() => {/* best-effort */});
+
   const bus = new InMemoryAttributionBus();
   bus.emit({
     source: "pitfall",
@@ -238,6 +267,49 @@ function normalizeLevel(raw: string): "personal" | "team" | "global" {
 function normalizeNature(raw: string): "objective" | "subjective" {
   if (raw === "objective") return "objective";
   return "subjective";
+}
+
+/** 生成工具操作视角描述的 LLM prompt */
+function buildToolContextPrompt(entry: KnowledgeEntry): string {
+  return [
+    "你是代码质量规则分析助手。给定一条编程规则，描述当 AI 使用工具时，什么样的具体工具操作（Bash命令、文件编辑等）会触发这条规则。",
+    "",
+    "规则信息：",
+    `- 触发场景: ${entry.trigger}`,
+    `- 错误做法: ${entry.wrong_pattern || "(无)"}`,
+    `- 正确做法: ${entry.correct_pattern}`,
+    `- 原因: ${entry.reasoning}`,
+    "",
+    "用1-2句话描述：AI 会执行什么样的具体工具操作（如 Bash 命令、写入什么文件、编辑什么代码）才会触发这条规则？",
+    "只描述工具操作，不要说场景或原因。直接输出描述，不加引号。",
+  ].join("\n");
+}
+
+/**
+ * 异步生成 tool_context_description 并同步向量。fire-and-forget。
+ */
+async function generateToolContextAsync(
+  entry: KnowledgeEntry,
+  projectDbPath: string,
+): Promise<void> {
+  const { ClaudeCodeLLMClient, XenovaRuleEmbedder: EmbedderClass, openDb: openDatabase } = await import("@teamagent/adapters");
+  const llm = new ClaudeCodeLLMClient({ model: "haiku" });
+  const desc = await llm.complete(buildToolContextPrompt(entry));
+  if (!desc || desc.trim().length < 5) return;
+
+  const embedder = new EmbedderClass();
+  const [vec] = await embedder.embed([desc.trim()]);
+  if (!vec) return;
+
+  const vdb = openDatabase(projectDbPath);
+  try {
+    vdb.prepare(
+      "UPDATE knowledge SET tool_context_description = ? WHERE id = ?",
+    ).run(desc.trim(), entry.id);
+    syncToolVector(vdb, entry.id, new Float32Array(vec));
+  } finally {
+    vdb.close();
+  }
 }
 
 /** 必填字段缺失或全空时抛出，由 bin.ts 捕获并以非零退出码报错。 */

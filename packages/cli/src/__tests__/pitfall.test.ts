@@ -190,6 +190,76 @@ describe("executePitfall", () => {
   });
 });
 
+describe("executePitfall: 自动向量同步", () => {
+  let tmp: ReturnType<typeof mkTmp>;
+  const fixedNow = "2026-04-27T10:00:00Z";
+
+  // 384-dim stub embedder，无 Xenova 依赖，行为确定
+  const stubEmbedder = {
+    async embed(texts: string[]): Promise<number[][]> {
+      return texts.map((t) => {
+        const v = new Array(384).fill(0.5);
+        let h = 0;
+        for (let i = 0; i < t.length; i++) h = ((h * 31 + t.charCodeAt(i)) & 0xffff);
+        v[h % 384] += 0.5;
+        const n = Math.sqrt(v.reduce((s: number, x: number) => s + x * x, 0));
+        return v.map((x: number) => x / n);
+      });
+    },
+  };
+
+  beforeEach(() => { tmp = mkTmp(); });
+  afterEach(() => { tmp.cleanup(); });
+
+  it("新规则写入后 trigger_description 已被填充", async () => {
+    await executePitfall(
+      { trigger: "调用外部 HTTP API 时", wrong: "axios", correct: "fetch + 错误处理", reason: "axios 过重" },
+      { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {}, embedder: stubEmbedder },
+    );
+
+    const db = openDb(path.join(tmp.cwd, ".teamagent", "knowledge.db"));
+    const row = db.prepare("SELECT trigger_description FROM knowledge LIMIT 1").get() as any;
+    db.close();
+
+    expect(typeof row?.trigger_description).toBe("string");
+    expect(row.trigger_description.length).toBeGreaterThan(0);
+  });
+
+  it("新规则写入后 knowledge_trigger_vec 中有对应向量", async () => {
+    await executePitfall(
+      { trigger: "调用外部 HTTP API 时", wrong: "axios", correct: "fetch", reason: "r" },
+      { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {}, embedder: stubEmbedder },
+    );
+
+    const db = openDb(path.join(tmp.cwd, ".teamagent", "knowledge.db"));
+    // 查询 vec 表行数：修复前 = 0，修复后 = 1
+    const vecCount = db.prepare("SELECT COUNT(*) as n FROM knowledge_trigger_vec").get() as any;
+    db.close();
+
+    expect(vecCount.n).toBe(1);
+  });
+
+  it("不提供 embedder 时也不崩溃（embedder 是 best-effort）", async () => {
+    // 不注入 embedder，默认会尝试 XenovaRuleEmbedder；超时或失败都不应该抛出
+    await expect(
+      executePitfall(
+        { trigger: "t", wrong: "w", correct: "c", reason: "r" },
+        { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
+      ),
+    ).resolves.not.toThrow();
+  });
+
+  it("异步生成不阻塞 pitfall：录入后函数正常返回", async () => {
+    // 只验证 pitfall 本身不因 generateToolContextAsync 失败而崩溃
+    await expect(
+      executePitfall(
+        { trigger: "git push --force 到主分支", wrong: "--force", correct: "PR 流程", reason: "保护主分支历史" },
+        { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {}, embedder: stubEmbedder },
+      ),
+    ).resolves.not.toThrow();
+  });
+});
+
 describe("parsePitfallArgs", () => {
   it("returns null without --non-interactive", () => {
     expect(parsePitfallArgs([])).toBeNull();

@@ -13,5 +13,7 @@ export default defineConfig({
         singleThread: true,
       },
     },
+    // Xenova 模型首次加载可能需要数秒；给嵌入相关测试留足裕量
+    testTimeout: 30000,
   },
 });
