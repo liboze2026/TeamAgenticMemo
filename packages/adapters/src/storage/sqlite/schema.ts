@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (1, datetime('now'));
 `;
 
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 const V6_ADDITIONS = `
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
@@ -221,6 +221,33 @@ function applyV6Migration(db: DatabaseSync): void {
         vec FLOAT[384]
       )`);
       db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_pattern_vec USING vec0(
+        id TEXT PRIMARY KEY,
+        vec FLOAT[384]
+      )`);
+    } catch { /* vec0 not available */ }
+  }
+}
+
+
+const V7_ALTER_COLUMNS = [
+  "tool_context_description TEXT DEFAULT ''",
+];
+
+function applyV7Migration(db: DatabaseSync): void {
+  const existing = new Set(
+    (db.prepare("PRAGMA table_info(knowledge)").all() as Array<{ name: string }>)
+      .map((c) => c.name),
+  );
+  for (const colDef of V7_ALTER_COLUMNS) {
+    const colName = colDef.split(/\s+/)[0];
+    if (!colName) continue;
+    if (!existing.has(colName)) {
+      db.exec(`ALTER TABLE knowledge ADD COLUMN ${colDef}`);
+    }
+  }
+  if (_sqliteVecLoad) {
+    try {
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_tool_vec USING vec0(
         id TEXT PRIMARY KEY,
         vec FLOAT[384]
       )`);
@@ -307,6 +334,15 @@ export function openDb(path: string): DatabaseSync {
   // Repair partially-applied M4-B databases. Some installs reached version 6
   // before sqlite-vec/FTS tables were available, so version alone is not enough.
   applyV6Migration(db);
+
+  // Migration: schema_version 6 → 7 (M6: tool_context_description column + knowledge_tool_vec table)
+  const versionM6 = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
+  if (!versionM6 || versionM6.version < 7) {
+    applyV7Migration(db);
+    db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (7, datetime('now'))");
+  }
+  // Repair partially-applied M6 databases.
+  applyV7Migration(db);
 
   return db;
 }
