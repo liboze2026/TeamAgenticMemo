@@ -50,19 +50,7 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（25条活跃知识）
-- 使用 忽略该标签内容，除非用户明确要求分析该消息 而非 <local-command-caveat>——该标签由本地命令自动生成，代表系统噪声而非用户意图，主动响应会污染对话上下文、误把噪声当作用户指令 [0.90]
-- 使用 识别并忽略该标签内的消息，不当作用户指令进行响应 而非 <local-command-caveat>——该标签标记的是系统自动生成的消息，不代表用户真实意图；响应会将系统噪声误认为用户指令，污染对话逻辑 [0.90]
-- 忽略该标签包裹的内容，除非用户明确要求分析——该标签标记的是本地命令自动生成而非用户意图的消息；响应会把系统噪声当指令污染对话 [0.90]
-- 识别并忽略该标签内的消息，除非用户明确要求分析——该标签表示消息由系统自动生成而非用户真实意图，主动响应会将系统噪声误认为用户指令，污染对话逻辑和上下文 [0.90]
-- 使用 忽略被 <local-command-caveat> 标记的内容，仅当用户明确要求时才分析 而非 <local-command-caveat>——该标签标记的是系统自动生成的噪声而非用户指令；对其响应会误把系统输出当作用户意图，污染对话逻辑 [0.90]
-- 使用 跑完实际验证命令（构建+启动+测试）并贴出真实输出再宣布完成 而非 全部修复完成——用户反复看到 AI 宣称修复完还残留 bug，说明 AI 基于局部证据（如单测绿）就下结论；完成声明必须以端到端验证输出为证据，否则等于骗用户 [0.90] [预置]
-- 先充分理解用户的核心需求、态度和约束（包括决心程度、核心原则如'全自动化'），再基于此设计方案，而不应以 AI 自主假设的难度/成本约束来预先限制方案范围——用户表明有激进改动的意愿和明确的核心原则（全自动化、破釜沉舟），AI 却基于自主假设的'低成本'优先级提出保守方案，脱离了用户真实意图；应先充分沟通理解，再设计 [0.95]
-- 用 embedding/语义向量思想快速定位核心洞察，而非长篇场景比喻和逐条对比分析——详细的场景讲解虽然全面但效率低；embedding 思想强调在高维语义空间中快速匹配用户的真实诉求，能更直接地聚焦问题本质 [0.90]
-- 使用 process.chdir then path.resolve, or C:/bzli/... format 而非 DatabaseSync('/c/bzli/...')——node:sqlite uses Win32 API, does not recognize Git Bash /c/ mountpoint [0.70]
-- 使用 use pnpm teamagent <cmd>, or build first then node dist/bin-stop.cjs 而非 node --input-type=module importing packages that re-export .ts source files——adapters/dist/index.js re-exports from .ts source, fails without tsx. Only the bundled bin-stop.cjs / bin.js are runnable standalone [0.70]
-## TeamAgent 经验（71条活跃知识，为你编译了 28 条（token 预算 3000）)
-- 使用 忽略 <local-command-caveat> 包裹的消息，除非用户明确要求分析 而非 <local-command-caveat>——该标签内容由本地命令自动生成，非用户意图表达；AI 主动响应会污染对话上下文，误把系统噪声当用户指令 [1.00]
+## TeamAgent 经验（85条活跃知识，为你编译了 28 条（token 预算 3000）)
 - 移除用户反馈的检查条件，仅基于失败本身触发分析——用户反馈约束是冗余的；所有错都应进入分析管道，由规则库自主决定是否学习，而非前置过滤 [0.95]
 - 规则类型（practice/avoidance）应只影响处理策略（enforcement），不应影响 matching 逻辑；所有规则都应参与匹配——在 matcher 中过滤 practice 类规则导致其永不触发，失去学习反馈信号和评分机制；类型应仅控制 block/warn/score 行为，而非决定规则是否生效 [0.95]
 - avoidance 必须配 wrong_pattern（可字面匹配关键词），practice 应为空；两种规则走不同处理流程——avoidance 类规则需要可靠字面关键词才能被 matcher 在 PreToolUse 拦截，practice 类规则是原则性指导、没可靠字面关键词，直接编译进 CLAUDE.md 供 AI 读；数据合法性约束必须在 seed 生成或 LLM extractor 阶段强制执行 [0.95]
@@ -78,7 +66,6 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 分别为 Windows（where/findstr/PowerShell）和 Unix（which/grep）提供诊断命令，或明确标注环境要求——Unix 命令（which, grep, cat |）在 Windows cmd 原生环境不可用；跨平台用户群需要对应平台的等价命令，混合给两个平台的指令会导致 Windows 用户卡住且困惑 [0.90]
 - 使用 Hook 系统完整工作；flag 仅隐藏 Claude Code UI 权限交互弹窗 而非 --dangerously-skip-permissions——Flag 名字暗示禁用全部权限检查，实际只跳过交互式弹窗。PreToolUse/PostToolUse/Stop/SessionStart 等 hook 独立于此标志完整运行，不受影响 [0.90]
 - 当遇到 `<local-command-caveat>` 标签，忽略其包裹的内容，除非用户明确要求分析或响应——该标签标记系统生成的消息（如本地命令输出），非用户的显式意图；直接响应会污染对话上下文并误把工具输出当作用户指令 [0.90]
-- 使用 跑完实际验证命令（构建+启动+测试）并贴出真实输出再宣布完成 而非 全部修复完成——用户反复看到 AI 宣称修复完还残留 bug，说明 AI 基于局部证据（如单测绿）就下结论；完成声明必须以端到端验证输出为证据，否则等于骗用户 [0.90] [预置]
 - 先把凭据/环境持久化到项目配置（增量、不改已有内容），再让 subagent 自主完成；远程实验需先检测空闲显卡避免影响他人——反复追问凭据打断用户节奏；配置应一次记录永久复用。subagent 应自主推进而非报 BLOCKED。共享 GPU 资源需礼让他人实验 [0.95]
 - 按产品经理视角讲架构、流程、关键原理,略过代码级细节——默认倾向给技术细节会淹没非技术受众；产品经理需要整体认知(架构/流程/原理)而非实现,讲解粒度要匹配听众心智模型 [0.95]
 - 只 append 新键，写入前先 backup；团队策略沿用 packages/core/src/init/meta-principles.ts 四条元规则；默认插件列表为 superpowers + caveman + sales + playground + claude-plugins-official（不含 gstack）——用户级配置属共享状态，覆盖/乱改会破坏已有设置，backup+增量最小风险；四条元规则已验证过，重设会稀释既有经验；gstack 非默认需求，默认装会污染其他用户环境 [0.95]
@@ -89,6 +76,8 @@ pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 - 将抽象层级维持在问题与思路层而非技术与结构层；焦点放在问题形状、核心判断、思路选择与权衡取舍，避免具体技术名、目录、字段、算法、流水线式细节——资深架构师关注的是设计的认知模型与思维方式而非实现的技术栈；提升抽象层级使文档跨时间跨团队复用，避免技术细节导致的快速过时 [0.95]
 - 保持在功能与机制层级：讲『系统做什么』和『如何运转』，避免实现细节（技术名、目录、代码组织）和空泛表述（价值观、文学比喻）——资深读者需要清晰的功能骨架来快速形成系统心智模型；过低的抽象陷入无关细节，过高的抽象脱离工程实现，只有功能与机制层才能既有清晰的因果链又足以指导架构判断 [0.95]
 - 保持在功能与机制层：讲系统做什么、如何运转；避免掉进实现细节（技术名、路径、代码组织）和空泛理念（价值观表述、文学比喻）——资深工程师需要清晰的功能骨架来快速形成系统心智模型；掉进细节淹没主线，飘到理念脱离工程实践，只有功能与机制层既有因果链又足以指导架构判断 [0.95]
+- 遇到用户提出的概念和名词优先到 web 中 search，而非依赖自身记忆——LLM 记忆可能过时或有幻觉，web search 确保信息最新准确，特别是对新术语和概念的理解 [0.95]
+- 优先提议能够完整践行核心系统原则（如全自动化）的方案，将成本和实现难度作为次要考量因素——系统的关键设计约束（如全自动化）是架构的基石，为了降低成本而绕过原则会留下隐患；应该先确保原则被完整践行，再在此基础上优化成本 [0.95]
 - verbose = 显示所有事件（含调试细节）——用户明确要求此措辞；保持文档用词与用户偏好一致 [0.90]
-> 还有 24 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）
+> 还有 23 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）
 <!-- TEAMAGENT:END -->
