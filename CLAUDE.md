@@ -33,6 +33,27 @@ pnpm typecheck        # 跑所有包的 tsc --noEmit
 pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 ```
 
+## claudefast 约定
+
+- `claudefast` 不是 TeamAgent 命令；在本项目里它表示“用更便宜或更快的 Claude Code profile 跑非交互测试”的本地 wrapper/alias。
+- 在这台机器上，`claudefast` 位于 `/Users/liushiyu/.local/bin/claudefast`，最终会调用 `claude`，并使用 MiniMax Anthropic-compatible fast profile。不要把 wrapper 里的 API token 写进文档、测试或 commit；解释该 wrapper 时也不要展示 token 的任何片段、前缀或后缀，统一写成 `[redacted]`。
+- 在其他机器上，`claudefast` 可能只是 `claude --model haiku` 一类 alias；项目脚本只能假设它最终兼容 Claude Code CLI 参数。
+- Claude Code 交互界面里的 `!claudefast ...` 表示执行本地 shell 命令；普通 shell、脚本和 CI 里写 `claudefast ...`，不要带 `!`。
+- Hook JSON 测试的推荐模板：
+
+```bash
+claudefast -p \
+  --output-format stream-json \
+  --include-hook-events \
+  --include-partial-messages \
+  --verbose \
+  --permission-mode acceptEdits \
+  "你的测试 prompt"
+```
+
+- 不要用 `--bare` 测 TeamAgent hooks；它会跳过 hooks、plugin sync 和 CLAUDE.md 自动发现。
+- 详细说明见 `docs/CLAUDEFAST.md`。
+
 ## 已知限制 / workaround
 
 - **Windows 下 vitest 并发 OOM**：`vitest.config.ts` 强制 `fileParallelism: false`，测试顺序跑。不要打开并发。

@@ -15,5 +15,6 @@
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
-  }
+  },
+  "exclude": ["node_modules", "dist", "scripts/out"]
 }

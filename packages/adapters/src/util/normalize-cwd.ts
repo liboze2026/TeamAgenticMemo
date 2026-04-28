@@ -1,5 +1,5 @@
 /**
- * Windows + Git Bash 路径规范化：把 `/c/bzli/...` 转成 `C:/bzli/...`。
+ * Windows + Git Bash 路径规范化：把 `/c/path/...` 转成 `C:/path/...`。
  * Claude Code 在 Windows 下传给 hook 的 cwd 是 Git Bash 风格（`/c/...`），
  * 但 Node on Windows 的 path/fs API 会把它当成根目录下的 `c` 文件夹。
  */
