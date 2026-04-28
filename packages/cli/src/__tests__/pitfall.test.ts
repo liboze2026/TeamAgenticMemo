@@ -105,6 +105,45 @@ describe("executePitfall", () => {
     expect(out).toContain("dayjs");
   });
 
+  // B-065: avoidance pitfall 实际写入 CLAUDE.md 知识块；归因消息以前
+  // 硬编码 count: 0 → 显示 "第 0 行"，让用户怀疑规则没生效。修复后
+  // count 应反映实际写入的块行数 ≥ 1。
+  it("avoidance pitfall: 传播到 显示真实的 CLAUDE.md 行数 (>0, 不再是 '第 0 行')", async () => {
+    const out = await executePitfall(
+      {
+        trigger: "moment 用法",
+        wrong: "moment().format()",
+        correct: "dayjs().format()",
+        reason: "moment 体积大 + 不再维护",
+      },
+      { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
+    );
+    // 显示到 CLAUDE.md
+    expect(out).toMatch(/传播到:.*CLAUDE\.md/);
+    // 不再显示 "第 0 行"
+    expect(out).not.toMatch(/CLAUDE\.md\s*第\s*0\s*行/);
+    // 真实写入的块至少 1 行
+    expect(out).toMatch(/CLAUDE\.md\s*第\s*[1-9]\d*\s*行/);
+  });
+
+  // B-065: practice pitfall (无 wrong_pattern) 不进 CLAUDE.md，只
+  // 进 ~/.claude/skills/teamagent/<id>/SKILL.md。归因应该指向
+  // SKILL.md，避免误导用户以为规则在 CLAUDE.md 生效。
+  it("practice pitfall: 传播到 应指向 SKILL.md (不在 CLAUDE.md)", async () => {
+    const out = await executePitfall(
+      {
+        trigger: "完成开发分支后",
+        wrong: "", // practice 类
+        correct: "调用 finishing-a-development-branch skill 跑完整流程",
+        reason: "skill 流程是验证的",
+      },
+      { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {} },
+    );
+    expect(out).toContain("传播到:");
+    // practice 类规则总是写入 skill 路径
+    expect(out).toMatch(/SKILL\.md/);
+  });
+
   it("silent mode returns empty output", async () => {
     const out = await executePitfall(
       { trigger: "t", wrong: "w", correct: "c", reason: "r" },

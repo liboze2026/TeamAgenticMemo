@@ -178,13 +178,26 @@ export async function executePitfall(
   // 异步生成 tool_context_description（不阻塞，后台写入）
   generateToolContextAsync(entry, paths.projectDbPath).catch(() => {/* best-effort */});
 
+  // B-065: 真实写入位置取决于 entry.type:
+  //   avoidance (有 wrong_pattern) → 进 CLAUDE.md 知识块 + skill 文件
+  //   practice  (无 wrong_pattern) → 仅 skill 文件，CLAUDE.md 不含此规则
+  // 之前 target 永远是 (CLAUDE.md, count=0)，渲染成"传播到 CLAUDE.md 第 0 行"，
+  // 让用户误以为 practice 类规则在 CLAUDE.md 生效（实际只在 SKILL.md）。
+  // 修复：根据类型选择正确文件，且 count 用真实 blockLineCount。
+  const home = opts.homeDir ?? os.homedir();
+  const skillMdPath = path.join(home, ".claude", "skills", "teamagent", entry.id, "SKILL.md");
+  const target: { file: string; count?: number } =
+    entry.type === "practice"
+      ? { file: skillMdPath }
+      : { file: compileResult.markdown.path, count: compileResult.markdown.blockLineCount };
+
   const bus = new InMemoryAttributionBus();
   bus.emit({
     source: "pitfall",
     action: `添加知识条目 ${entry.id} (${entry.category}/${entry.tags[0]})`,
     severity: "highlight",
     timestamp: now,
-    target: { file: compileResult.markdown.path, count: 0 },
+    target,
     before: { knowledgeCount: before },
     after: {
       knowledgeCount: after,
