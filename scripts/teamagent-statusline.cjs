@@ -148,12 +148,7 @@ function main() {
     }
   }
 
-  const parts = ["TeamAgent正在运行"];
-  parts.push(`规则库：${count !== null ? count : "-"}条`);
-  parts.push(`wiki：${wikiCount}条${lastWikiDate ? ` (${lastWikiDate})` : ""}`);
-  if (lastDate) parts.push(`最近全局解析：${lastDate}`);
-
-  process.stdout.write(parts.join(" · "));
+  process.stdout.write(`TeamAgent正在运行 · 规则库：${count !== null ? count : "-"}条`);
 }
 
 main();

@@ -1,5 +1,6 @@
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（21条活跃知识）
-- 使用 process.chdir then path.resolve, or C:/bzli/... format 而非 DatabaseSync('/c/bzli/...')——node:sqlite uses Win32 API, does not recognize Git Bash /c/ mountpoint [0.70]
-- 使用 use pnpm teamagent <cmd>, or build first then node dist/bin-stop.cjs 而非 node --input-type=module importing packages that re-export .ts source files——adapters/dist/index.js re-exports from .ts source, fails without tsx. Only the bundled bin-stop.cjs / bin.js are runnable standalone [0.70]
+## TeamAgent 经验（7条活跃知识）
+- 规则入库时自动生成向量并存入虚表，无需手动迁移步骤——自动化向量生成确保新规则立即可被语义检索系统使用，避免遗漏手动操作导致规则对检索系统不可见 [0.90]
+- 在各关键事件点（如 UserPromptSubmit、PreToolUse）显示相关规则摘要，让用户明确感知规则应用——提高系统透明度，让用户看到规则库如何指导决策，建立规则有效性的反馈验证机制 [0.85]
+- 使用 省略'无命中'统计，只显示有实际匹配结果的规则信息 而非 无命中——verbose 输出应聚焦于实际决策（哪些规则被应用了），而不强调未匹配的情况，可降低信噪比让用户快速抓住关键 [0.85]
 <!-- TEAMAGENT:END -->
