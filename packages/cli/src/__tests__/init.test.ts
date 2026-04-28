@@ -109,6 +109,45 @@ describe("executeInit", () => {
     expect(r.summary.totalActiveEntries).toBeGreaterThanOrEqual(10);
   });
 
+  it("target=codex writes CLAUDE.md and links AGENTS.md + .codex/skills", async () => {
+    const r = await executeInit({
+      ...commonOpts(),
+      target: "codex",
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.steps.find((s) => s.step === "compile-claude-md")?.status).toBe("ok");
+    expect(r.steps.find((s) => s.step === "link-codex-files")?.status).toBe("ok");
+    const claudePath = path.join(tmp.cwd, "CLAUDE.md");
+    const agentsPath = path.join(tmp.cwd, "AGENTS.md");
+    const codexSkillsPath = path.join(tmp.cwd, ".codex", "skills");
+    const agents = nodeFs.readFileSync(agentsPath, "utf-8");
+    expect(agents).toContain("TEAMAGENT:START");
+    expect(agents).toContain("TEAMAGENT:END");
+    expect(nodeFs.lstatSync(agentsPath).isSymbolicLink()).toBe(true);
+    expect(path.resolve(tmp.cwd, nodeFs.readlinkSync(agentsPath))).toBe(claudePath);
+    expect(nodeFs.lstatSync(codexSkillsPath).isSymbolicLink()).toBe(true);
+    expect(path.resolve(tmp.cwd, ".codex", nodeFs.readlinkSync(codexSkillsPath))).toBe(
+      path.join(tmp.cwd, ".claude", "skills"),
+    );
+  });
+
+  it("target=both writes CLAUDE.md and links AGENTS.md", async () => {
+    const r = await executeInit({
+      ...commonOpts(),
+      target: "both",
+      skipImport: true,
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(nodeFs.readFileSync(path.join(tmp.cwd, "CLAUDE.md"), "utf-8")).toContain("TEAMAGENT:START");
+    const agentsPath = path.join(tmp.cwd, "AGENTS.md");
+    expect(nodeFs.readFileSync(agentsPath, "utf-8")).toContain("TEAMAGENT:START");
+    expect(nodeFs.lstatSync(agentsPath).isSymbolicLink()).toBe(true);
+  });
+
   it("idempotent: running init twice doesn't duplicate presets", async () => {
     await executeInit({
       ...commonOpts(),
@@ -294,6 +333,10 @@ describe("parseInitArgs", () => {
     expect(parseInitArgs(["--install-plugins"])).toEqual({
       installPlugins: true,
     });
+  });
+  it("--codex and --target=both", () => {
+    expect(parseInitArgs(["--codex"])).toEqual({ target: "codex" });
+    expect(parseInitArgs(["--target=both"])).toEqual({ target: "both" });
   });
 });
 

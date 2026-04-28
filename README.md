@@ -1,10 +1,10 @@
 # TeamAgent
 
-> 自进化 AI 规则引擎 | Self-evolving AI rule engine for Claude Code
+> 自进化 AI 规则引擎 | Self-evolving AI rule engine for Claude Code and Codex
 
-让团队踩过的坑只踩一次——TeamAgent 自动学习你的错误，在下次犯错前实时拦截。
+让团队踩过的坑只踩一次——TeamAgent 自动学习你的错误，在下次犯错前实时拦截，或把团队经验编译给 Codex 读取。
 
-*Automatically learns from your mistakes and intercepts them in real time — so your team only falls into each pitfall once.*
+*Automatically learns from your mistakes, intercepts them in real time for Claude Code, and exposes the same team memory to Codex through AGENTS.md.*
 
 [![npm version](https://badge.fury.io/js/teamagent.svg)](https://www.npmjs.com/package/teamagent)
 ![Node ≥22](https://img.shields.io/badge/node-%3E%3D22-green)
@@ -21,13 +21,19 @@ npm install -g teamagent
 # 2. 进入你的项目 / Go to your project
 cd your-project
 
-# 3. 初始化 / Initialize
+# 3. 初始化 Claude Code / Initialize for Claude Code
 teamagent init
+
+# Codex: 编译 CLAUDE.md，并创建 AGENTS.md -> CLAUDE.md 软链接
+teamagent install-codex
+
+# 同时支持 Claude Code + Codex
+teamagent init --target=both
 
 # 4.（可选）一次性装团队标配插件 / (Optional) install team-standard plugins
 teamagent install-plugins
 
-# 5. 重启 Claude Code，开始使用 / Restart Claude Code — hooks + plugins are now active
+# 5. 重启 Claude Code 或开启新 Codex 会话 / Restart Claude Code or start a new Codex session
 ```
 
 ### 团队标配插件 / Team-Standard Plugins
@@ -92,12 +98,15 @@ pnpm smoke:claudefast
 | 命令 | 说明 |
 |------|------|
 | `teamagent init` | 初始化到当前项目 |
+| `teamagent install-codex` | 初始化 Codex 静态规则出口（`AGENTS.md -> CLAUDE.md`，`.codex/skills -> .claude/skills`） |
+| `teamagent init --target=both` | 同时支持 Claude Code + Codex |
 | `teamagent init --install-plugins` | 初始化 + 同时装团队标配插件 |
 | `teamagent install-plugins` | 独立装/重装团队标配插件 |
 | `teamagent doctor` | 诊断安装环境 |
 | `teamagent stats` | 查看知识库统计 |
 | `teamagent analyze --commit` | 分析最新会话并提取规则 |
 | `teamagent compile` | 重新编译 CLAUDE.md |
+| `teamagent compile --target=codex` | 重新编译 CLAUDE.md 并刷新 Codex 软链接 |
 | `teamagent pitfall` | 手动记录一条经验 |
 | `teamagent review` | 复核最近添加的规则 |
 | `teamagent uninstall` | 卸载（保留数据） |
@@ -123,6 +132,23 @@ teamagent doctor --fix
 
 必须重启 Claude Code（不是刷新页面，是完全退出重开）。
 *You must fully restart Claude Code (quit and reopen, not just refresh).*
+
+**Codex 没读到规则 / Codex did not load rules**
+
+`teamagent install-codex` 会创建项目根目录 `AGENTS.md -> CLAUDE.md`，并创建 `.codex/skills -> .claude/skills`。开启新的 Codex 会话后生效；它不会注册 Claude Code hooks，也不会提供实时拦截。
+
+验证 Codex 能读到 TeamAgent:
+
+```bash
+codex exec -m gpt-5.4-mini -c 'model_reasoning_effort="medium"' \
+  "Read the project instructions. If you can see a TeamAgent or TeamBrain managed block, answer exactly TEAMBRAIN_VISIBLE. Otherwise answer TEAMBRAIN_MISSING."
+```
+
+保存 raw chat / JSONL 证据:
+
+```bash
+scripts/verify-codex-raw-chat.sh
+```
 
 **Windows 下 Hook 不工作 / Hook not working on Windows**
 

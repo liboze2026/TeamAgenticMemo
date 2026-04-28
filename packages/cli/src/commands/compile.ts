@@ -12,6 +12,8 @@ import type { KnowledgeEntry } from "@teamagent/types";
 
 export interface CompileOptions {
   dryRun?: boolean;
+  /** Markdown target. Defaults to historical CLAUDE.md output. */
+  target?: "claude" | "codex" | "both";
   /** 只写 CLAUDE.md，跳过 skills 出口 */
   markdownOnly?: boolean;
   /** 只写 skills，跳过 CLAUDE.md */
@@ -24,10 +26,15 @@ export interface CompileOptions {
   cwd?: string;
   homeDir?: string;
   claudeMdPath?: string;
+  agentsMdPath?: string;
   skillsDir?: string;
   projectDbPath?: string;
   userGlobalDbPath?: string;
 }
+
+export type CompileCommandResult = CompilePipelineResult & {
+  agentsMarkdown?: { path: string; blockLineCount: number };
+};
 
 function resolvePaths(opts: CompileOptions) {
   const home = opts.homeDir ?? os.homedir();
@@ -38,8 +45,19 @@ function resolvePaths(opts: CompileOptions) {
     userGlobalDbPath:
       opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
+    agentsMdPath: opts.agentsMdPath ?? path.join(cwd, "AGENTS.md"),
     skillsDir: opts.skillsDir,
+    claudeProjectSkillsDir: path.join(cwd, ".claude", "skills"),
+    codexSkillsDir: path.join(cwd, ".codex", "skills"),
   };
+}
+
+function targetIncludesClaude(target: NonNullable<CompileOptions["target"]>): boolean {
+  return target === "claude" || target === "both";
+}
+
+function targetIncludesCodex(target: NonNullable<CompileOptions["target"]>): boolean {
+  return target === "codex" || target === "both";
 }
 
 /** 不做任何写操作的 SkillCompiler stub（用于 --markdown-only 模式）。 */
@@ -69,8 +87,9 @@ function makeNoopMarkdownCompiler() {
   };
 }
 
-export async function executeCompile(opts: CompileOptions = {}): Promise<CompilePipelineResult> {
+export async function executeCompile(opts: CompileOptions = {}): Promise<CompileCommandResult> {
   const paths = resolvePaths(opts);
+  const target = opts.target ?? "claude";
 
   fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
   fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
@@ -80,44 +99,102 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
     userGlobalDbPath: paths.userGlobalDbPath,
   });
 
+  const primaryMarkdownPath = paths.claudeMdPath;
+
   const markdownCompiler = opts.skillsOnly
     ? makeNoopMarkdownCompiler()
     : new MarkdownCompiler(
-        paths.claudeMdPath,
+        primaryMarkdownPath,
         opts.presetOnly ? { compileOptions: { presetOnly: true } } : undefined,
       );
 
-  const skillCompiler = opts.markdownOnly
-    ? makeNoopSkillCompiler()
-    : makeSkillCompiler({ skillsDir: paths.skillsDir });
+  const shouldWriteSkills = !opts.markdownOnly && targetIncludesClaude(target);
+  const skillCompiler = shouldWriteSkills
+    ? makeSkillCompiler({ skillsDir: paths.skillsDir })
+    : makeNoopSkillCompiler();
 
   try {
-    const result = await runCompile({
+    const result: CompileCommandResult = await runCompile({
       store,
       markdownCompiler,
       skillCompiler,
       dryRun: opts.dryRun,
     });
+    if (targetIncludesCodex(target) && !opts.skillsOnly) {
+      if (opts.dryRun) {
+        result.agentsMarkdown = { path: "(dry-run)", blockLineCount: 0 };
+      } else {
+        fs.mkdirSync(paths.claudeProjectSkillsDir, { recursive: true });
+        ensureSymlink(paths.agentsMdPath, paths.claudeMdPath, "file", () => new Date());
+        ensureSymlink(paths.codexSkillsDir, paths.claudeProjectSkillsDir, "dir", () => new Date());
+        result.agentsMarkdown = {
+          path: paths.agentsMdPath,
+          blockLineCount: result.markdown.blockLineCount,
+        };
+      }
+    }
     return result;
   } finally {
     store.close();
   }
 }
 
+function ensureSymlink(
+  linkPath: string,
+  targetPath: string,
+  targetType: "file" | "dir",
+  now: () => Date,
+): "created" | "already" | "backed-up" {
+  const relativeTarget = path.relative(path.dirname(linkPath), targetPath) || path.basename(targetPath);
+  try {
+    const stat = fs.lstatSync(linkPath);
+    if (stat.isSymbolicLink()) {
+      const current = fs.readlinkSync(linkPath);
+      const currentAbs = path.resolve(path.dirname(linkPath), current);
+      if (currentAbs === targetPath) return "already";
+      fs.unlinkSync(linkPath);
+    } else {
+      const backupPath = `${linkPath}.bak-teamagent-${now().toISOString().replace(/[:.]/g, "-")}`;
+      fs.renameSync(linkPath, backupPath);
+      fs.symlinkSync(relativeTarget, linkPath, targetType === "dir" ? "junction" : "file");
+      return "backed-up";
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+  fs.symlinkSync(relativeTarget, linkPath, targetType === "dir" ? "junction" : "file");
+  return "created";
+}
+
 export function parseCompileArgs(argv: string[]): CompileOptions {
   const opts: CompileOptions = {};
-  for (const a of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
     if (a === "--dry-run") opts.dryRun = true;
     else if (a === "--skills-only") opts.skillsOnly = true;
     else if (a === "--markdown-only") opts.markdownOnly = true;
     else if (a === "--force") opts.force = true;
     else if (a === "--preset-only") opts.presetOnly = true;
+    else if (a === "--codex") opts.target = "codex";
+    else if (a === "--claude") opts.target = "claude";
+    else if (a === "--both") opts.target = "both";
+    else if (a === "--target") {
+      opts.target = parseTarget(argv[++i]);
+    } else if (a.startsWith("--target=")) {
+      opts.target = parseTarget(a.slice("--target=".length));
+    }
   }
   return opts;
 }
 
+function parseTarget(value: string | undefined): NonNullable<CompileOptions["target"]> {
+  if (value === "claude" || value === "codex" || value === "both") return value;
+  throw new Error(`--target 必须是 claude|codex|both，收到: ${value ?? ""}`);
+}
+
 export function renderCompileResult(
-  result: CompilePipelineResult,
+  result: CompileCommandResult,
   dryRun = false,
 ): string {
   const lines: string[] = [];
@@ -125,14 +202,27 @@ export function renderCompileResult(
   lines.push(`🔧 TeamAgent Compile${tag}`);
   lines.push("");
 
+  const label =
+    result.markdown.path === "(skipped)" || result.markdown.path === "(dry-run)"
+      ? "Markdown"
+      : path.basename(result.markdown.path);
   if (result.markdown.path === "(skipped)") {
-    lines.push("  CLAUDE.md    (skipped)");
+    lines.push(`  ${label.padEnd(12)}(skipped)`);
   } else if (result.markdown.path === "(dry-run)") {
-    lines.push("  CLAUDE.md    (dry-run, 未写入)");
+    lines.push(`  ${label.padEnd(12)}(dry-run, 未写入)`);
   } else {
     lines.push(
-      `  CLAUDE.md    ${result.markdown.path}  (${result.markdown.blockLineCount} lines)`,
+      `  ${label.padEnd(12)}${result.markdown.path}  (${result.markdown.blockLineCount} lines)`,
     );
+  }
+  if (result.agentsMarkdown) {
+    if (result.agentsMarkdown.path === "(dry-run)") {
+      lines.push("  AGENTS.md   (dry-run, 未写入)");
+    } else {
+      lines.push(
+        `  AGENTS.md   ${result.agentsMarkdown.path}  (${result.agentsMarkdown.blockLineCount} lines)`,
+      );
+    }
   }
 
   lines.push("");
