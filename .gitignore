@@ -20,5 +20,7 @@ packages/benchmark/bench-*.md
 packages/*/*.tgz
 # reclassify command outputs (timestamped, regenerated per run)
 scripts/out/reclassify-*
+# claudefast stream-json smoke outputs (timestamped, regenerated per run)
+scripts/out/claudefast-stream-json/
 # CLAUDE.md compile-hook write-failure leftovers
 CLAUDE.md.tmp-*
