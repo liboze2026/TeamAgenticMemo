@@ -3,8 +3,14 @@
  * SessionStart Hook entry. NEVER blocks UI. NEVER exits non-zero.
  */
 import { decideAction, spawnAutoInit, logError } from "./session-start-logic.js";
+import { cleanupWikiResidue } from "./wiki-residue-cleanup.js";
 
 async function main(): Promise<void> {
+  // B-090: best-effort cleanup of orphan ~/.teamagent/wiki-refresh-errors.log
+  // left over by the removed wiki subsystem (commit 280e4e8). Silent + cheap;
+  // never blocks the hook.
+  cleanupWikiResidue();
+
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
   const raw = Buffer.concat(chunks).toString("utf-8").trim();
