@@ -23,6 +23,12 @@
 - **TDD**：每个新功能先写测试（看到红）→ 写最小实现（变绿）→ commit。
 - **小 commit**：每个 commit 覆盖一个 "概念上完整的小事"。跑得通、测试绿。
 - **commit message 格式**：`feat(m{N}): <...>` / `fix(m{N}): <...>` / `refactor(m{N}): <...>`，让 Milestone 产出在 git 历史中可溯。
+- **worktree 位置**：新建 git worktree 必须放在仓库内的 `.codex/worktrees/` 目录下，不要放在仓库同级目录、`.worktrees/` 或 `.claude/worktrees/`。
+
+## Project Skills
+
+- 项目级 Codex skill 放在 `.codex/skills/<name>/SKILL.md`，不要放在 `.codex/agents/`。
+- `.codex/skills/` 必须随 Git 跟踪；这样从本仓库创建的 worktree 会自动带上项目 skill。
 
 ## 跑命令
 
@@ -54,6 +60,13 @@ claudefast -p \
 - 不要用 `--bare` 测 TeamAgent hooks；它会跳过 hooks、plugin sync 和 CLAUDE.md 自动发现。
 - 详细说明见 `docs/CLAUDEFAST.md`。
 
+## Agent 工作树
+
+- Codex / agent 专用 worktree 放在 `.codex/worktrees/<task-name>`，不要放到项目同级目录。
+- 每个 worktree 使用同名短分支，便于从 `git worktree list` 直接看任务归属。
+- 父 checkout 本地用 `.git/info/exclude` 忽略 `.codex/worktrees/`，避免嵌套 worktree 污染主工作区状态。
+- 背景说明见 `docs/notes/2026-04-28-codex-worktrees.md`。
+
 ## 已知限制 / workaround
 
 - **Windows 下 vitest 并发 OOM**：`vitest.config.ts` 强制 `fileParallelism: false`，测试顺序跑。不要打开并发。
@@ -71,10 +84,12 @@ claudefast -p \
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（98条活跃知识，为你编译了 28 条（token 预算 3000）)
+## TeamAgent 经验（184条活跃知识，为你编译了 30 条（token 预算 3000）)
+- 使用 忽略 <local-command-caveat> 包裹的消息，除非用户明确要求分析 而非 <local-command-caveat>——该标签内容由本地命令自动生成，非用户意图表达；AI 主动响应会污染对话上下文，误把系统噪声当用户指令 [1.00] [预置]
 - 移除用户反馈的检查条件，仅基于失败本身触发分析——用户反馈约束是冗余的；所有错都应进入分析管道，由规则库自主决定是否学习，而非前置过滤 [0.95]
 - 规则类型（practice/avoidance）应只影响处理策略（enforcement），不应影响 matching 逻辑；所有规则都应参与匹配——在 matcher 中过滤 practice 类规则导致其永不触发，失去学习反馈信号和评分机制；类型应仅控制 block/warn/score 行为，而非决定规则是否生效 [0.95]
 - avoidance 必须配 wrong_pattern（可字面匹配关键词），practice 应为空；两种规则走不同处理流程——avoidance 类规则需要可靠字面关键词才能被 matcher 在 PreToolUse 拦截，practice 类规则是原则性指导、没可靠字面关键词，直接编译进 CLAUDE.md 供 AI 读；数据合法性约束必须在 seed 生成或 LLM extractor 阶段强制执行 [0.95]
+- 严格遵循 chaos-qa-hunter 铁律：仅发现并记录错误到 BUGS.md，禁止修改代码、建议修复方案或停止等待——chaos-qa-hunter 的职能专化为'发现者'而非'修复者'，修复由另一个智能体负责；混淆职责边界会导致任务散焦和重复劳动 [0.95]
 - 使用 先读用户指向的文件，重新 brainstorm + 补全需求，再拆 task 实现；API key 来源询问用户（如 claude code haiku） 而非 计划文档只是设计文档，还没实现——AI 未读文件就断言不存在会误导用户；正确做法是先 Read 指定路径、以文件内容为准，再结合用户偏好（如用 haiku 作 token 来源）规划实现 [0.90]
 - 立即读取 output-file 并继续后续流程，不再说'等通知'——task-notification 本身就是通知；AI 仍说'等通知'说明未识别该消息为触发信号，正确做法是收到后立即处理输出、推进工作流 [0.90]
 - 后台 agent 完成时系统会发 task-notification，包含 task-id、output-file、status、summary；可通过 TaskOutput 工具按 task-id 读取结果——Agent(run_in_background=true) 底层走 TaskCreate 机制，完成后 harness 自动发 task-notification 事件；AI 声称'无法手动查状态'是错的，实际有 task-id 可查 [0.90]
@@ -89,6 +104,9 @@ claudefast -p \
 - 当遇到 `<local-command-caveat>` 标签，忽略其包裹的内容，除非用户明确要求分析或响应——该标签标记系统生成的消息（如本地命令输出），非用户的显式意图；直接响应会污染对话上下文并误把工具输出当作用户指令 [0.90]
 - 调用 finishing-a-development-branch skill 时必须完整执行规范流程：(1) 宣布正在使用该 skill (2) Verify tests pass (3) Present options (4) Execute user's choice (5) Clean up——skill 规范流程确保测试验证不被跳过、用户保有选择掌控权；直接声称完成或跳步会隐藏测试失败并越过用户确认 [0.90]
 - 规则入库时自动异步生成向量，无需手动 migrate——自动化向量生成在规则入库时即时执行，确保语义检索系统及时可用，避免遗漏手动操作步骤 [0.90]
+- 先用真实 testcase 触发全部功能验证可运行，再描述其能力；以代码实际行为为准，而非设计文档——设计文档描述的是意图，代码运行才是事实；基于文档声称功能完备但未验证实现，会误导用户并浪费排查时间 [0.90]
+- 先完成根因调查（Phase 1），确认根因后再提出任何修复方案；不得跳过阶段直接 patch——systematic-debugging 铁律：'NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST'；跳过调查直接 fix 是症状修复而非根因修复，会掩盖真实问题并引入新 bug [0.90]
+- 先完成 Phase 1 根因分析，确认根本原因后再提出修复建议——跳过根因分析直接修补会掩盖真实问题、产生新 bug；系统调查能确保针对根本成因，修复可靠且可持续 [0.90]
 - 先把凭据/环境持久化到项目配置（增量、不改已有内容），再让 subagent 自主完成；远程实验需先检测空闲显卡避免影响他人——反复追问凭据打断用户节奏；配置应一次记录永久复用。subagent 应自主推进而非报 BLOCKED。共享 GPU 资源需礼让他人实验 [0.95]
 - 按产品经理视角讲架构、流程、关键原理,略过代码级细节——默认倾向给技术细节会淹没非技术受众；产品经理需要整体认知(架构/流程/原理)而非实现,讲解粒度要匹配听众心智模型 [0.95]
 - 只 append 新键，写入前先 backup；团队策略沿用 packages/core/src/init/meta-principles.ts 四条元规则；默认插件列表为 superpowers + caveman + sales + playground + claude-plugins-official（不含 gstack）——用户级配置属共享状态，覆盖/乱改会破坏已有设置，backup+增量最小风险；四条元规则已验证过，重设会稀释既有经验；gstack 非默认需求，默认装会污染其他用户环境 [0.95]
@@ -96,10 +114,7 @@ claudefast -p \
 - 全局单次init，所有项目共享规则——全局 init 避免重复配置和规则分散，保证用户所有项目规则一致，降低管理成本 [0.95]
 - 先澄清和解释系统逻辑细节，获得用户确认理解后再给建议——用户若不理解系统为何如此，对改动方案缺乏信心；同步理解是决策的前置条件，避免改动后产生新的疑虑 [0.95]
 - 按分阶段流程：通读项目结构 → 识别核心模块 → 追踪关键链路 → 提炼设计思想 → 最后动笔——充分的前期分析能确保文档的准确性、完整性和逻辑清晰，避免仓促写作导致遗漏或误读 [0.95]
-- 将抽象层级维持在问题与思路层而非技术与结构层；焦点放在问题形状、核心判断、思路选择与权衡取舍，避免具体技术名、目录、字段、算法、流水线式细节——资深架构师关注的是设计的认知模型与思维方式而非实现的技术栈；提升抽象层级使文档跨时间跨团队复用，避免技术细节导致的快速过时 [0.95]
-- 保持在功能与机制层级：讲『系统做什么』和『如何运转』，避免实现细节（技术名、目录、代码组织）和空泛表述（价值观、文学比喻）——资深读者需要清晰的功能骨架来快速形成系统心智模型；过低的抽象陷入无关细节，过高的抽象脱离工程实现，只有功能与机制层才能既有清晰的因果链又足以指导架构判断 [0.95]
-- 保持在功能与机制层：讲系统做什么、如何运转；避免掉进实现细节（技术名、路径、代码组织）和空泛理念（价值观表述、文学比喻）——资深工程师需要清晰的功能骨架来快速形成系统心智模型；掉进细节淹没主线，飘到理念脱离工程实践，只有功能与机制层既有因果链又足以指导架构判断 [0.95]
 - verbose = 显示所有事件（含调试细节）——用户明确要求此措辞；保持文档用词与用户偏好一致 [0.90]
-> 还有 46 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）
-> 另有 1 条因与已选条目近义（Jaccard ≥ 0.6）被多样性过滤
+> 还有 75 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）
+> 另有 49 条因与已选条目近义（Jaccard ≥ 0.6）被多样性过滤
 <!-- TEAMAGENT:END -->

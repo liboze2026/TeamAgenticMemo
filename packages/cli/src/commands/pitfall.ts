@@ -341,7 +341,15 @@ export function parsePitfallArgs(argv: string[]): PitfallInput | null {
   const wrong = (getFlag("wrong") ?? "").trim();
   const correct = (getFlag("correct") ?? "").trim();
   const reason = (getFlag("reason") ?? "").trim();
-  const category = getFlag("category") as "C" | "E" | "S" | "K" | undefined;
+  const categoryRaw = getFlag("category");
+  let category: "C" | "E" | "S" | "K" | undefined;
+  if (categoryRaw !== undefined) {
+    const upper = categoryRaw.toUpperCase();
+    if (upper !== "C" && upper !== "E" && upper !== "S" && upper !== "K") {
+      throw new PitfallValidationError([`--category 必须是 C/E/S/K 之一，收到: "${categoryRaw}"`]);
+    }
+    category = upper as "C" | "E" | "S" | "K";
+  }
   const tagsRaw = getFlag("tags");
   const level = getFlag("level") as "personal" | "team" | "global" | undefined;
   const nature = getFlag("nature") as "objective" | "subjective" | undefined;

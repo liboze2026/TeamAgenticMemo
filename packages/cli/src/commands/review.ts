@@ -64,9 +64,13 @@ export function executeReview(opts: ReviewOptions = {}): string {
   lines.push(`共 ${rows.length} 条，展示最近 ${slice.length}`);
   lines.push("");
 
-  if (slice.length === 0) {
+  if (rows.length === 0) {
     lines.push("(知识库为空)");
     lines.push("");
+    return lines.join("\n");
+  }
+
+  if (slice.length === 0) {
     return lines.join("\n");
   }
 
@@ -109,9 +113,13 @@ export function parseReviewArgs(argv: string[]): ReviewOptions {
     } else if (a.startsWith("--scope=")) {
       const v = a.slice("--scope=".length);
       if (v === "personal" || v === "team" || v === "global") opts.scope = v;
-    } else if (/^\d+$/.test(a)) {
+    } else if (/^-?\d+$/.test(a)) {
       // positional: teamagent review 20
-      opts.limit = parseInt(a, 10);
+      const v = parseInt(a, 10);
+      if (v < 0) {
+        throw new Error(`review N 必须是正整数，收到: ${a}`);
+      }
+      opts.limit = v;
     }
   }
   return opts;

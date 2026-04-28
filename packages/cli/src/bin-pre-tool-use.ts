@@ -50,7 +50,15 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  if (!input) {
+  if (!input || typeof input !== "object") {
+    process.exit(0);
+  }
+
+  // 缺少 tool_name 的 hook 调用静默放行，避免输出 "undefined 放行"
+  if (!(input as Record<string, unknown>).tool_name) {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" },
+    }));
     process.exit(0);
   }
 
@@ -181,7 +189,8 @@ async function main(): Promise<void> {
             return { matched: merged, semanticHits };
           } catch (_semErr) {
             // Silent fallback to legacy on any semantic error
-            process.stderr.write(`teamagent pre-hook: semantic match failed, falling back to legacy: ${String(_semErr)}\n`);
+            const stack = (_semErr instanceof Error ? _semErr.stack : String(_semErr)) ?? String(_semErr);
+            process.stderr.write(`teamagent pre-hook: semantic match failed, falling back to legacy: ${stack}\n`);
           }
         }
 

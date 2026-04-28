@@ -3,8 +3,11 @@
  * 构造 3 种 tool input 输入给 bundle，比对 stdout。
  */
 import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const BUNDLE = "packages/cli/dist/bin-pre-tool-use.cjs";
+const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const BUNDLE = path.join(REPO_ROOT, "packages/cli/dist/bin-pre-tool-use.cjs");
 
 function run(name: string, input: object) {
   const res = spawnSync("node", [BUNDLE], {
@@ -25,7 +28,7 @@ run("Bash with trigger keyword (Part 1: should FIRE — Bash has no file_path)",
   hook_event_name: "PreToolUse",
   tool_name: "Bash",
   tool_input: { command: `npm install ${TRIG}` },
-  cwd: "/c/bzli/teamagent",
+  cwd: REPO_ROOT,
   session_id: "smoke",
 });
 
@@ -33,10 +36,10 @@ run("Write to .md with trigger in content (Part 2: should be SILENT after fix)",
   hook_event_name: "PreToolUse",
   tool_name: "Write",
   tool_input: {
-    file_path: "/c/bzli/teamagent/docs/eval.md",
+    file_path: path.join(REPO_ROOT, "docs/eval.md"),
     content: `we talk about ${TRIG} in this doc`,
   },
-  cwd: "/c/bzli/teamagent",
+  cwd: REPO_ROOT,
   session_id: "smoke",
 });
 
@@ -44,9 +47,9 @@ run("Write to .ts with trigger in content (should FIRE)", {
   hook_event_name: "PreToolUse",
   tool_name: "Write",
   tool_input: {
-    file_path: "/c/bzli/teamagent/src/api.ts",
+    file_path: path.join(REPO_ROOT, "src/api.ts"),
     content: `import client from "${TRIG}"`,
   },
-  cwd: "/c/bzli/teamagent",
+  cwd: REPO_ROOT,
   session_id: "smoke",
 });

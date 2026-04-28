@@ -48,7 +48,13 @@ function resolveSince(sinceRaw: string | undefined, homeDir: string, now: Date):
     const hours = parseInt(sinceRaw, 10);
     return new Date(now.getTime() - hours * 60 * 60 * 1000);
   }
-  return new Date(sinceRaw);
+  const d = new Date(sinceRaw);
+  if (isNaN(d.getTime())) {
+    throw new Error(
+      `--since 格式无效: "${sinceRaw}"。接受格式: "24h"（小时）、"7d"（天）或 ISO 日期 "2026-01-01"`,
+    );
+  }
+  return d;
 }
 
 function saveScanState(homeDir: string, now: Date, mode: string): void {
@@ -271,13 +277,19 @@ export function parseScanErrorsArgs(argv: string[]): ScanErrorsOptions {
     if (a === "--mode" && argv[i + 1]) {
       const v = argv[++i]!;
       if (v === "full" || v === "efficient") opts.mode = v;
+      else throw new Error(`--mode 必须是 "efficient" 或 "full"，收到: "${v}"`);
     } else if (a.startsWith("--mode=")) {
       const v = a.slice("--mode=".length);
       if (v === "full" || v === "efficient") opts.mode = v;
+      else throw new Error(`--mode 必须是 "efficient" 或 "full"，收到: "${v}"`);
     } else if (a === "--min-freq" && argv[i + 1]) {
-      opts.minFreq = parseInt(argv[++i]!, 10);
+      const v = parseInt(argv[++i]!, 10);
+      if (isNaN(v)) throw new Error(`--min-freq 必须是整数，收到: "${argv[i]}"`);
+      opts.minFreq = v;
     } else if (a.startsWith("--min-freq=")) {
-      opts.minFreq = parseInt(a.slice("--min-freq=".length), 10);
+      const v = parseInt(a.slice("--min-freq=".length), 10);
+      if (isNaN(v)) throw new Error(`--min-freq 必须是整数，收到: "${a.slice("--min-freq=".length)}"`);
+      opts.minFreq = v;
     } else if (a === "--dry-run") {
       opts.dryRun = true;
     } else if (a === "--quiet") {

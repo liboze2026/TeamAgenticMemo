@@ -168,38 +168,52 @@ export async function runStopPipeline(
   // Step 1: analyze. Claude Code can fire Stop before the transcript jsonl
   // finishes flushing to disk, or the file may still be locked on Windows
   // (EACCES/EPERM). Retry up to 4 times with back-off.
+  //
+  // B-070: subagent / vitest / and other ephemeral session IDs never persist
+  // a transcript to ~/.claude/projects/. For those, retry is wasted time + log
+  // spam. Fast-path: if transcript_path is set but doesn't exist after the
+  // initial wait, skip analyze entirely (calibrate/compile still run).
   try {
     process.stderr.write(`TeamAgent: 分析会话中 (${modeTag})...\n`);
-    let lastErr: unknown;
-    let analyzed = false;
     // Small initial wait: Claude Code may still hold the transcript file lock
     // when Stop fires on Windows.
     await new Promise((r) => setTimeout(r, 300));
-    const llmClient = buildLLMClient();
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      try {
-        const result = await executeAnalyze({
-          session: input.transcript_path,
-          commit: true,
-          cwd,
-          fromTurnIndex,
-          llmClient,
-          isMomentSeen: (sig) => seen.has(sig),
-          markMomentSeen: (sig) => { newlySeen.add(sig); seen.add(sig); },
-          onMeta: (m) => { analyzeMeta = m; },
-          embedder: getStopEmbedder(),
-        });
-        const firstLine = result.split("\n")[0] ?? "分析完成";
-        process.stderr.write(`TeamAgent: ${firstLine}\n`);
-        analyzed = true;
-        break;
-      } catch (e) {
-        lastErr = e;
-        if (!isRetryableAnalyzeError(e) || attempt === 4) break;
-        await new Promise((r) => setTimeout(r, attempt * 1500));
+
+    if (input.transcript_path && !existsSync(input.transcript_path)) {
+      // Subagent or vitest session — transcript will never appear. Skip
+      // quietly (info-level stderr, no stop-errors.log entry).
+      process.stderr.write(
+        `TeamAgent: 跳过 analyze (transcript 未落盘，可能是子任务/测试 session)\n`,
+      );
+    } else {
+      let lastErr: unknown;
+      let analyzed = false;
+      const llmClient = buildLLMClient();
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        try {
+          const result = await executeAnalyze({
+            session: input.transcript_path,
+            commit: true,
+            cwd,
+            fromTurnIndex,
+            llmClient,
+            isMomentSeen: (sig) => seen.has(sig),
+            markMomentSeen: (sig) => { newlySeen.add(sig); seen.add(sig); },
+            onMeta: (m) => { analyzeMeta = m; },
+            embedder: getStopEmbedder(),
+          });
+          const firstLine = result.split("\n")[0] ?? "分析完成";
+          process.stderr.write(`TeamAgent: ${firstLine}\n`);
+          analyzed = true;
+          break;
+        } catch (e) {
+          lastErr = e;
+          if (!isRetryableAnalyzeError(e) || attempt === 4) break;
+          await new Promise((r) => setTimeout(r, attempt * 1500));
+        }
       }
+      if (!analyzed) throw lastErr;
     }
-    if (!analyzed) throw lastErr;
   } catch (e) {
     logError(cwd, "analyze", e);
   }
@@ -450,15 +464,48 @@ function isValidStopHookInput(v: unknown): v is StopHookInput {
   );
 }
 
+/**
+ * B-068: env-var leak resilience.
+ *
+ * Detect whether this invocation is a genuine detached-pipeline child.
+ * Requires BOTH env flag set AND argv[2] pointing to an existing tmp file —
+ * the env flag alone is insufficient because TEAMAGENT_STOP_PIPELINE=1 has
+ * been observed leaking into the foreground hook process (root cause:
+ * upstream env inheritance in Claude Code's hook spawn). When env says "I'm
+ * a child" but argv proves otherwise, fall through to the foreground stdin
+ * path instead of erroring out — this restores the learning loop even when
+ * env is polluted.
+ */
+export function isDetachedPipelineInvocation(
+  env: NodeJS.ProcessEnv,
+  argv: readonly string[],
+  envKey: string = "TEAMAGENT_STOP_PIPELINE",
+): boolean {
+  if (env[envKey] !== "1") return false;
+  const arg = argv[2];
+  if (!arg) return false;
+  if (!existsSync(arg)) return false;
+  return true;
+}
+
 async function main(): Promise<void> {
-  // When spawned as detached pipeline subprocess
-  if (process.env["TEAMAGENT_STOP_PIPELINE"] === "1") {
-    const parsed = JSON.parse(process.argv[2] ?? "{}");
+  // Genuine detached pipeline subprocess: env flag + valid tmp-file argv[2].
+  if (isDetachedPipelineInvocation(process.env, process.argv)) {
+    const arg = process.argv[2]!;
+    let parsed: unknown;
+    try {
+      const raw = readFileSync(arg, "utf-8");
+      try { unlinkSync(arg); } catch { /* ignore cleanup failure */ }
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      logError(process.cwd(), "main", new Error(`detached spawn JSON parse failed: ${arg}`));
+      return;
+    }
     if (!isValidStopHookInput(parsed)) {
       logError(
         process.cwd(),
         "main",
-        new Error(`detached spawn received invalid input: ${process.argv[2]}`),
+        new Error(`detached spawn received invalid input: ${arg}`),
       );
       return;
     }
@@ -498,7 +545,17 @@ async function main(): Promise<void> {
       logError(cwd, "main", new Error("process.argv[1] missing — cannot self-spawn"));
       return;
     }
-    const child = spawn(process.execPath, [selfPath, JSON.stringify(input)], {
+    // Write JSON payload to a temp file instead of passing via argv[2].
+    // Windows CreateProcess command-line quoting of JSON strings containing
+    // backslashes and double-quotes is fragile; a temp file is unambiguous.
+    const tmpFile = path.join(os.tmpdir(), `teamagent-stop-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+    try {
+      writeFileSync(tmpFile, JSON.stringify(input), "utf-8");
+    } catch (e) {
+      logError(cwd, "write-tmp", e);
+      return;
+    }
+    const child = spawn(process.execPath, [selfPath, tmpFile], {
       detached: true,
       stdio: "ignore",
       cwd,
@@ -513,6 +570,7 @@ async function main(): Promise<void> {
     // and exit cleanly rather than crash with an unhandled 'error' event.
     child.on("error", (err) => {
       logError(cwd, "spawn-detached", err);
+      try { unlinkSync(tmpFile); } catch { /* ignore */ }
     });
     child.unref();
     return;
@@ -525,14 +583,22 @@ async function main(): Promise<void> {
   ]);
 }
 
-main().catch((e) => {
-  try {
-    const logPath = path.join(os.homedir(), ".teamagent", "stop-errors.log");
-    appendFileSync(
-      logPath,
-      `[${new Date().toISOString()}] main-crash err=${String(e)}\n`,
-      "utf-8",
-    );
-  } catch { /* silent */ }
-  process.exit(0); // never block session close
-});
+// Guard: only auto-invoke main() when this bundle IS the entry point.
+// bin-session-end.ts imports runFullRescanPipeline from this module, which
+// causes tsup to inline all of bin-stop.ts (including this top-level call)
+// into bin-session-end.cjs. Without this guard both bundles call main(),
+// consuming stdin inside bin-session-end.cjs and making the real SessionEnd
+// main() see empty stdin. Check argv[1] to distinguish.
+if (path.basename(process.argv[1] ?? "").startsWith("bin-stop")) {
+  main().catch((e) => {
+    try {
+      const logPath = path.join(os.homedir(), ".teamagent", "stop-errors.log");
+      appendFileSync(
+        logPath,
+        `[${new Date().toISOString()}] main-crash err=${String(e)}\n`,
+        "utf-8",
+      );
+    } catch { /* silent */ }
+    process.exit(0); // never block session close
+  });
+}

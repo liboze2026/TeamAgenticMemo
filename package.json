@@ -14,6 +14,7 @@
     "smoke:hook": "tsx scripts/hook-smoke-test.ts",
     "smoke:claudefast": "tsx scripts/claudefast-stream-json-tests.ts",
     "evidence:phase-gaps": "tsx scripts/evidence-phase-gaps-ab.ts",
+    "smoke:claudefast:rule-card": "tsx scripts/claudefast-rule-card-smoke.ts",
     "verify": "tsx packages/cli/src/bin.ts verify",
     "dogfood-report": "tsx packages/cli/src/bin.ts dogfood-report",
     "benchmark": "pnpm --filter @teamagent/benchmark bench",
@@ -31,5 +32,9 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "onnxruntime-node": "^1.14.0",
+    "sharp": "^0.33.5"
   }
 }

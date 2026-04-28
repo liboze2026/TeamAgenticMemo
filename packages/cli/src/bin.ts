@@ -159,7 +159,12 @@ async function main(): Promise<void> {
         } else if (a.startsWith("--explain=")) {
           statsOpts.explain = a.slice("--explain=".length);
         } else if (a.startsWith("--stuck-days=")) {
-          statsOpts.stuckDays = parseInt(a.slice("--stuck-days=".length), 10);
+          const v = parseInt(a.slice("--stuck-days=".length), 10);
+          if (isNaN(v) || v < 0) {
+            process.stderr.write(`--stuck-days 必须是正整数，收到: "${a.slice("--stuck-days=".length)}"\n`);
+            process.exit(1);
+          }
+          statsOpts.stuckDays = v;
         } else if (a === "--override-signals") {
           statsOpts.overrideSignals = true;
         }
@@ -327,6 +332,11 @@ async function main(): Promise<void> {
         return;
       }
       const output = await executeIngest(opts);
+      if (output.startsWith("✗")) {
+        process.stderr.write(output);
+        process.exit(1);
+        return;
+      }
       process.stdout.write(output);
       return;
     }
@@ -415,77 +425,6 @@ async function main(): Promise<void> {
       const reviewOpts = parseReviewCandidatesArgs(rest);
       const output = await executeReviewCandidates(reviewOpts);
       if (output) process.stdout.write(output);
-      return;
-    }
-    case "wiki:refresh": {
-      const { runWikiRefresh } = await import("./wiki-refresh.js");
-      const force = rest.includes("--force");
-      const result = await runWikiRefresh({ cwd: process.cwd(), force });
-      if (result.skipped) {
-        process.stdout.write(`wiki:refresh skipped (${result.skipReason})\n`);
-      } else {
-        process.stdout.write(
-          `wiki:refresh done — added: ${result.added}, archived: ${result.archived}\n`,
-        );
-      }
-      break;
-    }
-    case "wiki:pull": {
-      const { executeWikiPull, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiPull(opts);
-      return;
-    }
-    case "wiki:add": {
-      const url = rest.find(a => !a.startsWith("--"));
-      if (!url) { process.stderr.write("Usage: teamagent wiki:add <url>\n"); process.exit(1); }
-      const { executeWikiAdd, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiAdd(url, opts);
-      return;
-    }
-    case "wiki:list": {
-      const { executeWikiList, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiList(opts);
-      return;
-    }
-    case "wiki:stats": {
-      const { executeWikiStats, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiStats(opts);
-      return;
-    }
-    case "wiki:subscriptions": {
-      const { executeWikiSubscriptions, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiSubscriptions(opts);
-      return;
-    }
-    case "wiki:subscribe": {
-      const { executeWikiSubscribe, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiSubscribe(opts);
-      return;
-    }
-    case "wiki:unsubscribe": {
-      const { executeWikiUnsubscribe, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiUnsubscribe(opts);
-      return;
-    }
-    case "wiki:rejected": {
-      const { executeWikiRejected, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiRejected(opts);
-      return;
-    }
-    case "wiki:dislike": {
-      const id = rest.find(a => !a.startsWith("--"));
-      if (!id) { process.stderr.write("Usage: teamagent wiki:dislike <knowledge-id>\n"); process.exit(1); }
-      const { executeWikiDislike, parseWikiArgs } = await import("./commands/wiki.js");
-      const { opts } = parseWikiArgs(rest);
-      await executeWikiDislike(id, opts);
       return;
     }
     case "doctor": {
@@ -601,19 +540,6 @@ async function main(): Promise<void> {
           "                                   自动采集错误信号 → 提取候选规则 → 写入候选队列",
           "  teamagent review-candidates [--limit=N]",
           "                                   交互式审核候选规则：[a]批准 [r]拒绝 [s]跳过 [q]退出",
-          "  teamagent wiki:refresh [--force]  立即拉取 + 清理（24h debounce，--force 强制）",
-          "  teamagent wiki:pull [--since=<duration|ISO>] [--dry-run]",
-          "                                   从5个源拉取前沿知识并存入知识库",
-          "  teamagent wiki:add <url>         手动添加单条 URL 到知识库",
-          "  teamagent wiki:list [--limit=20] [--source=github_release|npm|rss|arxiv|manual]",
-          "                                   查看已入库的 wiki 条目",
-          "  teamagent wiki:stats             显示 wiki 统计数据",
-          "  teamagent wiki:subscriptions     查看当前订阅源",
-          "  teamagent wiki:subscribe --repo <owner/repo> | --rss <url> | --arxiv <category>",
-          "                                   手动追加订阅源",
-          "  teamagent wiki:unsubscribe --id <id>  退订某个源",
-          "  teamagent wiki:rejected [--limit=20]  查看被拒绝的条目",
-          "  teamagent wiki:dislike <id>      标记条目为不喜欢（M2.7 注入时跳过）",
           "  teamagent migrate-v6 [--dry-run] [--limit=N] [--db=<path>]",
           "                                   迁移旧规则（trigger_description 为空）通过 LLM 生成双描述，并写入 vec0 和 FTS5",
           "  teamagent migrate-v7 [--dry-run] [--limit=N] [--db=<path>]",

@@ -2,7 +2,7 @@
 /**
  * SessionStart Hook entry. NEVER blocks UI. NEVER exits non-zero.
  */
-import { decideAction, spawnRefresh, spawnAutoInit, logError, DEFAULT_DEBOUNCE_HOURS } from "./session-start-logic.js";
+import { decideAction, spawnAutoInit, logError } from "./session-start-logic.js";
 
 async function main(): Promise<void> {
   const chunks: Buffer[] = [];
@@ -18,9 +18,7 @@ async function main(): Promise<void> {
   }
 
   const action = decideAction(cwd, new Date());
-  if (action === "spawn") {
-    try { spawnRefresh(cwd); } catch (e) { logError("spawn-failed", e); }
-  } else if (action === "auto-init") {
+  if (action === "auto-init") {
     // New project: show visible banner to user + kick off init in background.
     // Claude Code displays SessionStart stderr/stdout on first turn.
     process.stderr.write(

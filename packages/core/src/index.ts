@@ -132,25 +132,6 @@ export type { FilterOptions } from "./error-collector/signal-filter.js";
 export { buildErrorBatches } from "./error-collector/error-batch-builder.js";
 export type { ErrorBatch } from "./error-collector/error-batch-builder.js";
 export {
-  filterByStack,
-  filterByAge,
-  validateWikiItem,
-  buildWikiEntry,
-  detectStackPackages,
-  mergeStack,
-  autoSubscribe,
-  STACK_TO_SOURCES,
-  computeArchivals,
-  type ValidationResult,
-  type WikiEntry,
-  type JudgedWikiItem,
-  type WikiEntrySnapshot,
-  type SweepPolicy,
-  type ArchiveReason,
-  type ArchiveDecision,
-} from "./wiki/index.js";
-export * from "./wiki-injection/index.js";
-export {
   scanNarrative,
   formatPendingRecord,
   mergePending,

@@ -10,10 +10,10 @@
  * NEVER exits non-zero.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runFullRescanPipeline, type StopHookInput } from "./bin-stop.js";
+import { isDetachedPipelineInvocation, runFullRescanPipeline, type StopHookInput } from "./bin-stop.js";
 
 const FULL_RESCAN_TIMEOUT_MS = (() => {
   const envVal = parseInt(process.env.TEAMAGENT_STOP_TIMEOUT_MS ?? "", 10);
@@ -21,9 +21,14 @@ const FULL_RESCAN_TIMEOUT_MS = (() => {
 })();
 
 async function main(): Promise<void> {
-  // Spawned as detached subprocess
-  if (process.env["TEAMAGENT_SESSION_END_PIPELINE"] === "1") {
-    const input = JSON.parse(process.argv[2] ?? "{}") as StopHookInput;
+  // B-068: only enter detached branch when env flag AND argv[2] tmp file
+  // both prove this is a real child. Otherwise the env was leaked from a
+  // prior process and we must fall through to the foreground stdin path.
+  if (isDetachedPipelineInvocation(process.env, process.argv, "TEAMAGENT_SESSION_END_PIPELINE")) {
+    const arg = process.argv[2]!;
+    const raw = readFileSync(arg, "utf-8");
+    try { unlinkSync(arg); } catch { /* ignore */ }
+    const input = JSON.parse(raw) as StopHookInput;
     await runFullRescanPipeline(input);
     return;
   }
@@ -37,15 +42,19 @@ async function main(): Promise<void> {
   const input = JSON.parse(raw) as StopHookInput;
   const cwd = input.cwd ?? process.cwd();
 
-  // Detached + windowsHide — MUST NOT pop a console window on Windows.
+  // Use temp file to pass JSON payload — avoids Windows command-line quoting issues.
   const selfPath = process.argv[1]!;
-  const child = spawn(process.execPath, [selfPath, JSON.stringify(input)], {
+  const tmpFile = path.join(os.tmpdir(), `teamagent-session-end-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  writeFileSync(tmpFile, JSON.stringify(input), "utf-8");
+
+  const child = spawn(process.execPath, [selfPath, tmpFile], {
     detached: true,
     stdio: "ignore",
     cwd,
     env: { ...process.env, TEAMAGENT_SESSION_END_PIPELINE: "1" },
     windowsHide: true,
   });
+  child.on("error", () => { try { unlinkSync(tmpFile); } catch { /* ignore */ } });
   child.unref();
 }
 

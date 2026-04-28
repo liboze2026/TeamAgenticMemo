@@ -85,7 +85,7 @@ function defaultPostHookEntry(): string {
 /**
  * 把 Windows 反斜杠路径转为正斜杠格式。
  * Git Bash 会吞掉路径里的反斜杠（视为转义），所以 hook command 必须用 /。
- * `C:\bzli\foo` → `C:/bzli/foo`
+ * `C:\path\to\repo` → `C:/path/to/repo`
  */
 function toForwardSlash(p: string): string {
   return p.replace(/\\/g, "/");
