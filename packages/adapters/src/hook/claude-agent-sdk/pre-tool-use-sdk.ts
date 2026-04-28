@@ -1,9 +1,19 @@
 import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { detectCompliedSignals, type OverrideSignalEvent } from "@teamagent/core";
 
+export interface SemanticHit {
+  id: string;
+  trigger: string;
+  score: number;
+}
+
 export interface PreToolUseDeps {
   matcher: {
-    match(input: { tool_name: string; tool_input: unknown }): Promise<{ matched: any[] }>;
+    match(input: { tool_name: string; tool_input: unknown }): Promise<{
+      matched: any[];
+      /** 语义检索原始命中（不限 enforcement 级别），verbose pass 时展示 */
+      semanticHits?: SemanticHit[];
+    }>;
   };
   eventLog: {
     append(e: any): void;
@@ -31,7 +41,7 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
     const tool_use_id = input.tool_use_id ?? crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const { matched } = await deps.matcher.match({ tool_name, tool_input });
+    const { matched, semanticHits } = await deps.matcher.match({ tool_name, tool_input });
 
     if (matched.length === 0) {
       // Clean pass — 检测 AI 是否遵守了近期对同 tool 的警告
@@ -56,10 +66,13 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
       });
       if (deps.visibility === "verbose") {
         const n = typeof deps.ruleCount === "number" ? deps.ruleCount : 0;
-        return {
-          permissionDecision: "allow",
-          systemMessage: `◈ TeamAgent: ✓ ${tool_name} 放行 (检查 ${n} 条规则, 无命中)`,
-        };
+        const hits = semanticHits ?? [];
+        const hitSummary = hits.length > 0 ? `语义命中 ${hits.length} 条` : "无命中";
+        const lines = [`◈ TeamAgent: ✓ ${tool_name} 放行 (检查 ${n} 条规则, ${hitSummary})`];
+        for (const h of hits) {
+          lines.push(`  · [${h.id}] ${h.trigger.slice(0, 40)} (score ${h.score.toFixed(2)})`);
+        }
+        return { permissionDecision: "allow", systemMessage: lines.join("\n") };
       }
       return { permissionDecision: "allow" };
     }

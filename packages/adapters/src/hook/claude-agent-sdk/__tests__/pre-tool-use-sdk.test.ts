@@ -134,6 +134,56 @@ describe("createPreToolUseHandler (SDK)", () => {
     expect(result.systemMessage).toContain("放行");
   });
 
+  it("verbose + semanticHits → pass message shows hit count and rule details", async () => {
+    const semanticHits = [
+      { id: "rule-abc", trigger: "写测试时先看红", score: 0.78 },
+      { id: "rule-xyz", trigger: "提交前跑全量测试", score: 0.61 },
+    ];
+    const handler = createPreToolUseHandler({
+      matcher: {
+        match: async () => ({ matched: [], semanticHits }),
+      } as any,
+      eventLog: { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) } as any,
+      visibility: "verbose",
+      ruleCount: 87,
+    });
+    const result = await handler({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test" },
+      tool_use_id: "tu-sem-hits",
+    } as any);
+
+    expect(result.permissionDecision).toBe("allow");
+    // 摘要行：显示命中数而非"无命中"
+    expect(result.systemMessage).toContain("语义命中 2 条");
+    // 每条规则的 trigger 和 score
+    expect(result.systemMessage).toContain("写测试时先看红");
+    expect(result.systemMessage).toContain("0.78");
+    expect(result.systemMessage).toContain("rule-abc");
+  });
+
+  it("verbose + empty semanticHits → pass message shows 无命中", async () => {
+    const handler = createPreToolUseHandler({
+      matcher: {
+        match: async () => ({ matched: [], semanticHits: [] }),
+      } as any,
+      eventLog: { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) } as any,
+      visibility: "verbose",
+      ruleCount: 87,
+    });
+    const result = await handler({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "ls" },
+      tool_use_id: "tu-sem-empty",
+    } as any);
+
+    expect(result.permissionDecision).toBe("allow");
+    expect(result.systemMessage).toContain("无命中");
+    expect(result.systemMessage).not.toContain("语义命中");
+  });
+
   it("smart/silent visibility → clean pass stays silent (no systemMessage)", async () => {
     for (const vis of ["smart", "silent"] as const) {
       const handler = createPreToolUseHandler({
