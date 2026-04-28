@@ -69,11 +69,18 @@ async function queryRules(
   globalDbPath: string,
   excludeIds: Set<string>,
 ): Promise<KnowledgeEntry[]> {
+  // project DB 存放用户积累的 personal-scope 规则；global DB 存放跨项目 global-scope 规则。
+  // 必须按 DB 来源传正确的 scope，否则 scope_level 过滤会把所有 personal 规则过滤掉（零命中）。
+  const dbsWithScope: Array<{ path: string; scope: "personal" | "global" }> = [
+    { path: projectDbPath, scope: "personal" },
+    { path: globalDbPath,  scope: "global"   },
+  ];
+
   const dbs: ReturnType<typeof openDb>[] = [];
   const hits: SemanticMatch[] = [];
 
   try {
-    for (const dbPath of [projectDbPath, globalDbPath]) {
+    for (const { path: dbPath, scope } of dbsWithScope) {
       if (!fs.existsSync(dbPath)) continue;
       const db = openDb(dbPath);
       dbs.push(db);
@@ -83,7 +90,7 @@ async function queryRules(
         actionText: text,
         embedder,
         retriever,
-        scope: { level: "global" },
+        scope: { level: scope },
         topK: TOP_K * 3,
       });
       hits.push(...matches);
