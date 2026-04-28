@@ -78,7 +78,7 @@ Self-tests cover synthetic data only — they miss everything below.
 | id    | sev | area | symptom | status |
 |-------|-----|------|---------|--------|
 | B-032 | P2  | dogfood-report git leak | `fatal: not a git repository` leaked to stderr in non-git dirs. | **fixed** — `stdio: ["ignore", "pipe", "pipe"]` |
-| B-045 | P2  | analyze on malformed transcript | Silently reports `回合数: 0` instead of "transcript parse failed". | open — low priority; user can verify via file content |
+| B-045 | P2  | analyze on malformed transcript | Silently reports `回合数: 0` instead of "transcript parse failed". | **fixed (wave9)** — analyze 加 hasAnyValidJsonlLine() guard，garbage 文件直接返回 "transcript parse failed" 报告 (commit 3afe408) |
 
 ---
 
@@ -135,10 +135,10 @@ Approach: full white-box read of 215 source files, then logic attacks on all pur
 | B-061 | P3 | `calibrator/v2/demerit.ts:computeDemerit future timestamp` | `last_updated` 为未来时间时，`daysSince = (now - future) < 0`，`if (daysSince > 0)` 跳过衰减，demerit 永久停留在当前值无法衰减。系统时钟向前跳（NTP 调整、跨时区切换）或脚本设置了未来时间戳时触发。 | **fixed** — `Math.max(0, daysSince)` clamp (commit 6ed76ce) |
 | B-062 | P1 | `compiler/markdown.ts:injectBlockIntoDoc` | 若知识条目任意文本字段（trigger、correct_pattern、reasoning 等）包含 `<!-- TEAMAGENT:END -->`，编译后 CLAUDE.md 中会存在 2 个 END 标记。下次 compile 时 `existing.match(endTagRegex)` 匹配到条目内部的 END 而非真正的结束标记，导致 `before+block+after` 中 `after` 包含漏出的条目内容，CLAUDE.md 结构永久损坏。经 `chaos-verify-injection.mjs` 实测确认。 | **fixed** — `sanitizeBlockMarkers()` with U+200B zero-width space (commit 46f0070) |
 | B-063 | P2 | `adapters/storage/sqlite/dual-layer-store.ts` | `DualLayerStore` 缺少 `update()` / `findByScopeLevel()` / `delete()` / `count()` 等方法，不满足 `KnowledgeStore` port 接口的完整契约。若 `runCalibrationPipeline` 被直接传入 `DualLayerStore`（而非各层 `SqliteKnowledgeStore`），将在运行时抛 `TypeError: store.update is not a function`。 | **fixed** — added all 4 missing methods with layer routing (commit 44e257c) |
-| B-064 | P1 | `correction-detector/rule-based.ts` | `analyze` 把提问（含"能…吗？"）和 skill 系统消息（"Base directory for this skill:..."）均识别为 `explicit_denial` 纠正时刻（权重 0.90/0.95），导致 `analyze --commit` 从本次 QA 测试会话提取了 3 条虚假知识入库（知识库从 57 → 61），污染全局规则库。实测：session `6d8d49f5` 中 turn4（测试请求）和 turn5（skill 加载消息）均被误判。 | open |
-| B-065 | P2 | `commands/pitfall.ts` 归因消息 | pitfall 录入规则后，归因显示"传播到: `<project>/CLAUDE.md` **第 0 行**"，但实际写入路径是 `~/.claude/skills/teamagent/<id>/SKILL.md`；CLAUDE.md 文本中完全不包含该规则。"第 0 行"是 bug 的残留痕迹。用户误认为规则已在 CLAUDE.md 生效。实测 0 条命中。 | open |
-| B-066 | P2 | `commands/demo-hook.ts` 事件污染 | `teamagent demo hook Bash 'command=npm install moment'` 写入了被 `calibrate` 视为真实用户接受的事件，导致刚录入的规则（无任何真实触发历史）在下次 `calibrate --dry-run` 中置信度从 0.70 → 0.83（+0.13）。`demo hook` 是离线测试命令，不应产生影响校准管线的事件记录。 | open |
-| B-067 | P3 | `commands/pitfall.ts` 输入校验 | `pitfall --non-interactive` 对 `--trigger`/`--wrong`/`--correct`/`--reason` 字段无长度上限，接受并存储 10000 字符的 trigger（exit 0）。超长字段被完整向量化并写入 DB，在编译时可能撑爆 3000 token 预算。 | open |
+| B-064 | P1 | `correction-detector/rule-based.ts` | `analyze` 把提问（含"能…吗？"）和 skill 系统消息（"Base directory for this skill:..."）均识别为 `explicit_denial` 纠正时刻（权重 0.90/0.95），导致 `analyze --commit` 从本次 QA 测试会话提取了 3 条虚假知识入库（知识库从 57 → 61），污染全局规则库。实测：session `6d8d49f5` 中 turn4（测试请求）和 turn5（skill 加载消息）均被误判。 | **fixed (wave9)** — 加 isSystemInjectedMessage() (skill loader / `<system-reminder>` / `<local-command-caveat>` / `<command-*>` 标签) + isPoliteQuery() (短礼貌 "能/可以…吗?")；命中即跳过 explicit_denial signal (commit 468932d) |
+| B-065 | P2 | `commands/pitfall.ts` 归因消息 | pitfall 录入规则后，归因显示"传播到: `<project>/CLAUDE.md` **第 0 行**"，但实际写入路径是 `~/.claude/skills/teamagent/<id>/SKILL.md`；CLAUDE.md 文本中完全不包含该规则。"第 0 行"是 bug 的残留痕迹。用户误认为规则已在 CLAUDE.md 生效。实测 0 条命中。 | **fixed (wave9)** — emit 事件按 entry.type 分流：avoidance → CLAUDE.md + 真实 blockLineCount；practice → ~/.claude/skills/teamagent/<id>/SKILL.md (commit d7f3ab9) |
+| B-066 | P2 | `commands/demo-hook.ts` 事件污染 | `teamagent demo hook Bash 'command=npm install moment'` 写入了被 `calibrate` 视为真实用户接受的事件，导致刚录入的规则（无任何真实触发历史）在下次 `calibrate --dry-run` 中置信度从 0.70 → 0.83（+0.13）。`demo hook` 是离线测试命令，不应产生影响校准管线的事件记录。 | **fixed (wave9)** — 当前 demo-hook 已是只读（事件不写、hit_count 不变）；本次加 IRON LAW 注释 + 2 条防御测试 lock 该约束以防回退 (commit ea7ac55) |
+| B-067 | P3 | `commands/pitfall.ts` 输入校验 | `pitfall --non-interactive` 对 `--trigger`/`--wrong`/`--correct`/`--reason` 字段无长度上限，接受并存储 10000 字符的 trigger（exit 0）。超长字段被完整向量化并写入 DB，在编译时可能撑爆 3000 token 预算。 | **fixed (wave9)** — parsePitfallArgs 加每字段 1000 字符上限，超过抛 PitfallValidationError exit 2 (commit 5523bb3) |
 | B-068 | P0 | `bin-stop.ts:main` async / TEAMAGENT_STOP_PIPELINE env 泄漏 | 复诊更新根因：原假设「Windows spawn 转义反斜杠 JSON」**已排除**——bundle 早改成传 tmpFile 路径。真根因：`TEAMAGENT_STOP_PIPELINE=1` 环境变量泄漏进 hook 进程 env，前台 hook 误入 detached 分支读 argv[2]=undefined 立即退出。复现：`TEAMAGENT_STOP_PIPELINE=1 node bin-stop.cjs` 字节级一致。 | **fixed** — 抽出 `isDetachedPipelineInvocation(env, argv, envKey)`：env=1 AND argv[2] 存在且为可读文件 才走 detached，否则降级到前台 stdin（env 污染无影响）。bin-stop + bin-session-end 同步修。6 条 unit test 覆盖各种泄漏组合。 |
 | B-069 | P1 | `bin-stop.ts:semantic-scan` `onnxruntime-node` | Stop hook 语义扫描崩溃：`Cannot find module 'onnxruntime-node'`。 | **fixed** — 当前 bundle (04-28 16:00) 之后 0 次错误（之前 73 次/24h）。修复路径：catch-up 向量化已包在 fire-and-forget 模式 + 依赖到位。 |
 | B-070 | P2 | `bin-stop.ts:analyze` subagent transcript 重试浪费 + 日志噪音 | Stop hook 对子任务 / vitest session 重试 4 次（9s）查找不存在的 transcript jsonl，每次写一条 stop-errors.log。 | **fixed** — analyze 第一步加 `existsSync(transcript_path)` fast-path：缺失则 stderr info-level 退出，不写 errors.log，calibrate/compile 仍正常跑。2 条新 unit test。|
@@ -217,5 +217,8 @@ Wave 7 遗留 open（B-045 / B-064 / B-065 / B-066 / B-067）本轮**未**复测
 **Wave 9 修复状态**: 6/6 全部 fixed，1207/1207 测试绿，typecheck 干净；
 实测 `pnpm test` 前后 `wc -l ~/.teamagent/stop-errors.log` 不增长。
 
-**未复测的 Wave 7 open**: B-045, B-064（已知 P1，知识投毒）, B-065, B-066, B-067 — 留给下一轮专攻 correction-detector / pitfall 归因。
+**Wave 9 续修复 — Wave 7 遗留 5 条 open 全部清零**：
+B-045 / B-064 / B-065 / B-066 / B-067 一并 fixed；累计 1223/1223 测试绿，
+typecheck 干净。BUGS.md 全部条目（B-001 ~ B-090）状态：fixed (75) /
+withdrawn (8) / wontfix-merged (1) /  open (0)。
 
