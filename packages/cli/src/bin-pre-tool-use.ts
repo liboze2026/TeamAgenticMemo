@@ -181,7 +181,8 @@ async function main(): Promise<void> {
             return { matched: merged, semanticHits };
           } catch (_semErr) {
             // Silent fallback to legacy on any semantic error
-            process.stderr.write(`teamagent pre-hook: semantic match failed, falling back to legacy: ${String(_semErr)}\n`);
+            const stack = (_semErr instanceof Error ? _semErr.stack : String(_semErr)) ?? String(_semErr);
+            process.stderr.write(`teamagent pre-hook: semantic match failed, falling back to legacy: ${stack}\n`);
           }
         }
 

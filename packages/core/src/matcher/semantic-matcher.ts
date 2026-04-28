@@ -55,7 +55,7 @@ export async function semanticMatch(args: {
       // but store may also hold a JSON string if the rule was partially migrated.
       const raw = (c.rule as any).hard_negatives;
       const hardNegVecs: number[][] = Array.isArray(raw)
-        ? (raw as number[][])
+        ? (raw as number[][]).filter(Array.isArray)
         : (typeof raw === "string" && raw
             ? (() => { try { return JSON.parse(raw) as number[][]; } catch { return []; } })()
             : []);
