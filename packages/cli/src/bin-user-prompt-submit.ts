@@ -30,6 +30,7 @@ import {
 } from "./user-prompt-inject.js";
 import {
   retrieveRulesForPrompt,
+  buildTerminalSummary,
 } from "./user-prompt-rule-retriever.js";
 import {
   isFirstPrompt,
@@ -157,6 +158,8 @@ async function main(): Promise<void> {
   }
 
   // Rule semantic retrieval (Tier-1 / Tier-2)
+  let matchedTier1: import("@teamagent/types").KnowledgeEntry[] = [];
+  let matchedTier2: import("@teamagent/types").KnowledgeEntry[] = [];
   try {
     const sessionId = input.session_id ?? "";
     if (sessionId && prompt) {
@@ -181,6 +184,8 @@ async function main(): Promise<void> {
         if (ruleResult.injectionText) {
           blocks.push(ruleResult.injectionText);
         }
+        matchedTier1 = ruleResult.tier1Rules;
+        matchedTier2 = ruleResult.tier2Rules;
         if (ruleResult.allInjectedIds.length > 0) {
           appendSessionInjected(sessionsDir, sessionId, ruleResult.allInjectedIds);
         } else if (firstPrompt) {
@@ -202,7 +207,21 @@ async function main(): Promise<void> {
 
   if (result) blocks.push(result);
 
-  if (blocks.length > 0) process.stdout.write(blocks.join("\n\n") + "\n");
+  if (blocks.length > 0) {
+    const injectionText = blocks.join("\n\n");
+    const rawVis = (process.env.TEAMAGENT_VISIBILITY ?? "verbose").toLowerCase();
+    const terminalSummary =
+      rawVis !== "silent" ? buildTerminalSummary(matchedTier1, matchedTier2) : "";
+
+    const output: Record<string, unknown> = {
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: injectionText,
+      },
+    };
+    if (terminalSummary) output.systemMessage = terminalSummary;
+    process.stdout.write(JSON.stringify(output));
+  }
 }
 
 main().catch(() => process.exit(0));

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatRuleInjection, buildTechStackText } from "../user-prompt-rule-retriever.js";
+import { formatRuleInjection, buildTechStackText, buildTerminalSummary } from "../user-prompt-rule-retriever.js";
 import type { KnowledgeEntry } from "@teamagent/types";
 
 function makeRule(id: string, trigger: string, correct: string, conf = 0.9): KnowledgeEntry {
@@ -56,6 +56,38 @@ describe("formatRuleInjection", () => {
     const text = formatRuleInjection(rules, "T2");
     expect(text).toContain("先写测试");
     expect(text).toContain("一次一件事");
+  });
+});
+
+describe("buildTerminalSummary", () => {
+  it("returns empty string when no rules", () => {
+    expect(buildTerminalSummary([], [])).toBe("");
+  });
+
+  it("includes ◈ TeamAgent header with count", () => {
+    const rules = [makeRule("r1", "调用外部 HTTP API 时", "fetch + 错误处理")];
+    const text = buildTerminalSummary(rules, []);
+    expect(text).toContain("◈ TeamAgent");
+    expect(text).toContain("1");
+  });
+
+  it("lists each rule's trigger and correct_pattern", () => {
+    const r1 = makeRule("r1", "调用外部 HTTP API 时", "fetch");
+    const r2 = makeRule("r2", "git push 到主分支", "PR 流程");
+    const text = buildTerminalSummary([r1], [r2]);
+    expect(text).toContain("调用外部 HTTP API 时");
+    expect(text).toContain("fetch");
+    expect(text).toContain("git push 到主分支");
+    expect(text).toContain("PR 流程");
+  });
+
+  it("combines tier1 and tier2 rules", () => {
+    const t1 = [makeRule("r1", "触发1", "做法1")];
+    const t2 = [makeRule("r2", "触发2", "做法2")];
+    const text = buildTerminalSummary(t1, t2);
+    expect(text).toContain("2");
+    expect(text).toContain("触发1");
+    expect(text).toContain("触发2");
   });
 });
 
