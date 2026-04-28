@@ -51,6 +51,30 @@ teamagent doctor
 
 All 8 checks should show ✅. If any fail, follow the fix hint shown.
 
+### 使用 claudefast 做 JSON 测试 / JSON Testing with claudefast
+
+本仓库的调试文档会用 `claudefast` 表示“用更便宜或更快的 Claude Code profile 跑非交互测试”。它不是 TeamAgent 命令，而是本机对 `claude` 的 wrapper 或 alias；常见实现包括 `claude --model haiku`，或指向 Anthropic-compatible provider（例如 MiniMax）的本地脚本。
+
+推荐的 hook JSON 测试模板：
+
+```bash
+claudefast -p \
+  --output-format stream-json \
+  --include-hook-events \
+  --include-partial-messages \
+  --verbose \
+  --permission-mode acceptEdits \
+  "创建一个 TypeScript 文件，里面用 axios 发请求"
+```
+
+完整说明见 [`docs/CLAUDEFAST.md`](docs/CLAUDEFAST.md)。
+
+批量 smoke test：
+
+```bash
+pnpm smoke:claudefast
+```
+
 ---
 
 ## 它能做什么 / What it does
