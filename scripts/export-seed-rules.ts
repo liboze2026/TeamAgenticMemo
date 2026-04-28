@@ -10,7 +10,7 @@
  *   1. status=active
  *   2. 去重: 按 normalized(trigger + "|" + correct_pattern) hash
  *   3. 剔除项目专属路径: correct_pattern/trigger/reasoning 含绝对 Windows 路径
- *      ("C:/bzli"/"C:\\bzli"/"/c/bzli") 或 "packages/core/src/init/meta-principles"
+ *      (repo-specific absolute paths) 或 "packages/core/src/init/meta-principles"
  *      (自指引用)
  *   4. confidence >= 0.6
  *   5. 排除 meta-principle 自身 (id 以 "preset-" 开头) —— 新用户 init 会另装一份

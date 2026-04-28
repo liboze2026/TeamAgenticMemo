@@ -2,6 +2,7 @@
 # L0 机械验证：不依赖 Claude Code 会话，10 秒跑完
 set -e
 cd "$(dirname "$0")/.."
+REPO_ROOT="$(pwd)"
 
 echo "=== 1/5 tests ==="
 pnpm test 2>&1 | tail -3
@@ -21,7 +22,8 @@ fi
 
 echo ""
 echo "=== 4/5 hook invocation (end-to-end) ==="
-RESULT=$(echo '{"session_id":"verify","hook_event_name":"PreToolUse","cwd":"/c/bzli/teamagent","permission_mode":"default","transcript_path":"/t","tool_name":"Bash","tool_input":{"command":"wget fake"},"tool_use_id":"t"}' \
+TRANSCRIPT_PATH="$(mktemp)"
+RESULT=$(node -e 'const cwd=process.argv[1]; const transcript_path=process.argv[2]; process.stdout.write(JSON.stringify({session_id:"verify",hook_event_name:"PreToolUse",cwd,permission_mode:"default",transcript_path,tool_name:"Bash",tool_input:{command:"wget fake"},tool_use_id:"t"}));' "$REPO_ROOT" "$TRANSCRIPT_PATH" \
   | node packages/cli/dist/bin-pre-tool-use.cjs)
 if echo "$RESULT" | grep -q "先检查下载目录"; then
   echo "✅ hook responds correctly"
