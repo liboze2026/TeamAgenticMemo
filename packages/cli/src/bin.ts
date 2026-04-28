@@ -67,6 +67,17 @@ import {
   executeReviewCandidates,
   parseReviewCandidatesArgs,
 } from "./commands/review-candidates.js";
+import {
+  executePairAccept,
+  executePairCapsule,
+  executePairKnock,
+  executePairList,
+  parsePairArgs,
+  renderPairAcceptResult,
+  renderPairCapsuleResult,
+  renderPairKnockResult,
+  renderPairList,
+} from "./commands/pair.js";
 
 function findPackageVersion(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
@@ -445,6 +456,37 @@ async function main(): Promise<void> {
       if (!result.ok) process.exit(1);
       return;
     }
+    case "pair": {
+      const parsed = parsePairArgs(rest);
+      if (parsed.subcommand === "capsule") {
+        const result = executePairCapsule(parsed.options as unknown as Parameters<typeof executePairCapsule>[0]);
+        process.stdout.write(renderPairCapsuleResult(result));
+        return;
+      }
+      if (parsed.subcommand === "accept") {
+        const result = executePairAccept(parsed.options as unknown as Parameters<typeof executePairAccept>[0]);
+        process.stdout.write(renderPairAcceptResult(result));
+        return;
+      }
+      if (parsed.subcommand === "knock") {
+        const opts = parsed.options as unknown as Parameters<typeof executePairKnock>[0];
+        const result = executePairKnock(opts);
+        if (opts.json) {
+          process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+        } else {
+          process.stdout.write(renderPairKnockResult(result));
+        }
+        if (!result.ok) process.exit(1);
+        return;
+      }
+      const book = executePairList(parsed.options as Parameters<typeof executePairList>[0]);
+      if ((parsed.options as { json?: boolean }).json) {
+        process.stdout.write(JSON.stringify(book, null, 2) + "\n");
+      } else {
+        process.stdout.write(renderPairList(book));
+      }
+      return;
+    }
     case "reclassify": {
       const sub = rest[0];
       const subArgs = rest.slice(1);
@@ -518,6 +560,13 @@ async function main(): Promise<void> {
           "                                   注册团队标配 plugins（superpowers/caveman/sales/playground）",
           "                                   通过 'claude plugin marketplace add' + 'claude plugin install' 调 CC CLI",
           "                                   默认装全部；--only 限定子集；--dry-run 只预览",
+          "  teamagent pair capsule --name=<device> --host=<host> [--user=<user>] [--out=<file>]",
+          "                                   生成短期 teammate 配对胶囊（不包含 SSH 私钥）",
+          "  teamagent pair accept <capsule-file|token> [--local-name=<device>]",
+          "                                   接受胶囊，写入 peer 账本、SSH config 受管块和收据",
+          "  teamagent pair knock <peer> [--json] [--simulate]",
+          "                                   通过 SSH 验证配对；--simulate 用于离线验收",
+          "  teamagent pair list              列出已配对 teammate",
           "  teamagent disable                临时禁用 Hook（保留数据）",
           "  teamagent enable                 重新启用 Hook",
           "  teamagent uninstall [--delete-data] [--dry-run]",
