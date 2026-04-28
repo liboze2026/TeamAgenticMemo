@@ -11,8 +11,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { DualLayerStore } from "../packages/adapters/src/index.ts";
-import type { KnowledgeEntry } from "../packages/types/src/index.ts";
+import { DualLayerStore } from "../packages/adapters/src/index";
+import type { KnowledgeEntry } from "../packages/types/src/index";
 
 type JsonObject = Record<string, unknown>;
 
