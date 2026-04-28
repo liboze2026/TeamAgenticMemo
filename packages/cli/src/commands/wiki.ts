@@ -219,16 +219,22 @@ export async function executeWikiSubscribe(opts: WikiCommandOptions): Promise<vo
 
 // wiki:unsubscribe
 export async function executeWikiUnsubscribe(opts: WikiCommandOptions): Promise<void> {
+  if (!opts.sourceId) {
+    process.stderr.write("用法: teamagent wiki:unsubscribe --id <id>\n");
+    process.exit(1);
+  }
+
   const { openDb } = await import("@teamagent/adapters/storage/sqlite/schema");
   const { WikiSubscriptionStore } = await import("@teamagent/adapters/wiki/wiki-subscription-store");
 
   const db = openDb(resolveDbPath(opts));
   const store = new WikiSubscriptionStore(db);
-  const found = store.remove(opts.sourceId!);
+  const found = store.remove(opts.sourceId);
   if (found) {
     process.stdout.write(`✓ 已退订 ${opts.sourceId}\n`);
   } else {
     process.stderr.write(`未找到订阅: ${opts.sourceId}\n`);
+    process.exit(1);
   }
 }
 
@@ -263,6 +269,7 @@ export async function executeWikiDislike(knowledgeId: string, opts: WikiCommandO
     process.stdout.write(`✓ 已标记 ${knowledgeId} 为不喜欢，后续注入会跳过\n`);
   } else {
     process.stderr.write(`未找到条目: ${knowledgeId}\n`);
+    process.exit(1);
   }
 }
 

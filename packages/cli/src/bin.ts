@@ -159,7 +159,12 @@ async function main(): Promise<void> {
         } else if (a.startsWith("--explain=")) {
           statsOpts.explain = a.slice("--explain=".length);
         } else if (a.startsWith("--stuck-days=")) {
-          statsOpts.stuckDays = parseInt(a.slice("--stuck-days=".length), 10);
+          const v = parseInt(a.slice("--stuck-days=".length), 10);
+          if (isNaN(v) || v < 0) {
+            process.stderr.write(`--stuck-days 必须是正整数，收到: "${a.slice("--stuck-days=".length)}"\n`);
+            process.exit(1);
+          }
+          statsOpts.stuckDays = v;
         } else if (a === "--override-signals") {
           statsOpts.overrideSignals = true;
         }
@@ -327,6 +332,11 @@ async function main(): Promise<void> {
         return;
       }
       const output = await executeIngest(opts);
+      if (output.startsWith("✗")) {
+        process.stderr.write(output);
+        process.exit(1);
+        return;
+      }
       process.stdout.write(output);
       return;
     }

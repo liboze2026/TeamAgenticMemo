@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { ExtractionInput } from "@teamagent/ports";
 
 /**
@@ -47,15 +49,24 @@ export function parseNpmAudit(raw: string): ExtractionInput[] {
   return out;
 }
 
-/** 调 runner 拿 `npm audit --json` 输出；包住 runner 方便测试。 */
+/** 根据 lockfile 检测包管理器，返回对应的 audit 命令。 */
+function detectAuditCmd(cwd?: string): string {
+  const dir = cwd ?? process.cwd();
+  if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) return "pnpm audit --json";
+  if (fs.existsSync(path.join(dir, "yarn.lock"))) return "yarn audit --json";
+  return "npm audit --json";
+}
+
+/** 调 runner 拿 audit --json 输出；自动检测 pnpm/yarn/npm，方便测试注入 runner。 */
 export async function getNpmAuditOutput(
   runner: (cmd: string, opts: { cwd?: string }) => Promise<string>,
   cwd?: string,
 ): Promise<string> {
+  const cmd = detectAuditCmd(cwd);
   try {
-    return await runner("npm audit --json", { cwd });
+    return await runner(cmd, { cwd });
   } catch (err) {
-    // npm audit 在有漏洞时 exit code 非 0；如果输出还是 JSON，优先用它
+    // audit 在有漏洞时 exit code 非 0；如果输出还是 JSON，优先用它
     const message = err instanceof Error ? err.message : String(err);
     const match = message.match(/\{[\s\S]*\}$/);
     if (match) return match[0];

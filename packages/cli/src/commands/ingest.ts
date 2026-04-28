@@ -324,8 +324,13 @@ export function parseIngestArgs(argv: string[]): IngestOptions {
       opts.source = "candidates";
       opts.filePath = argv[++i];
     } else if (a.startsWith("--since=")) {
-      const m = a.slice("--since=".length).match(/^(\d+)d?$/);
-      if (m) opts.sinceDays = parseInt(m[1]!, 10);
+      const raw = a.slice("--since=".length);
+      const m = raw.match(/^(\d+)d?$/);
+      if (m) {
+        opts.sinceDays = parseInt(m[1]!, 10);
+      } else if (raw) {
+        throw new Error(`--since 格式无效: "${raw}"。接受格式: "30d" 或 "45"（天数）`);
+      }
     } else if (a.startsWith("--threshold=")) {
       opts.threshold = parseInt(a.slice("--threshold=".length), 10);
     }

@@ -22,3 +22,6 @@ packages/*/*.tgz
 scripts/out/reclassify-*
 # CLAUDE.md compile-hook write-failure leftovers
 CLAUDE.md.tmp-*
+# Machine-local Claude Code settings (contains absolute hook paths specific to each dev's machine).
+# Each developer runs `teamagent install-hook` after clone to generate their own.
+.claude/settings.local.json

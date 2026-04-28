@@ -41,6 +41,6 @@ export function buildToolActionSummary(toolName: string, toolInput: unknown): st
     return `查找文件 ${pattern}`;
   }
 
-  // 通用兜底
-  return `${toolName}: ${JSON.stringify(toolInput).slice(0, 200)}`;
+  // 通用兜底 — JSON.stringify(undefined) 返回 JS undefined（非字符串），需先转 null 再序列化
+  return `${toolName ?? "unknown"}: ${JSON.stringify(toolInput ?? null).slice(0, 200)}`;
 }
