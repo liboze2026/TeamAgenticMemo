@@ -163,7 +163,7 @@ describe("createPreToolUseHandler (SDK)", () => {
     expect(result.systemMessage).toContain("rule-abc");
   });
 
-  it("verbose + empty semanticHits → pass message shows 无命中", async () => {
+  it("verbose + empty semanticHits → pass message shows rule count only (no 无命中)", async () => {
     const handler = createPreToolUseHandler({
       matcher: {
         match: async () => ({ matched: [], semanticHits: [] }),
@@ -180,7 +180,8 @@ describe("createPreToolUseHandler (SDK)", () => {
     } as any);
 
     expect(result.permissionDecision).toBe("allow");
-    expect(result.systemMessage).toContain("无命中");
+    expect(result.systemMessage).toContain("检查 87 条规则");
+    expect(result.systemMessage).not.toContain("无命中");
     expect(result.systemMessage).not.toContain("语义命中");
   });
 

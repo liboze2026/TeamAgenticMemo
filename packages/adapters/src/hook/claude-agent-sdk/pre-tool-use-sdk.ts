@@ -67,8 +67,8 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
       if (deps.visibility === "verbose") {
         const n = typeof deps.ruleCount === "number" ? deps.ruleCount : 0;
         const hits = semanticHits ?? [];
-        const hitSummary = hits.length > 0 ? `语义命中 ${hits.length} 条` : "无命中";
-        const lines = [`◈ TeamAgent: ✓ ${tool_name} 放行 (检查 ${n} 条规则, ${hitSummary})`];
+        const hitSummary = hits.length > 0 ? `, 语义命中 ${hits.length} 条` : "";
+        const lines = [`◈ TeamAgent: ✓ ${tool_name} 放行 (检查 ${n} 条规则${hitSummary})`];
         for (const h of hits) {
           lines.push(`  · [${h.id}] ${h.trigger.slice(0, 40)} (score ${h.score.toFixed(2)})`);
         }
