@@ -312,6 +312,14 @@ async function generateToolContextAsync(
   }
 }
 
+/**
+ * B-067: per-field length cap for pitfall non-interactive input. 1000 chars
+ * is generous for any natural-language pitfall description; values beyond
+ * this strongly suggest abuse or accidental paste of large content. The cap
+ * prevents one entry from dominating the 3000-token CLAUDE.md compile budget.
+ */
+const PITFALL_FIELD_MAX = 1000;
+
 /** 必填字段缺失或全空时抛出，由 bin.ts 捕获并以非零退出码报错。 */
 export class PitfallValidationError extends Error {
   constructor(public readonly missing: string[]) {
@@ -361,6 +369,20 @@ export function parsePitfallArgs(argv: string[]): PitfallInput | null {
   if (!correct) missing.push("--correct");
   if (!reason) missing.push("--reason");
   if (missing.length > 0) throw new PitfallValidationError(missing);
+
+  // B-067: enforce per-field length cap. Without this, 10000-char trigger
+  // gets stored, vectorized, and compiled into CLAUDE.md (3000-token budget)
+  // — a single bad entry can blow out the entire knowledge block.
+  const overLong: string[] = [];
+  if (trigger.length > PITFALL_FIELD_MAX) overLong.push(`--trigger 长度 ${trigger.length}`);
+  if (wrong.length > PITFALL_FIELD_MAX) overLong.push(`--wrong 长度 ${wrong.length}`);
+  if (correct.length > PITFALL_FIELD_MAX) overLong.push(`--correct 长度 ${correct.length}`);
+  if (reason.length > PITFALL_FIELD_MAX) overLong.push(`--reason 长度 ${reason.length}`);
+  if (overLong.length > 0) {
+    throw new PitfallValidationError([
+      `字段超长（每字段最大 ${PITFALL_FIELD_MAX} 字符）: ${overLong.join(", ")}`,
+    ]);
+  }
 
   const tags = tagsRaw
     ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean)

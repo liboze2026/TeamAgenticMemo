@@ -323,4 +323,69 @@ describe("parsePitfallArgs", () => {
       ]),
     ).toThrow(/缺少必填字段.*--trigger/);
   });
+
+  // B-067: pitfall 字段无长度上限会让 10000 字符的 trigger 入库 + 向量化 +
+  // 编译进 CLAUDE.md 的 3000 token 预算，造成知识被一条恶性条目占满。
+  describe("B-067 length validation", () => {
+    it("rejects trigger over 1000 chars", () => {
+      const longText = "a".repeat(1001);
+      expect(() =>
+        parsePitfallArgs([
+          "--non-interactive",
+          `--trigger=${longText}`,
+          "--correct=c",
+          "--reason=r",
+        ]),
+      ).toThrow(/超长|过长|长度|too long|length/i);
+    });
+
+    it("rejects wrong over 1000 chars", () => {
+      const longText = "x".repeat(1500);
+      expect(() =>
+        parsePitfallArgs([
+          "--non-interactive",
+          "--trigger=t",
+          `--wrong=${longText}`,
+          "--correct=c",
+          "--reason=r",
+        ]),
+      ).toThrow(/超长|过长|长度|too long|length/i);
+    });
+
+    it("rejects correct over 1000 chars", () => {
+      const longText = "y".repeat(2000);
+      expect(() =>
+        parsePitfallArgs([
+          "--non-interactive",
+          "--trigger=t",
+          `--correct=${longText}`,
+          "--reason=r",
+        ]),
+      ).toThrow(/超长|过长|长度|too long|length/i);
+    });
+
+    it("rejects reason over 1000 chars", () => {
+      const longText = "z".repeat(1001);
+      expect(() =>
+        parsePitfallArgs([
+          "--non-interactive",
+          "--trigger=t",
+          "--correct=c",
+          `--reason=${longText}`,
+        ]),
+      ).toThrow(/超长|过长|长度|too long|length/i);
+    });
+
+    it("accepts fields exactly at 1000-char boundary", () => {
+      const exact = "a".repeat(1000);
+      const input = parsePitfallArgs([
+        "--non-interactive",
+        `--trigger=${exact}`,
+        "--correct=c",
+        "--reason=r",
+      ]);
+      expect(input).not.toBeNull();
+      expect(input!.trigger.length).toBe(1000);
+    });
+  });
 });
