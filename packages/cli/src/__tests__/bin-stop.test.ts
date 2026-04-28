@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { runStopPipeline, type StopHookInput } from "../bin-stop.js";
+import { isDetachedPipelineInvocation, runStopPipeline, type StopHookInput } from "../bin-stop.js";
 
 vi.mock("../commands/analyze.js", () => ({
   executeAnalyze: vi.fn().mockResolvedValue("analyze done"),
@@ -42,19 +42,29 @@ import { executeCompile } from "../commands/compile.js";
 import { getRecentEntries } from "../commands/recent-entries.js";
 
 describe("runStopPipeline", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  // B-070: analyze is now skipped when transcript_path doesn't exist on disk.
+  // Tests that need analyze to run use this real (empty) transcript file.
+  let transcriptPath: string;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    transcriptPath = path.join(os.tmpdir(), `bin-stop-test-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
+    fs.writeFileSync(transcriptPath, "", "utf-8");
+  });
+  afterEach(() => {
+    try { fs.unlinkSync(transcriptPath); } catch { /* ignore */ }
+  });
 
   it("calls analyze with transcript_path and commit=true", async () => {
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
     await runStopPipeline(input);
     expect(executeAnalyze).toHaveBeenCalledWith(
       expect.objectContaining({
-        session: "/tmp/session.jsonl",
+        session: transcriptPath,
         commit: true,
         cwd: process.cwd(),
       })
@@ -64,7 +74,7 @@ describe("runStopPipeline", () => {
   it("calls calibrate and compile after analyze", async () => {
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -77,7 +87,7 @@ describe("runStopPipeline", () => {
     vi.mocked(executeAnalyze).mockRejectedValueOnce(new Error("analyze failed"));
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -92,7 +102,7 @@ describe("runStopPipeline", () => {
     vi.mocked(executeCompile).mockRejectedValueOnce(new Error("fail"));
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -105,12 +115,12 @@ describe("runStopPipeline", () => {
   // produce candidates.
   it("retries analyze when it throws Session not found", async () => {
     vi.mocked(executeAnalyze)
-      .mockRejectedValueOnce(new Error("Session not found: /tmp/session.jsonl"))
-      .mockRejectedValueOnce(new Error("Session not found: /tmp/session.jsonl"))
+      .mockRejectedValueOnce(new Error("Session not found: " + transcriptPath))
+      .mockRejectedValueOnce(new Error("Session not found: " + transcriptPath))
       .mockResolvedValueOnce("analyze done");
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -118,11 +128,46 @@ describe("runStopPipeline", () => {
     expect(executeAnalyze).toHaveBeenCalledTimes(3);
   });
 
+  // B-070: subagent / vitest sessions never persist a transcript jsonl.
+  // Stop hook would otherwise burn 9s on 4 retries, plus log noise.
+  it("skips analyze without retry when transcript_path doesn't exist", async () => {
+    const ghostPath = path.join(os.tmpdir(), `ghost-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
+    expect(fs.existsSync(ghostPath)).toBe(false);
+    const input: StopHookInput = {
+      session_id: "subagent-x",
+      transcript_path: ghostPath,
+      cwd: process.cwd(),
+      hook_event_name: "Stop",
+    };
+    await runStopPipeline(input);
+    expect(executeAnalyze).not.toHaveBeenCalled();
+    // Calibrate/compile still run — only analyze is skipped
+    expect(executeCalibrate).toHaveBeenCalled();
+    expect(executeCompile).toHaveBeenCalled();
+  });
+
+  it("still calls analyze when transcript_path exists", async () => {
+    const realPath = path.join(os.tmpdir(), `real-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
+    fs.writeFileSync(realPath, "", "utf-8");
+    try {
+      const input: StopHookInput = {
+        session_id: "real",
+        transcript_path: realPath,
+        cwd: process.cwd(),
+        hook_event_name: "Stop",
+      };
+      await runStopPipeline(input);
+      expect(executeAnalyze).toHaveBeenCalled();
+    } finally {
+      try { fs.unlinkSync(realPath); } catch { /* ignore */ }
+    }
+  });
+
   it("does not retry on unrelated errors", async () => {
     vi.mocked(executeAnalyze).mockRejectedValueOnce(new Error("unexpected format"));
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -136,7 +181,7 @@ describe("runStopPipeline", () => {
       .mockResolvedValueOnce("分析完成\n");
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -156,7 +201,7 @@ describe("runStopPipeline", () => {
     });
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -177,7 +222,7 @@ describe("runStopPipeline", () => {
     });
     const input: StopHookInput = {
       session_id: "abc123",
-      transcript_path: "/tmp/session.jsonl",
+      transcript_path: transcriptPath,
       cwd: process.cwd(),
       hook_event_name: "Stop",
     };
@@ -188,8 +233,62 @@ describe("runStopPipeline", () => {
   });
 });
 
+describe("isDetachedPipelineInvocation (B-068 env-leak resilience)", () => {
+  let tmpFile: string;
+  beforeEach(() => {
+    tmpFile = path.join(os.tmpdir(), `bin-stop-test-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+    fs.writeFileSync(tmpFile, JSON.stringify({}), "utf-8");
+  });
+  afterEach(() => {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+  });
+
+  it("returns true when env=1 AND argv[2] is an existing file", () => {
+    const env = { TEAMAGENT_STOP_PIPELINE: "1" };
+    const argv = ["/path/to/node", "/path/to/bin-stop.cjs", tmpFile];
+    expect(isDetachedPipelineInvocation(env, argv)).toBe(true);
+  });
+
+  it("returns false when env is unset (foreground hook)", () => {
+    const env = {};
+    const argv = ["/path/to/node", "/path/to/bin-stop.cjs", tmpFile];
+    expect(isDetachedPipelineInvocation(env, argv)).toBe(false);
+  });
+
+  it("returns false when env=1 but argv[2] is missing — env was leaked", () => {
+    // This is the real-world bug: TEAMAGENT_STOP_PIPELINE leaks into Claude
+    // Code's hook spawn, so the foreground hook (no argv[2]) sees env=1 and
+    // previously crashed by trying to read argv[2]. Must fall through instead.
+    const env = { TEAMAGENT_STOP_PIPELINE: "1" };
+    const argv = ["/path/to/node", "/path/to/bin-stop.cjs"];
+    expect(isDetachedPipelineInvocation(env, argv)).toBe(false);
+  });
+
+  it("returns false when env=1 but argv[2] points to a non-existent file", () => {
+    const env = { TEAMAGENT_STOP_PIPELINE: "1" };
+    const ghostPath = path.join(os.tmpdir(), `does-not-exist-${Date.now()}.json`);
+    const argv = ["/path/to/node", "/path/to/bin-stop.cjs", ghostPath];
+    expect(isDetachedPipelineInvocation(env, argv)).toBe(false);
+  });
+
+  it("supports custom env key for SessionEnd binary", () => {
+    const env = { TEAMAGENT_SESSION_END_PIPELINE: "1" };
+    const argv = ["/path/to/node", "/path/to/bin-session-end.cjs", tmpFile];
+    expect(isDetachedPipelineInvocation(env, argv, "TEAMAGENT_SESSION_END_PIPELINE")).toBe(true);
+    // wrong env key → false
+    expect(isDetachedPipelineInvocation(env, argv)).toBe(false);
+  });
+
+  it("returns false when env value is not exactly '1'", () => {
+    expect(isDetachedPipelineInvocation({ TEAMAGENT_STOP_PIPELINE: "true" }, ["", "", tmpFile])).toBe(false);
+    expect(isDetachedPipelineInvocation({ TEAMAGENT_STOP_PIPELINE: "" }, ["", "", tmpFile])).toBe(false);
+    expect(isDetachedPipelineInvocation({ TEAMAGENT_STOP_PIPELINE: "0" }, ["", "", tmpFile])).toBe(false);
+  });
+});
+
 describe("runStopPipeline lock file", () => {
   let tmpCwd: string;
+  let lockTranscriptPath: string;
   beforeEach(() => {
     vi.clearAllMocks();
     // Restore baseline resolving mocks (earlier describe's mockRejectedValueOnce
@@ -201,6 +300,9 @@ describe("runStopPipeline lock file", () => {
       skills: { written: [], removed: [] },
     } as never);
     tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "stop-lock-"));
+    // B-070: analyze fast-skips when transcript missing; create a real one.
+    lockTranscriptPath = path.join(tmpCwd, "transcript.jsonl");
+    fs.writeFileSync(lockTranscriptPath, "", "utf-8");
   });
   afterEach(() => {
     fs.rmSync(tmpCwd, { recursive: true, force: true });
@@ -221,7 +323,7 @@ describe("runStopPipeline lock file", () => {
 
     const input: StopHookInput = {
       session_id: "x",
-      transcript_path: "/tmp/t.jsonl",
+      transcript_path: lockTranscriptPath,
       cwd: tmpCwd,
       hook_event_name: "Stop",
     };
@@ -241,7 +343,7 @@ describe("runStopPipeline lock file", () => {
 
     const input: StopHookInput = {
       session_id: "x",
-      transcript_path: "/tmp/t.jsonl",
+      transcript_path: lockTranscriptPath,
       cwd: tmpCwd,
       hook_event_name: "Stop",
     };

@@ -10,10 +10,10 @@
  * NEVER exits non-zero.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runFullRescanPipeline, type StopHookInput } from "./bin-stop.js";
+import { isDetachedPipelineInvocation, runFullRescanPipeline, type StopHookInput } from "./bin-stop.js";
 
 const FULL_RESCAN_TIMEOUT_MS = (() => {
   const envVal = parseInt(process.env.TEAMAGENT_STOP_TIMEOUT_MS ?? "", 10);
@@ -21,17 +21,14 @@ const FULL_RESCAN_TIMEOUT_MS = (() => {
 })();
 
 async function main(): Promise<void> {
-  // Spawned as detached subprocess
-  if (process.env["TEAMAGENT_SESSION_END_PIPELINE"] === "1") {
-    const arg = process.argv[2];
-    let input: StopHookInput;
-    if (arg && existsSync(arg)) {
-      const raw = readFileSync(arg, "utf-8");
-      try { unlinkSync(arg); } catch { /* ignore */ }
-      input = JSON.parse(raw) as StopHookInput;
-    } else {
-      input = JSON.parse(arg ?? "{}") as StopHookInput;
-    }
+  // B-068: only enter detached branch when env flag AND argv[2] tmp file
+  // both prove this is a real child. Otherwise the env was leaked from a
+  // prior process and we must fall through to the foreground stdin path.
+  if (isDetachedPipelineInvocation(process.env, process.argv, "TEAMAGENT_SESSION_END_PIPELINE")) {
+    const arg = process.argv[2]!;
+    const raw = readFileSync(arg, "utf-8");
+    try { unlinkSync(arg); } catch { /* ignore */ }
+    const input = JSON.parse(raw) as StopHookInput;
     await runFullRescanPipeline(input);
     return;
   }
