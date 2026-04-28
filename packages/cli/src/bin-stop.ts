@@ -23,11 +23,12 @@ import {
   DualLayerStore,
   SqliteEventLog,
   openDb,
+  syncRuleVectors,
   XenovaRuleEmbedder,
   SqliteSemanticRetriever,
 } from "@teamagent/adapters";
 import type { LLMClient } from "@teamagent/ports";
-import { momentSignature, parseSessionFile, semanticMatch } from "@teamagent/core";
+import { momentSignature, parseSessionFile, semanticMatch, buildSemanticDescriptions } from "@teamagent/core";
 import { executeAnalyze, type AnalyzeMeta } from "./commands/analyze.js";
 import { executeCalibrate } from "./commands/calibrate.js";
 import { executeCompile } from "./commands/compile.js";
@@ -43,6 +44,40 @@ let _stopEmbedder: XenovaRuleEmbedder | null = null;
 function getStopEmbedder(): XenovaRuleEmbedder {
   if (!_stopEmbedder) _stopEmbedder = new XenovaRuleEmbedder();
   return _stopEmbedder;
+}
+
+/** 每次 Stop 补全最多 BATCH 条缺向量的规则（fire-and-forget，不阻塞主流程）。 */
+async function catchUpVectorization(projectDbPath: string, embedder: XenovaRuleEmbedder, batch = 15): Promise<void> {
+  const vdb = openDb(projectDbPath);
+  try {
+    const rows = (vdb.prepare(
+      `SELECT id, trigger, wrong_pattern, correct_pattern, reasoning
+       FROM knowledge
+       WHERE COALESCE(trigger_description, '') = '' AND status != 'archived'
+       LIMIT ?`,
+    ).all(batch) as Array<{ id: string; trigger: string; wrong_pattern: string; correct_pattern: string; reasoning: string }>);
+
+    if (rows.length === 0) return;
+
+    for (const r of rows) {
+      const desc = buildSemanticDescriptions({
+        trigger: r.trigger,
+        wrong_pattern: r.wrong_pattern,
+        correct_pattern: r.correct_pattern,
+        reasoning: r.reasoning,
+      });
+      const [tv, pv] = await embedder.embed([desc.trigger_description, desc.pattern_description]);
+      if (tv && pv) {
+        vdb.prepare(
+          "UPDATE knowledge SET trigger_description=?, pattern_description=?, embedder_model_id=? WHERE id=?",
+        ).run(desc.trigger_description, desc.pattern_description, "Xenova/multilingual-e5-small", r.id);
+        syncRuleVectors(vdb, r.id, new Float32Array(tv), new Float32Array(pv));
+      }
+    }
+    process.stderr.write(`TeamAgent: 向量化补全 ${rows.length} 条规则\n`);
+  } finally {
+    vdb.close();
+  }
 }
 
 export interface StopHookInput {
@@ -229,6 +264,12 @@ export async function runStopPipeline(
     });
   } catch (e) {
     logError(cwd, "harvest", e);
+  }
+
+  // Step 4.5: catch-up vectorization —补全缺向量的老规则（fire-and-forget，最多 15 条/次）
+  const catchUpDbPath = path.join(cwd, ".teamagent", "knowledge.db");
+  if (existsSync(catchUpDbPath)) {
+    catchUpVectorization(catchUpDbPath, getStopEmbedder()).catch(() => {/* best-effort */});
   }
 
   // Step 5: scan-errors → candidates.db (opt-out via config). Runs last so
