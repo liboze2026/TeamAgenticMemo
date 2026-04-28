@@ -152,6 +152,7 @@ export async function runStopPipeline(
           isMomentSeen: (sig) => seen.has(sig),
           markMomentSeen: (sig) => { newlySeen.add(sig); seen.add(sig); },
           onMeta: (m) => { analyzeMeta = m; },
+          embedder: getStopEmbedder(),
         });
         const firstLine = result.split("\n")[0] ?? "分析完成";
         process.stderr.write(`TeamAgent: ${firstLine}\n`);

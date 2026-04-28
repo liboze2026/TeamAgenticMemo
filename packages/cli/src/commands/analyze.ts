@@ -9,6 +9,8 @@ import {
   MarkdownCompiler,
   openDb,
   makeSkillCompiler,
+  syncRuleVectors,
+  XenovaRuleEmbedder,
 } from "@teamagent/adapters";
 import {
   ruleBasedCorrectionDetector,
@@ -62,6 +64,8 @@ export interface AnalyzeOptions {
    * 回调：把本次 analyze 的结构化结果传回。在返回 string 之外提供便捷访问。
    */
   onMeta?: (meta: AnalyzeMeta) => void;
+  /** 向量 embedder（测试用）；缺省用 XenovaRuleEmbedder */
+  embedder?: { embed(texts: string[]): Promise<number[][]> };
 }
 
 export interface AnalyzeMeta {
@@ -282,6 +286,13 @@ async function runCommit(
 
   dualStore.close();
 
+  // 向量同步（best-effort，失败不阻断主流程）
+  if (result.extracted.length > 0) {
+    try {
+      await vectorizeExtractedEntries(result.extracted, projectDbPath, opts.embedder);
+    } catch { /* 向量同步失败不阻断 */ }
+  }
+
   const lines: string[] = [];
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   lines.push(`  --commit 完成`);
@@ -390,6 +401,38 @@ function renderReport(
   }
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   return lines.join("\n") + "\n";
+}
+
+async function vectorizeExtractedEntries(
+  entries: KnowledgeEntry[],
+  projectDbPath: string,
+  embedder?: { embed(texts: string[]): Promise<number[][]> },
+): Promise<void> {
+  const { buildSemanticDescriptions } = await import("@teamagent/core");
+  const actualEmbedder = embedder ?? new XenovaRuleEmbedder();
+  const vdb = openDb(projectDbPath);
+  try {
+    for (const entry of entries) {
+      const e = entry as any;
+      const desc = (e.trigger_description?.trim() && e.pattern_description?.trim())
+        ? { trigger_description: e.trigger_description as string, pattern_description: e.pattern_description as string }
+        : buildSemanticDescriptions({
+            trigger: entry.trigger,
+            wrong_pattern: entry.wrong_pattern,
+            correct_pattern: entry.correct_pattern,
+            reasoning: entry.reasoning,
+          });
+      const [tv, pv] = await actualEmbedder.embed([desc.trigger_description, desc.pattern_description]);
+      if (tv && pv) {
+        vdb.prepare(
+          "UPDATE knowledge SET trigger_description=?, pattern_description=?, embedder_model_id=? WHERE id=?",
+        ).run(desc.trigger_description, desc.pattern_description, "Xenova/multilingual-e5-small", entry.id);
+        syncRuleVectors(vdb, entry.id, new Float32Array(tv), new Float32Array(pv));
+      }
+    }
+  } finally {
+    vdb.close();
+  }
 }
 
 function truncate(s: string, max: number): string {

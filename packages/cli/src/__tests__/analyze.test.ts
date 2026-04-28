@@ -203,6 +203,74 @@ describe("executeAnalyze", () => {
   });
 });
 
+describe("--commit mode: auto-vectorization", () => {
+  let tmp: ReturnType<typeof mkTmp>;
+
+  const stubLLM = (response: string): LLMClient => ({
+    complete: async () => response,
+  });
+
+  // 384-dim deterministic stub embedder (no Xenova dependency)
+  const stubEmbedder = {
+    async embed(texts: string[]): Promise<number[][]> {
+      return texts.map((t) => {
+        const v = new Array(384).fill(0.5);
+        let h = 0;
+        for (let i = 0; i < t.length; i++) h = ((h * 31 + t.charCodeAt(i)) & 0xffff);
+        v[h % 384] += 0.5;
+        const n = Math.sqrt(v.reduce((s: number, x: number) => s + x * x, 0));
+        return v.map((x: number) => x / n);
+      });
+    },
+  };
+
+  beforeEach(() => { tmp = mkTmp(); });
+  afterEach(() => { tmp.cleanup(); });
+
+  it("新规则提取后自动写入 knowledge_trigger_vec", async () => {
+    const projectDbPath = path.join(tmp.dir, "knowledge.db");
+    const userGlobalDbPath = path.join(tmp.dir, "global.db");
+
+    const llm = stubLLM(
+      "```json\n" +
+        JSON.stringify({
+          category: "E",
+          tags: ["http-client"],
+          type: "avoidance",
+          nature: "subjective",
+          trigger: "需要发 HTTP 请求",
+          wrong_pattern: "axios",
+          correct_pattern: "fetch",
+          reasoning: "零依赖偏好",
+        }) +
+        "\n```",
+    );
+
+    await executeAnalyze({
+      session: path.join(FIXTURE_ROOT, "correction-denial-01.jsonl"),
+      homeDir: tmp.dir,
+      cwd: tmp.dir,
+      commit: true,
+      llmClient: llm,
+      projectDbPath,
+      userGlobalDbPath,
+      claudeMdPath: path.join(tmp.dir, "CLAUDE.md"),
+      idGen: () => "pers-vec-test-0001",
+      now: () => new Date("2026-04-28T12:00:00Z"),
+      skipCalibrate: true,
+      embedder: stubEmbedder,
+    });
+
+    const db = openDb(projectDbPath);
+    const vecCount = db.prepare("SELECT COUNT(*) as n FROM knowledge_trigger_vec").get() as { n: number };
+    const patVecCount = db.prepare("SELECT COUNT(*) as n FROM knowledge_pattern_vec").get() as { n: number };
+    db.close();
+
+    expect(vecCount.n).toBe(1);
+    expect(patVecCount.n).toBe(1);
+  });
+});
+
 describe("parseAnalyzeArgs", () => {
   it("empty → no options", () => {
     expect(parseAnalyzeArgs([])).toEqual({});
