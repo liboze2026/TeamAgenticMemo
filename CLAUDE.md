@@ -25,6 +25,11 @@
 - **commit message 格式**：`feat(m{N}): <...>` / `fix(m{N}): <...>` / `refactor(m{N}): <...>`，让 Milestone 产出在 git 历史中可溯。
 - **worktree 位置**：新建 git worktree 必须放在仓库内的 `.codex/worktrees/` 目录下，不要放在仓库同级目录、`.worktrees/` 或 `.claude/worktrees/`。
 
+## Project Skills
+
+- 项目级 Codex skill 放在 `.codex/skills/<name>/SKILL.md`，不要放在 `.codex/agents/`。
+- `.codex/skills/` 必须随 Git 跟踪；这样从本仓库创建的 worktree 会自动带上项目 skill。
+
 ## 跑命令
 
 ```bash
@@ -34,26 +39,12 @@ pnpm typecheck        # 跑所有包的 tsc --noEmit
 pnpm teamagent <cmd>  # 跑 CLI（M0 可用：skeleton-demo）
 ```
 
-## claudefast 约定
+## Agent 工作树
 
-- `claudefast` 不是 TeamAgent 命令；在本项目里它表示“用更便宜或更快的 Claude Code profile 跑非交互测试”的本地 wrapper/alias。
-- 在这台机器上，`claudefast` 位于 `/Users/liushiyu/.local/bin/claudefast`，最终会调用 `claude`，并使用 MiniMax Anthropic-compatible fast profile。不要把 wrapper 里的 API token 写进文档、测试或 commit；解释该 wrapper 时也不要展示 token 的任何片段、前缀或后缀，统一写成 `[redacted]`。
-- 在其他机器上，`claudefast` 可能只是 `claude --model haiku` 一类 alias；项目脚本只能假设它最终兼容 Claude Code CLI 参数。
-- Claude Code 交互界面里的 `!claudefast ...` 表示执行本地 shell 命令；普通 shell、脚本和 CI 里写 `claudefast ...`，不要带 `!`。
-- Hook JSON 测试的推荐模板：
-
-```bash
-claudefast -p \
-  --output-format stream-json \
-  --include-hook-events \
-  --include-partial-messages \
-  --verbose \
-  --permission-mode acceptEdits \
-  "你的测试 prompt"
-```
-
-- 不要用 `--bare` 测 TeamAgent hooks；它会跳过 hooks、plugin sync 和 CLAUDE.md 自动发现。
-- 详细说明见 `docs/CLAUDEFAST.md`。
+- Codex / agent 专用 worktree 放在 `.codex/worktrees/<task-name>`，不要放到项目同级目录。
+- 每个 worktree 使用同名短分支，便于从 `git worktree list` 直接看任务归属。
+- 父 checkout 本地用 `.git/info/exclude` 忽略 `.codex/worktrees/`，避免嵌套 worktree 污染主工作区状态。
+- 背景说明见 `docs/notes/2026-04-28-codex-worktrees.md`。
 
 ## 已知限制 / workaround
 
