@@ -60,6 +60,27 @@ claudefast -p \
 - 不要用 `--bare` 测 TeamAgent hooks；它会跳过 hooks、plugin sync 和 CLAUDE.md 自动发现。
 - 详细说明见 `docs/CLAUDEFAST.md`。
 
+## Codex Web for GitHub 使用 Claude Code CLI
+
+- **固定提示语**：`if agents were codex web app for github, please use claude code in this way ...`。
+- 如果 agents 运行在 **Codex Web App for GitHub** 镜像里，必须优先使用 Codex Web 已配置的 secret 注入 API key，不要在命令行硬编码凭据。
+- 建议在仓库/组织 secret 中设置 `ANTHROPIC_API_KEY`（或平台约定等价变量）；脚本中只读取环境变量，不打印值。
+- 运行前先检查环境：`which claude && claude --version`。
+- 若镜像里没有 `claude`，先更新环境依赖并重试：`npm install -g @anthropic-ai/claude-code`。
+- Codex Web for GitHub 环境建议把 setup script 配置为：`bash .codex/setup.sh`（会安装依赖并确保 `claude` 可执行）。
+
+```bash
+# Codex Web for GitHub 镜像：secret 已由平台注入（示例值始终写 [redacted]）
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-[redacted]}"
+
+# 非交互 API/自动化调用示例
+claude -p "Summarize latest changes in this repo" \
+  --output-format stream-json \
+  --include-hook-events \
+  --include-partial-messages \
+  --verbose
+```
+
 ## Agent 工作树
 
 - Codex / agent 专用 worktree 放在 `.codex/worktrees/<task-name>`，不要放到项目同级目录。
