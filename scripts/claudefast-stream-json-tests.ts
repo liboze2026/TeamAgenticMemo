@@ -62,6 +62,15 @@ interface ParsedStream {
   rawText: string;
   eventTypes: Record<string, number>;
   hookNames: string[];
+  hookResponses: HookResponseSummary[];
+}
+
+interface HookResponseSummary {
+  hook: string;
+  hookName: string;
+  outcome: string | null;
+  exitCode: number | null;
+  stderrFirstLine: string;
 }
 
 interface CaseResult {
@@ -596,6 +605,7 @@ function parseStream(stdout: string): ParsedStream {
   const invalidLines: string[] = [];
   const eventTypes: Record<string, number> = {};
   const hookNames: string[] = [];
+  const hookResponses: HookResponseSummary[] = [];
 
   for (const line of stdout.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -605,6 +615,8 @@ function parseStream(stdout: string): ParsedStream {
       jsonEvents.push(parsed);
       const eventType = readString(parsed, ["type"]) ?? readString(parsed, ["event", "type"]);
       if (eventType) eventTypes[eventType] = (eventTypes[eventType] ?? 0) + 1;
+      const hookResponse = parseHookResponse(parsed);
+      if (hookResponse) hookResponses.push(hookResponse);
       for (const hookName of [
         "SessionStart",
         "UserPromptSubmit",
@@ -623,7 +635,7 @@ function parseStream(stdout: string): ParsedStream {
     }
   }
 
-  return { jsonEvents, invalidLines, rawText: stdout, eventTypes, hookNames };
+  return { jsonEvents, invalidLines, rawText: stdout, eventTypes, hookNames, hookResponses };
 }
 
 function checkExpectation(expectation: ExpectationKind, parsed: ParsedStream): boolean {
@@ -636,15 +648,15 @@ function checkExpectation(expectation: ExpectationKind, parsed: ParsedStream): b
     case "final-result":
       return includesAny(text, ['"type":"result"', '"type": "result"', '"subtype":"success"', '"subtype": "success"']);
     case "session-start-hook":
-      return text.includes("SessionStart");
+      return hasPassingHook(parsed, "SessionStart");
     case "user-prompt-submit-hook":
-      return text.includes("UserPromptSubmit");
+      return hasPassingHook(parsed, "UserPromptSubmit");
     case "pre-tool-use-hook":
-      return text.includes("PreToolUse");
+      return hasPassingHook(parsed, "PreToolUse");
     case "post-tool-use-hook":
-      return text.includes("PostToolUse");
+      return hasPassingHook(parsed, "PostToolUse");
     case "stop-hook":
-      return text.includes('"Stop"') || text.includes("Stop");
+      return hasPassingHook(parsed, "Stop");
     case "tool-use":
       return includesAny(text, ["tool_use", "tool_result", '"toolUse"', '"toolResult"']);
     case "teamagent-reason":
@@ -663,6 +675,42 @@ function checkExpectation(expectation: ExpectationKind, parsed: ParsedStream): b
   }
 }
 
+function parseHookResponse(value: unknown): HookResponseSummary | null {
+  if (readString(value, ["type"]) !== "system") return null;
+  if (readString(value, ["subtype"]) !== "hook_response") return null;
+
+  const hook =
+    readString(value, ["hook_event"]) ??
+    normalizeHookName(readString(value, ["hook_name"]) ?? "");
+  if (!hook) return null;
+
+  const stderr = readString(value, ["stderr"]) ?? "";
+  return {
+    hook,
+    hookName: readString(value, ["hook_name"]) ?? hook,
+    outcome: readString(value, ["outcome"]),
+    exitCode: readNumber(value, ["exit_code"]),
+    stderrFirstLine: stderr.split(/\r?\n/).find(Boolean) ?? "",
+  };
+}
+
+function normalizeHookName(hookName: string): string | null {
+  const base = hookName.split(":")[0]?.trim();
+  return base || null;
+}
+
+/**
+ * Strong hook evidence: the expected hook must emit at least one hook_response,
+ * and every response for that hook must report outcome=success and exit_code=0.
+ * This prevents false positives where the stream merely mentions a hook name
+ * while the hook command actually failed.
+ */
+function hasPassingHook(parsed: ParsedStream, hook: string): boolean {
+  const responses = parsed.hookResponses.filter((r) => r.hook === hook);
+  if (responses.length === 0) return false;
+  return responses.every((r) => r.outcome === "success" && r.exitCode === 0);
+}
+
 function includesAny(text: string, needles: string[]): boolean {
   return needles.some((needle) => text.includes(needle));
 }
@@ -676,12 +724,25 @@ function readString(value: unknown, pathParts: string[]): string | null {
   return typeof cur === "string" ? cur : null;
 }
 
+function readNumber(value: unknown, pathParts: string[]): number | null {
+  let cur = value;
+  for (const part of pathParts) {
+    if (!cur || typeof cur !== "object" || !(part in cur)) return null;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return typeof cur === "number" ? cur : null;
+}
+
 function summarizeParsed(parsed: ParsedStream): object {
   return {
     jsonEvents: parsed.jsonEvents.length,
     invalidLines: parsed.invalidLines.length,
     eventTypes: parsed.eventTypes,
     hookNames: parsed.hookNames,
+    hookResponses: parsed.hookResponses,
+    failedHookResponses: parsed.hookResponses.filter(
+      (r) => r.outcome !== "success" || r.exitCode !== 0,
+    ),
   };
 }
 

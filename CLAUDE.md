@@ -23,6 +23,12 @@
 - **TDD**：每个新功能先写测试（看到红）→ 写最小实现（变绿）→ commit。
 - **小 commit**：每个 commit 覆盖一个 "概念上完整的小事"。跑得通、测试绿。
 - **commit message 格式**：`feat(m{N}): <...>` / `fix(m{N}): <...>` / `refactor(m{N}): <...>`，让 Milestone 产出在 git 历史中可溯。
+- **worktree 位置**：新建 git worktree 必须放在仓库内的 `.codex/worktrees/` 目录下，不要放在仓库同级目录、`.worktrees/` 或 `.claude/worktrees/`。
+
+## Project Skills
+
+- 项目级 Codex skill 放在 `.codex/skills/<name>/SKILL.md`，不要放在 `.codex/agents/`。
+- `.codex/skills/` 必须随 Git 跟踪；这样从本仓库创建的 worktree 会自动带上项目 skill。
 
 ## 跑命令
 
@@ -53,6 +59,13 @@ claudefast -p \
 
 - 不要用 `--bare` 测 TeamAgent hooks；它会跳过 hooks、plugin sync 和 CLAUDE.md 自动发现。
 - 详细说明见 `docs/CLAUDEFAST.md`。
+
+## Agent 工作树
+
+- Codex / agent 专用 worktree 放在 `.codex/worktrees/<task-name>`，不要放到项目同级目录。
+- 每个 worktree 使用同名短分支，便于从 `git worktree list` 直接看任务归属。
+- 父 checkout 本地用 `.git/info/exclude` 忽略 `.codex/worktrees/`，避免嵌套 worktree 污染主工作区状态。
+- 背景说明见 `docs/notes/2026-04-28-codex-worktrees.md`。
 
 ## 已知限制 / workaround
 
