@@ -25,7 +25,6 @@ describe("sqlite schema", () => {
     expect(names).toContain("knowledge");
     expect(names).toContain("observations");
     expect(names).toContain("events");
-    expect(names).toContain("wiki_meta");
     expect(names).toContain("schema_version");
     closeDb(db);
   });
@@ -52,9 +51,8 @@ describe("sqlite schema", () => {
     closeDb(db);
   });
 
-  // sqlite-vec was loading silently into a DB opened without allowExtension:true,
-  // so the knowledge_vec virtual table was never created and wiki injection
-  // returned 0 results forever. Verify the table now exists when sqlite-vec is
+  // sqlite-vec must load when allowExtension:true is set so the knowledge_vec
+  // virtual table is actually created. Verify it exists when sqlite-vec is
   // installed (which it is in this workspace).
   it("creates knowledge_vec virtual table when sqlite-vec is loaded", () => {
     const db = openDb(tmpDbPath());

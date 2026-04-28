@@ -9,13 +9,6 @@
  */
 import path from "node:path";
 import os from "node:os";
-import {
-  extractQueryKeywords,
-  buildQueryText,
-  formatInjection,
-} from "@teamagent/core";
-import { SqliteWikiRetriever } from "@teamagent/adapters/storage/sqlite/sqlite-wiki-retriever";
-import { XenovaEmbedder } from "@teamagent/adapters/wiki/xenova-embedder";
 import { openDb } from "@teamagent/adapters/storage/sqlite/schema";
 import { normalizeCwd } from "@teamagent/adapters/util/normalize-cwd";
 import {
@@ -39,40 +32,7 @@ import {
   touchSessionInjected,
 } from "./session-rule-injected.js";
 
-const DEFAULT_FREQ = {
-  cooldownMinutes: 30,
-  sessionWindowMinutes: 60,
-  sessionMaxInjections: 15,
-} as const;
-
 const HOOK_TIMEOUT_MS = 5_000;
-
-async function runPipeline(db: ReturnType<typeof openDb>, prompt: string): Promise<string | null> {
-  const embedder = new XenovaEmbedder();
-  const retriever = new SqliteWikiRetriever(db);
-  const now = new Date();
-
-  const keywords = extractQueryKeywords(prompt);
-  const queryText = buildQueryText(keywords, prompt);
-  const embeddings = await embedder.embed([queryText]);
-  const embedding = embeddings[0];
-  if (!embedding) return null;
-
-  const entries = await retriever.query({
-    embedding,
-    minSimilarity: 0.75,
-    maxAgeDays: 90,
-    maxResults: 3,
-    now,
-    ...DEFAULT_FREQ,
-  });
-
-  if (entries.length > 0) {
-    retriever.recordInjection(entries.map((e) => e.knowledgeId), now);
-  }
-
-  return formatInjection(entries) || null;
-}
 
 async function main(): Promise<void> {
   const chunks: Buffer[] = [];
@@ -88,14 +48,6 @@ async function main(): Promise<void> {
     process.env["CLAUDE_PROJECT_DIR"] ?? process.cwd(),
   );
   const dbPath = path.join(cwd, ".teamagent", "knowledge.db");
-
-  let db: ReturnType<typeof openDb>;
-  try {
-    db = openDb(dbPath);
-  } catch {
-    return;
-  }
-
   const blocks: string[] = [];
 
   // M4-A: narrative warnings + user-input flag (fast path, runs first)
@@ -198,14 +150,6 @@ async function main(): Promise<void> {
   } catch {
     // rule retrieval is best-effort — never block user input
   }
-
-  // Wiki injection (original M2.7 path)
-  const result = await Promise.race([
-    runPipeline(db, prompt),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), HOOK_TIMEOUT_MS)),
-  ]);
-
-  if (result) blocks.push(result);
 
   if (blocks.length > 0) {
     const injectionText = blocks.join("\n\n");

@@ -49,26 +49,4 @@ describe("teamagent seed integration", () => {
     }
   });
 
-  it("seeded axios rule matches Write call with CancelToken", () => {
-    const db = openDb(path.join(workdir, ".teamagent", "knowledge.db"));
-    try {
-      const store = new SqliteKnowledgeStore(db);
-      const rules = store.findActive();
-
-      const matches = matchRules(
-        {
-          toolName: "Write",
-          input: {
-            file_path: "http-client.ts",
-            content:
-              "import axios from 'axios';\nconst src = axios.CancelToken.source();",
-          },
-        },
-        rules,
-      );
-      expect(matches.some((r) => r.id === "wiki-axios-abort-signal")).toBe(true);
-    } finally {
-      db.close();
-    }
-  });
 });

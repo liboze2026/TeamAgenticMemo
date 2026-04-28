@@ -15,59 +15,30 @@ describe("decideAction", () => {
   });
 
   it("无 .teamagent/knowledge.db + 非项目目录 → skip-not-a-project", () => {
-    const action = decideAction(cwd, new Date(), 24);
+    const action = decideAction(cwd, new Date());
     expect(action).toBe("skip-not-a-project");
   });
 
   it("无 db + 有 package.json → auto-init", () => {
     writeFileSync(join(cwd, "package.json"), "{}");
-    expect(decideAction(cwd, new Date(), 24)).toBe("auto-init");
+    expect(decideAction(cwd, new Date())).toBe("auto-init");
   });
 
   it("无 db + 有 .git → auto-init", () => {
     mkdirSync(join(cwd, ".git"), { recursive: true });
-    expect(decideAction(cwd, new Date(), 24)).toBe("auto-init");
+    expect(decideAction(cwd, new Date())).toBe("auto-init");
   });
 
   it("无 db + .teamagent/auto-init.disabled 存在 → skip-auto-init-disabled", () => {
     writeFileSync(join(cwd, "package.json"), "{}");
     mkdirSync(join(cwd, ".teamagent"), { recursive: true });
     writeFileSync(join(cwd, ".teamagent", "auto-init.disabled"), "");
-    expect(decideAction(cwd, new Date(), 24)).toBe("skip-auto-init-disabled");
+    expect(decideAction(cwd, new Date())).toBe("skip-auto-init-disabled");
   });
 
-  it("有 db 无 marker → spawn（首次）", () => {
+  it("已存在 knowledge.db → skip-already-initialized", () => {
     mkdirSync(join(cwd, ".teamagent"), { recursive: true });
     writeFileSync(join(cwd, ".teamagent", "knowledge.db"), "");
-    expect(decideAction(cwd, new Date(), 24)).toBe("spawn");
-  });
-
-  it("marker 在 24h 内 → skip-debounced", () => {
-    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
-    writeFileSync(join(cwd, ".teamagent", "knowledge.db"), "");
-    writeFileSync(
-      join(cwd, ".teamagent", "wiki-last-pull.json"),
-      JSON.stringify({ attemptedAt: new Date().toISOString(), added: 0, archived: 0 }),
-    );
-    expect(decideAction(cwd, new Date(), 24)).toBe("skip-debounced");
-  });
-
-  it("marker 在 24h 外 → spawn", () => {
-    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
-    writeFileSync(join(cwd, ".teamagent", "knowledge.db"), "");
-    const stale = new Date(Date.now() - 25 * 3_600_000);
-    writeFileSync(
-      join(cwd, ".teamagent", "wiki-last-pull.json"),
-      JSON.stringify({ attemptedAt: stale.toISOString(), added: 0, archived: 0 }),
-    );
-    expect(decideAction(cwd, new Date(), 24)).toBe("spawn");
-  });
-
-  it("autoRefresh.enabled=false → skip-disabled", () => {
-    mkdirSync(join(cwd, ".teamagent"), { recursive: true });
-    writeFileSync(join(cwd, ".teamagent", "knowledge.db"), "");
-    writeFileSync(join(cwd, ".teamagent", "config.json"),
-      JSON.stringify({ wiki: { autoRefresh: { enabled: false } } }));
-    expect(decideAction(cwd, new Date())).toBe("skip-disabled");
+    expect(decideAction(cwd, new Date())).toBe("skip-already-initialized");
   });
 });

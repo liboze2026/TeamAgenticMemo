@@ -22,11 +22,9 @@ const NATIVE_EXTERNAL = [
   "web-tree-sitter",
   "tree-sitter-typescript",
   "tree-sitter-python",
-  // Wiki-only deps — externalize so the startup bundle does not hard require
-  // optional integrations. Wiki commands import their implementation lazily.
+  // Externalize so the startup bundle does not hard-require these heavy/native
+  // optional deps. Their consumers should import lazily where still needed.
   "@xenova/transformers",
-  "rss-parser",
-  "@mozilla/readability",
 ];
 
 export default defineConfig([

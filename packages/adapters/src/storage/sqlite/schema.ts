@@ -93,48 +93,6 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_kind ON events(kind, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_knowledge ON events(knowledge_id);
 
--- Wiki 专用元数据表（SP-3 用，M2.6 完整版）
-CREATE TABLE IF NOT EXISTS wiki_meta (
-  knowledge_id             TEXT PRIMARY KEY,
-  source_url               TEXT NOT NULL,
-  source_type              TEXT NOT NULL,
-  source_id                TEXT NOT NULL,
-  published_at             TEXT NOT NULL,
-  tldr                     TEXT NOT NULL,
-  keywords                 TEXT NOT NULL,
-  user_thumbs_down         INTEGER DEFAULT 0,
-  inline_injection_count   INTEGER DEFAULT 0,
-  last_injected_at         TEXT,
-  fetch_error              TEXT,
-  FOREIGN KEY(knowledge_id) REFERENCES knowledge(id) ON DELETE CASCADE
-);
-
--- idx_wiki_source is created in migration v1→v2 after source_id column is guaranteed to exist
-
--- Wiki 订阅表（M2.6）
-CREATE TABLE IF NOT EXISTS wiki_subscriptions (
-  id          TEXT PRIMARY KEY,
-  source_type TEXT NOT NULL,
-  config      TEXT NOT NULL,
-  auto_added  INTEGER DEFAULT 0,
-  enabled     INTEGER DEFAULT 1,
-  created_at  TEXT NOT NULL
-);
-
--- Wiki 拒绝日志（M2.6）
-CREATE TABLE IF NOT EXISTS wiki_rejection_log (
-  id          TEXT PRIMARY KEY,
-  source_type TEXT,
-  source_id   TEXT,
-  title       TEXT,
-  reason      TEXT,
-  rejected_at TEXT NOT NULL
-);
-
--- Vector embeddings for wiki entries (sqlite-vec, M2.6)
--- CREATE VIRTUAL TABLE is intentionally omitted here; it's created in openDb()
--- after sqlite-vec extension is loaded, so it's guarded properly.
-
 -- 候选规则队列（M2.5-half，review-candidates 用）
 CREATE TABLE IF NOT EXISTS rule_candidates (
   id          TEXT PRIMARY KEY,
@@ -156,7 +114,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (1, datetime('now'));
 `;
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 const V6_ADDITIONS = `
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
@@ -262,8 +220,7 @@ function applyV7Migration(db: DatabaseSync): void {
  */
 export function openDb(path: string): DatabaseSync {
   // allowExtension: true is required for sqlite-vec.load() to call db.loadExtension();
-  // node:sqlite forbids extension loading by default, which silently broke the
-  // wiki_vec virtual table creation and disabled wiki injection end-to-end.
+  // node:sqlite forbids extension loading by default.
   const db = new DatabaseSyncCtor(path, { allowExtension: true });
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec("PRAGMA journal_mode = WAL;");
@@ -287,13 +244,9 @@ export function openDb(path: string): DatabaseSync {
     )`);
   } catch { /* sqlite-vec not loaded — vector features disabled */ }
 
-  // Migration: schema_version 1 → 2 (add wiki_meta columns, wiki_subscriptions, wiki_rejection_log)
+  // Migration: schema_version 1 → 2 was wiki_meta column additions (now removed in v8).
   const version = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
   if (!version || version.version < 2) {
-    // Add missing wiki_meta columns (ALTER TABLE IF NOT EXISTS not supported in SQLite)
-    try { db.exec("ALTER TABLE wiki_meta ADD COLUMN source_id TEXT NOT NULL DEFAULT ''"); } catch {}
-    try { db.exec("ALTER TABLE wiki_meta ADD COLUMN fetch_error TEXT"); } catch {}
-    try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_source ON wiki_meta(source_type, source_id)"); } catch {}
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (2, datetime('now'))");
   }
 
@@ -308,10 +261,9 @@ export function openDb(path: string): DatabaseSync {
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (3, datetime('now'))");
   }
 
-  // Migration: schema_version 3 → 4 (add last_injected_at to wiki_meta)
+  // Migration: schema_version 3 → 4 was last_injected_at on wiki_meta (now removed in v8).
   const versionNow = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
   if (!versionNow || versionNow.version < 4) {
-    try { db.exec("ALTER TABLE wiki_meta ADD COLUMN last_injected_at TEXT"); } catch {}
     db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (4, datetime('now'))");
   }
 
@@ -343,6 +295,21 @@ export function openDb(path: string): DatabaseSync {
   }
   // Repair partially-applied M6 databases.
   applyV7Migration(db);
+
+  // Migration: schema_version 7 → 8 (drop legacy wiki_* tables; the wiki feature was removed)
+  const versionWikiDrop = db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as { version: number } | undefined;
+  if (!versionWikiDrop || versionWikiDrop.version < 8) {
+    db.exec("DROP TABLE IF EXISTS wiki_meta");
+    db.exec("DROP TABLE IF EXISTS wiki_subscriptions");
+    db.exec("DROP TABLE IF EXISTS wiki_rejection_log");
+    db.exec("DROP TABLE IF EXISTS wiki_entries");
+    db.exec("DROP TABLE IF EXISTS wiki_sources");
+    db.exec("DROP TABLE IF EXISTS wiki_rejections");
+    try { db.exec("DROP TABLE IF EXISTS wiki_entries_vec"); } catch {}
+    try { db.exec("DROP TABLE IF EXISTS wiki_entries_fts"); } catch {}
+    try { db.exec("DROP TABLE IF EXISTS wiki_vec"); } catch {}
+    db.exec("INSERT OR REPLACE INTO schema_version(version, applied_at) VALUES (8, datetime('now'))");
+  }
 
   return db;
 }
