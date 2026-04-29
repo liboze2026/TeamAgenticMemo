@@ -9,6 +9,7 @@ import {
   ClaudeCodeLLMClient,
   openDb,
   ClaudePluginInstaller,
+  makeSkillCompiler,
 } from "@teamagent/adapters";
 import {
   executeInstallPlugins,
@@ -31,6 +32,8 @@ import { installHook } from "./install-hook.js";
 export interface InitOptions {
   cwd?: string;
   homeDir?: string;
+  /** Install target. Claude keeps the historical behavior; Codex writes AGENTS.md. */
+  target?: "claude" | "codex" | "both";
   /** 预览模式：只检查、只输出"会做什么"，不写任何文件。 */
   dryRun?: boolean;
   /** 注入 LLM（测试用）；缺省用 ClaudeCodeLLMClient。 */
@@ -56,6 +59,8 @@ export interface InitOptions {
   projectDbPath?: string;
   userGlobalDbPath?: string;
   claudeMdPath?: string;
+  agentsMdPath?: string;
+  skillsDir?: string;
   hookEntry?: string;
   now?: () => Date;
   idGen?: () => string;
@@ -91,8 +96,21 @@ function resolvePaths(opts: InitOptions) {
     userGlobalDbPath:
       opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
+    agentsMdPath: opts.agentsMdPath ?? path.join(cwd, "AGENTS.md"),
+    teamagentSkillsDir:
+      opts.skillsDir ??
+      process.env["TEAMAGENT_SKILLS_DIR"] ??
+      path.join(home, ".claude", "skills", "teamagent"),
     installLogPath: path.join(home, ".teamagent", ".install-log"),
   };
+}
+
+function targetIncludesClaude(target: InitOptions["target"]): boolean {
+  return target === "claude" || target === "both";
+}
+
+function targetIncludesCodex(target: InitOptions["target"]): boolean {
+  return target === "codex" || target === "both";
 }
 
 function cwdFilePresence(cwd: string): FilePresence {
@@ -114,11 +132,12 @@ function cwdFilePresence(cwd: string): FilePresence {
 export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
   const paths = resolvePaths(opts);
   const dryRun = opts.dryRun ?? false;
+  const target = opts.target ?? "claude";
   const now = opts.now ?? (() => new Date());
   const steps: InitStepResult[] = [];
 
   // ---------- Phase A: Pre-check ----------
-  const preCheck = runPreChecks(paths);
+  const preCheck = runPreChecks(paths, target);
   steps.push(preCheck);
   if (preCheck.status === "failed") {
     return finalize(false, dryRun, steps, emptySummary());
@@ -143,8 +162,14 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
   const importStep = await doImportRules(paths, opts, dryRun, now);
   steps.push(...importStep.steps);
 
-  if (!opts.skipHook) {
+  if (targetIncludesClaude(target) && !opts.skipHook) {
     steps.push(doInstallHook(paths.cwd, opts.hookEntry, dryRun));
+  } else if (targetIncludesCodex(target) && !targetIncludesClaude(target)) {
+    steps.push({
+      step: "install-hook",
+      status: "skipped",
+      detail: "target=codex；Codex 通过 AGENTS.md 读取规则，不注册 Claude Code hook",
+    });
   } else {
     steps.push({ step: "install-hook", status: "skipped", detail: "skipHook=true" });
   }
@@ -153,8 +178,34 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
     steps.push(await doInstallPlugins(dryRun, opts.pluginInstaller));
   }
 
-  const compileStep = doCompileClaudeMd(paths, dryRun, now);
-  steps.push(compileStep);
+  if (targetIncludesClaude(target)) {
+    steps.push(
+      doCompileMarkdownDoc(
+        paths,
+        paths.claudeMdPath,
+        "compile-claude-md",
+        "CLAUDE.md",
+        dryRun,
+        now,
+      ),
+    );
+  }
+  if (targetIncludesCodex(target)) {
+    if (!targetIncludesClaude(target)) {
+      steps.push(
+        doCompileMarkdownDoc(
+          paths,
+          paths.claudeMdPath,
+          "compile-claude-md",
+          "CLAUDE.md",
+          dryRun,
+          now,
+        ),
+      );
+    }
+    steps.push(await doCompileCodexSkills(paths, dryRun));
+    steps.push(doLinkCodexFiles(paths, dryRun));
+  }
 
   // 末尾预热向量模型（首装首次触发；测试/离线/已 cached 时跳过）
   const skipWarmup =
@@ -221,7 +272,10 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
 
 // ======================== Step implementations ========================
 
-function runPreChecks(paths: ReturnType<typeof resolvePaths>): InitStepResult {
+function runPreChecks(
+  paths: ReturnType<typeof resolvePaths>,
+  target: NonNullable<InitOptions["target"]>,
+): InitStepResult {
   if (!fs.existsSync(paths.cwd)) {
     return failStep("pre-check", `项目目录不存在: ${paths.cwd}`);
   }
@@ -234,11 +288,19 @@ function runPreChecks(paths: ReturnType<typeof resolvePaths>): InitStepResult {
   } catch {
     return failStep("pre-check", "无法创建 ~/.teamagent 目录，请检查磁盘权限");
   }
-  if (fs.existsSync(paths.claudeMdPath)) {
+  const mdPaths: Array<{ path: string; label: string }> = [];
+  if (targetIncludesClaude(target) || targetIncludesCodex(target)) {
+    mdPaths.push({ path: paths.claudeMdPath, label: "CLAUDE.md" });
+  }
+  if (targetIncludesCodex(target)) {
+    mdPaths.push({ path: paths.agentsMdPath, label: "AGENTS.md" });
+  }
+  for (const item of mdPaths) {
+    if (!fs.existsSync(item.path)) continue;
     try {
-      fs.accessSync(paths.claudeMdPath, fs.constants.R_OK | fs.constants.W_OK);
+      fs.accessSync(item.path, fs.constants.R_OK | fs.constants.W_OK);
     } catch {
-      return failStep("pre-check", "CLAUDE.md 文件无写入权限，请运行: chmod 644 CLAUDE.md");
+      return failStep("pre-check", `${item.label} 文件无写入权限，请运行: chmod 644 ${item.label}`);
     }
   }
   return okStep("pre-check", "所有前置检查通过");
@@ -414,6 +476,8 @@ async function doImportRules(
 ): Promise<{ steps: InitStepResult[]; importedCount: number; wouldImport: number }> {
   const steps: InitStepResult[] = [];
   const claudeMdExists = fs.existsSync(paths.claudeMdPath);
+  const agentsMdExists =
+    fs.existsSync(paths.agentsMdPath) && !isSymlinkTo(paths.agentsMdPath, paths.claudeMdPath);
   const cursorRulesPath = path.join(paths.cwd, ".cursorrules");
   const cursorExists = fs.existsSync(cursorRulesPath);
 
@@ -423,6 +487,12 @@ async function doImportRules(
     const md = fs.readFileSync(paths.claudeMdPath, "utf-8");
     const bullets = extractRuleBullets(md);
     scanDetails.push(`CLAUDE.md: ${bullets.length} bullets`);
+    rawTexts.push(...bullets);
+  }
+  if (agentsMdExists) {
+    const md = fs.readFileSync(paths.agentsMdPath, "utf-8");
+    const bullets = extractRuleBullets(md);
+    scanDetails.push(`AGENTS.md: ${bullets.length} bullets`);
     rawTexts.push(...bullets);
   }
   if (cursorExists) {
@@ -436,7 +506,7 @@ async function doImportRules(
       "scan-rules",
       scanDetails.length > 0
         ? scanDetails.join(", ")
-        : "CLAUDE.md / .cursorrules 均不存在，跳过导入",
+        : "CLAUDE.md / AGENTS.md / .cursorrules 均不存在，跳过导入",
     ),
   );
 
@@ -557,15 +627,18 @@ function doInstallHook(
   }
 }
 
-function doCompileClaudeMd(
+function doCompileMarkdownDoc(
   paths: ReturnType<typeof resolvePaths>,
+  mdPath: string,
+  stepName: string,
+  label: string,
   dryRun: boolean,
   now: () => Date,
 ): InitStepResult {
   if (dryRun) {
     return okStep(
-      "compile-claude-md",
-      `(dry-run) 会把活跃条目合并编译到 ${paths.claudeMdPath}`,
+      stepName,
+      `(dry-run) 会把活跃条目合并编译到 ${mdPath}`,
     );
   }
   try {
@@ -577,14 +650,124 @@ function doCompileClaudeMd(
     });
     const all = store.findActive();
     store.close();
-    const compiler = new MarkdownCompiler(paths.claudeMdPath, () => now().toISOString());
+    const compiler = new MarkdownCompiler(mdPath, () => now().toISOString());
     const info = compiler.writeToFile(all);
     return okStep(
-      "compile-claude-md",
+      stepName,
       `已编译 ${all.length} 条 → ${info.filePath}`,
     );
   } catch (err) {
-    return failStep("compile-claude-md", String(err).slice(0, 200));
+    return failStep(stepName, `${label}: ${String(err).slice(0, 180)}`);
+  }
+}
+
+async function doCompileCodexSkills(
+  paths: ReturnType<typeof resolvePaths>,
+  dryRun: boolean,
+): Promise<InitStepResult> {
+  if (dryRun) {
+    return okStep(
+      "compile-codex-skills",
+      `(dry-run) 会把 stable+ 规则编译到 ${paths.teamagentSkillsDir}`,
+    );
+  }
+  try {
+    fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+    const store = new DualLayerStore({
+      projectDbPath: paths.projectDbPath,
+      userGlobalDbPath: paths.userGlobalDbPath,
+    });
+    const entries = store.getAll();
+    store.close();
+    const compiler = makeSkillCompiler({ skillsDir: paths.teamagentSkillsDir });
+    const artifacts = compiler.compile(entries);
+    const written = await compiler.write(artifacts);
+    return okStep(
+      "compile-codex-skills",
+      `已编译 ${written.written.length} 条 skill → ${paths.teamagentSkillsDir}`,
+    );
+  } catch (err) {
+    return failStep("compile-codex-skills", String(err).slice(0, 200));
+  }
+}
+
+function doLinkCodexFiles(
+  paths: ReturnType<typeof resolvePaths>,
+  dryRun: boolean,
+): InitStepResult {
+  const links = [
+    {
+      linkPath: paths.agentsMdPath,
+      targetPath: paths.claudeMdPath,
+      label: "AGENTS.md -> CLAUDE.md",
+      targetType: "file" as const,
+    },
+    {
+      linkPath: path.join(paths.cwd, ".codex", "skills"),
+      targetPath: paths.teamagentSkillsDir,
+      label: ".codex/skills -> TeamAgent skills",
+      targetType: "dir" as const,
+    },
+  ];
+
+  if (dryRun) {
+    return okStep(
+      "link-codex-files",
+      `(dry-run) 会创建软链接: ${links.map((l) => l.label).join(", ")}`,
+    );
+  }
+
+  try {
+    const details: string[] = [];
+    for (const link of links) {
+      fs.mkdirSync(path.dirname(link.linkPath), { recursive: true });
+      fs.mkdirSync(path.dirname(link.targetPath), { recursive: true });
+      if (link.targetType === "dir") fs.mkdirSync(link.targetPath, { recursive: true });
+      const state = ensureSymlink(link.linkPath, link.targetPath, link.targetType, () => new Date());
+      details.push(`${link.label} (${state})`);
+    }
+    return okStep("link-codex-files", `已确保软链接: ${details.join(", ")}`);
+  } catch (err) {
+    return failStep("link-codex-files", String(err).slice(0, 200));
+  }
+}
+
+function ensureSymlink(
+  linkPath: string,
+  targetPath: string,
+  targetType: "file" | "dir",
+  now: () => Date,
+): "created" | "already" | "backed-up" {
+  const relativeTarget = path.relative(path.dirname(linkPath), targetPath) || path.basename(targetPath);
+  try {
+    const stat = fs.lstatSync(linkPath);
+    if (stat.isSymbolicLink()) {
+      const current = fs.readlinkSync(linkPath);
+      const currentAbs = path.resolve(path.dirname(linkPath), current);
+      if (currentAbs === targetPath) return "already";
+      fs.unlinkSync(linkPath);
+    } else {
+      const backupPath = `${linkPath}.bak-teamagent-${now().toISOString().replace(/[:.]/g, "-")}`;
+      fs.renameSync(linkPath, backupPath);
+      fs.symlinkSync(relativeTarget, linkPath, targetType === "dir" ? "junction" : "file");
+      return "backed-up";
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  fs.symlinkSync(relativeTarget, linkPath, targetType === "dir" ? "junction" : "file");
+  return "created";
+}
+
+function isSymlinkTo(linkPath: string, targetPath: string): boolean {
+  try {
+    const stat = fs.lstatSync(linkPath);
+    if (!stat.isSymbolicLink()) return false;
+    const current = fs.readlinkSync(linkPath);
+    return path.resolve(path.dirname(linkPath), current) === targetPath;
+  } catch {
+    return false;
   }
 }
 
@@ -667,14 +850,29 @@ function finalize(
 
 export function parseInitArgs(argv: string[]): InitOptions {
   const opts: InitOptions = {};
-  for (const a of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
     if (a === "--dry-run") opts.dryRun = true;
     else if (a === "--skip-import") opts.skipImport = true;
     else if (a === "--skip-hook") opts.skipHook = true;
     else if (a === "--skip-warmup") opts.skipWarmup = true;
     else if (a === "--install-plugins") opts.installPlugins = true;
+    else if (a === "--codex") opts.target = "codex";
+    else if (a === "--claude") opts.target = "claude";
+    else if (a === "--both") opts.target = "both";
+    else if (a === "--target") {
+      const value = argv[++i];
+      opts.target = parseTarget(value);
+    } else if (a.startsWith("--target=")) {
+      opts.target = parseTarget(a.slice("--target=".length));
+    }
   }
   return opts;
+}
+
+function parseTarget(value: string | undefined): NonNullable<InitOptions["target"]> {
+  if (value === "claude" || value === "codex" || value === "both") return value;
+  throw new Error(`--target 必须是 claude|codex|both，收到: ${value ?? ""}`);
 }
 
 export function renderInitResult(result: InitResult): string {
@@ -690,7 +888,8 @@ export function renderInitResult(result: InitResult): string {
     { icon: "📦", label: "初始化知识库", stepKeys: ["pre-check", "create-dirs", "load-preset", "load-seed", "scan-rules", "structure-rules"] },
     { icon: "🔗", label: "注册 Hook", stepKeys: ["install-hook"] },
     { icon: "🔌", label: "安装团队标配插件", stepKeys: ["install-plugins"] },
-    { icon: "📄", label: "编译 CLAUDE.md", stepKeys: ["compile-claude-md"] },
+    { icon: "📄", label: "编译规则文件", stepKeys: ["compile-claude-md"] },
+    { icon: "🔗", label: "链接 Codex 文件", stepKeys: ["link-codex-files"] },
   ];
 
   for (const group of stepGroups) {
@@ -715,13 +914,22 @@ export function renderInitResult(result: InitResult): string {
   if (result.ok) {
     lines.push("✅ TeamAgent 安装成功！\n");
     lines.push("下一步:");
-    lines.push("  1. 重新打开 Claude Code（让 hook 生效）");
-    lines.push("  2. 运行 teamagent doctor 验证安装");
-    lines.push("  3. 运行 teamagent stats 查看知识库状态");
+    const hasAnyCompileTarget = result.steps.some(
+      (s) => s.step === "compile-claude-md" || s.step === "link-codex-files",
+    );
+    const hasClaude =
+      result.steps.some((s) => s.step === "install-hook" && !s.detail.includes("target=codex")) ||
+      !hasAnyCompileTarget;
+    const hasCodex = result.steps.some((s) => s.step === "link-codex-files");
+    let next = 1;
+    if (hasClaude) lines.push(`  ${next++}. 重新打开 Claude Code（让 hook 生效）`);
+    if (hasCodex) lines.push(`  ${next++}. 启动新的 Codex 会话（让 AGENTS.md 生效）`);
+    lines.push(`  ${next++}. 运行 teamagent doctor 验证安装`);
+    lines.push(`  ${next++}. 运行 teamagent stats 查看知识库状态`);
     const pluginsInstalled = result.steps.some(
       (s) => s.step === "install-plugins",
     );
-    if (!pluginsInstalled) {
+    if (hasClaude && !pluginsInstalled) {
       lines.push("");
       lines.push("💡 团队标配插件（superpowers/caveman/sales/playground）默认不装");
       lines.push("   需要时运行: teamagent install-plugins");
@@ -746,6 +954,7 @@ function stepLabel(step: string): string {
     "install-hook": "Hook 注册",
     "install-plugins": "Plugin 安装",
     "compile-claude-md": "CLAUDE.md",
+    "link-codex-files": "Codex 软链接",
   };
   return map[step] ?? step;
 }
