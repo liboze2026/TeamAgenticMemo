@@ -12,6 +12,12 @@ roadmaps over older roadmaps when they disagree.
 | [2026-04-20-phase3-design.md](2026-04-20-phase3-design.md) | Phase 3 readiness, doctor command, init UX, npm packaging. |
 | [2026-04-22-product-roadmap-v3.md](2026-04-22-product-roadmap-v3.md) | Latest roadmap in this folder. Start here for roadmap questions. |
 
+## Office-Hours Designs
+
+| Document | Focus |
+| --- | --- |
+| [Recording Memory for Organization Materials](../../../.gstack/projects/libz-renlab-ai-TeamBrain/liushiyu-main-design-20260429-142029.md) | Approved transcript-first plan for making organization recordings agent-discoverable. |
+
 ## M2 Design Stream
 
 | Document | Focus |
