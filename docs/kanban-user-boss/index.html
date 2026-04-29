@@ -1,88 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TeamBrain Kanban Mockups</title>
+  <title>TeamBrain 看板前端 Mockup</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="#top" aria-label="TeamBrain kanban mockups">
+    <a class="brand" href="#top" aria-label="TeamBrain 看板 mockup">
       <span class="brand-mark">TB</span>
       <span>
-        <strong>TeamBrain Kanban</strong>
-        <small>six static front-end directions</small>
+        <strong>TeamBrain 看板</strong>
+        <small>6 个静态前端方向</small>
       </span>
     </a>
-    <nav class="top-nav" aria-label="Mockup variants">
-      <a href="#command-center">Command</a>
-      <a href="#boardroom">Boardroom</a>
-      <a href="#team-flow">Team Flow</a>
-      <a href="#war-room">War Room</a>
-      <a href="#roadmap-wall">Roadmap</a>
-      <a href="#salary-case">Funding</a>
+    <nav class="top-nav" aria-label="Mockup 版本">
+      <a href="#command-center">指挥中心</a>
+      <a href="#boardroom">投资人版</a>
+      <a href="#team-flow">团队流</a>
+      <a href="#war-room">作战室</a>
+      <a href="#roadmap-wall">路线图</a>
+      <a href="#salary-case">拨款理由</a>
     </nav>
   </header>
 
   <main id="top">
     <section class="intro-panel">
       <div>
-        <p class="eyebrow">For team members, tech leads, bosses, and investors</p>
-        <h1>Kanban front-end mockups that make execution legible.</h1>
+        <p class="eyebrow">给团队成员、技术负责人、老板和投资人看</p>
+        <h1>让执行进展一眼看懂的看板前端 Mockup。</h1>
       </div>
-      <p class="intro-copy">Each direction uses the same TeamAgent reality: Phase 1-3 shipped, Phase 4 team memory is the live bet, token overhead and team sync are the honest risks. No interaction is implemented yet.</p>
+      <p class="intro-copy">6 个方向使用同一组 TeamAgent 事实：Phase 1-3 已交付，Phase 4 团队记忆是当前主战场，token 开销和团队同步是需要诚实暴露的风险。当前只做静态前端展示，不实现交互。</p>
     </section>
 
     <section class="mockup command" id="command-center" aria-labelledby="command-title">
       <div class="mockup-label">
         <span>A</span>
         <div>
-          <h2 id="command-title">Command Center</h2>
-          <p>Dense operator view for tech lead and boss review.</p>
+          <h2 id="command-title">执行指挥中心</h2>
+          <p>给技术负责人和老板复盘用的高密执行视图。</p>
         </div>
       </div>
       <div class="command-shell">
         <aside class="rail">
           <strong>TeamBrain</strong>
-          <a class="active">Execution</a>
-          <a>Risks</a>
-          <a>Evidence</a>
-          <a>People</a>
+          <a class="active">执行</a>
+          <a>风险</a>
+          <a>证据</a>
+          <a>人员</a>
         </aside>
         <div class="workspace">
           <div class="workspace-head">
             <div>
-              <p class="muted">Current cycle</p>
-              <h3>Phase 4 team memory v1</h3>
+              <p class="muted">当前周期</p>
+              <h3>Phase 4 团队记忆 v1</h3>
             </div>
-            <div class="score-chip">82% confidence</div>
+            <div class="score-chip">82% 信心</div>
           </div>
           <div class="metrics-row">
-            <article><span>2432</span><small>hook events</small></article>
-            <article><span>73</span><small>active rules</small></article>
-            <article><span>+52%</span><small>token cost risk</small></article>
-            <article><span>3</span><small>decisions needed</small></article>
+            <article><span>2432</span><small>hook 事件</small></article>
+            <article><span>73</span><small>活跃规则</small></article>
+            <article><span>+52%</span><small>token 成本风险</small></article>
+            <article><span>3</span><small>待决策事项</small></article>
           </div>
           <div class="board four">
             <div class="lane">
-              <h4>Now</h4>
-              <div class="task hot"><b>MDC export/import</b><p>File format that can survive review.</p><small>Owner: LS - due Fri</small></div>
-              <div class="task"><b>Git transport</b><p>Pull team rules into local DB.</p><small>Owner: Core</small></div>
+              <h4>进行中</h4>
+              <div class="task hot"><b>MDC 导出 / 导入</b><p>能进入 review、能被 diff 的规则文件格式。</p><small>负责人：LS - 周五前</small></div>
+              <div class="task"><b>Git 同步通道</b><p>把团队规则拉进本地数据库。</p><small>负责人：Core</small></div>
             </div>
             <div class="lane">
-              <h4>Next</h4>
-              <div class="task"><b>Conflict resolver</b><p>Mark contested rules before they hurt users.</p><small>Owner: CLI</small></div>
-              <div class="task"><b>PII redactor</b><p>Block emails, hostnames, paths.</p><small>Owner: Security</small></div>
+              <h4>下一步</h4>
+              <div class="task"><b>冲突解决器</b><p>在规则伤到用户之前，把争议规则标出来。</p><small>负责人：CLI</small></div>
+              <div class="task"><b>隐私脱敏</b><p>拦住邮箱、内部主机名、本地路径。</p><small>负责人：Security</small></div>
             </div>
             <div class="lane">
-              <h4>Blocked</h4>
-              <div class="task blocked"><b>Team scope runtime</b><p>DualLayerStore still throws on team scope.</p><small>Needs architecture decision</small></div>
+              <h4>阻塞</h4>
+              <div class="task blocked"><b>team scope 运行时</b><p>DualLayerStore 遇到 team scope 仍会抛错。</p><small>需要架构决策</small></div>
             </div>
             <div class="lane">
-              <h4>Evidence</h4>
-              <div class="task done"><b>Phase 3 ready</b><p>doctor, npm package, README shipped.</p><small>v0.5.0</small></div>
-              <div class="task done"><b>Benchmark PRR</b><p>18/18 baseline errors to 0/18.</p><small>bench report</small></div>
+              <h4>证据</h4>
+              <div class="task done"><b>Phase 3 已就绪</b><p>doctor、npm 包、README 已交付。</p><small>v0.5.0</small></div>
+              <div class="task done"><b>Benchmark PRR</b><p>baseline 18/18 犯错降到 0/18。</p><small>benchmark 报告</small></div>
             </div>
           </div>
         </div>
@@ -93,33 +93,33 @@
       <div class="mockup-label">
         <span>B</span>
         <div>
-          <h2 id="boardroom-title">Investor Boardroom</h2>
-          <p>Clean progress narrative for funders and executives.</p>
+          <h2 id="boardroom-title">投资人会议室</h2>
+          <p>给投资人和管理者看的清晰进展叙事。</p>
         </div>
       </div>
       <div class="boardroom-page">
         <div class="letterhead">
           <div>
-            <p>April 29, 2026</p>
-            <h3>TeamAgent Progress Memo</h3>
+            <p>2026 年 4 月 29 日</p>
+            <h3>TeamAgent 进展备忘录</h3>
           </div>
-          <strong>Confidence: high, with named risks</strong>
+          <strong>信心：高，但风险已明确列出</strong>
         </div>
         <div class="memo-grid">
           <article class="memo-main">
-            <h4>Why this work matters</h4>
-            <p>TeamAgent turns corrected AI mistakes into reusable team memory. The wedge is automatic capture plus cross-user sync, a gap not covered by current static rule systems.</p>
+            <h4>为什么这件事值得做</h4>
+            <p>TeamAgent 把 AI 被纠正过的错误变成可复用的团队记忆。真正的切入点是“自动捕获 + 跨用户同步”，这是现有静态规则系统还没有覆盖的空白。</p>
             <div class="milestones">
-              <span>Phase 1 shipped</span>
-              <span>Phase 2 frozen</span>
-              <span>Phase 3 ready</span>
-              <span class="current">Phase 4 active</span>
+              <span>Phase 1 已交付</span>
+              <span>Phase 2 已冻结</span>
+              <span>Phase 3 已就绪</span>
+              <span class="current">Phase 4 进行中</span>
             </div>
           </article>
-          <article><b>Proof</b><span>100% PRR in benchmark fixture</span></article>
-          <article><b>Adoption</b><span>Friend testing started, team sync next</span></article>
-          <article><b>Risk</b><span>Token overhead and contested rule UX</span></article>
-          <article><b>Ask</b><span>Keep funding until 3-person shared-rule trial</span></article>
+          <article><b>证据</b><span>benchmark fixture 中 PRR 达到 100%</span></article>
+          <article><b>试用</b><span>同事试用已开始，下一步是团队同步</span></article>
+          <article><b>风险</b><span>token 开销与争议规则 UX</span></article>
+          <article><b>请求</b><span>支持到 3 人共享规则仓库试验完成</span></article>
         </div>
       </div>
     </section>
@@ -128,33 +128,33 @@
       <div class="mockup-label">
         <span>C</span>
         <div>
-          <h2 id="flow-title">Team Flow</h2>
-          <p>Day-to-day kanban for builders who need scanning speed.</p>
+          <h2 id="flow-title">团队工作流</h2>
+          <p>给一线开发者日常扫描用的实用看板。</p>
         </div>
       </div>
       <div class="flow-shell">
         <div class="flow-top">
-          <h3>This Week</h3>
+          <h3>本周</h3>
           <div class="avatars"><span>LS</span><span>DX</span><span>CLI</span><span>SEC</span></div>
         </div>
         <div class="flow-board">
           <div class="swimlane">
-            <h4>Build</h4>
-            <div class="flow-card priority"><b>teamagent promote</b><span>CLI</span><p>One command to propose high-score rules into team repo.</p></div>
-            <div class="flow-card"><b>MDC parser</b><span>Core</span><p>Markdown body plus YAML frontmatter.</p></div>
+            <h4>开发</h4>
+            <div class="flow-card priority"><b>teamagent promote</b><span>CLI</span><p>一条命令把高分规则提议进团队仓库。</p></div>
+            <div class="flow-card"><b>MDC 解析器</b><span>Core</span><p>Markdown 正文加 YAML frontmatter。</p></div>
           </div>
           <div class="swimlane">
-            <h4>Verify</h4>
-            <div class="flow-card"><b>Cross-user sync test</b><span>Ports</span><p>Alice learns, Bob receives on next session start.</p></div>
-            <div class="flow-card"><b>PII fixture pack</b><span>Security</span><p>Emails, hosts, UUIDs, local paths.</p></div>
+            <h4>验证</h4>
+            <div class="flow-card"><b>跨用户同步测试</b><span>Ports</span><p>Alice 学到规则，Bob 下次启动 session 时收到。</p></div>
+            <div class="flow-card"><b>PII 测试集</b><span>Security</span><p>邮箱、主机名、UUID、本地路径。</p></div>
           </div>
           <div class="swimlane">
-            <h4>Review</h4>
-            <div class="flow-card"><b>Contested status copy</b><span>UX</span><p>Make conflicts obvious without stopping work.</p></div>
+            <h4>评审</h4>
+            <div class="flow-card"><b>争议状态文案</b><span>UX</span><p>让冲突足够明显，同时不打断正常工作。</p></div>
           </div>
           <div class="swimlane">
-            <h4>Done</h4>
-            <div class="flow-card done"><b>Doctor command</b><span>v0.5.0</span><p>Eight checks, fix path for install issues.</p></div>
+            <h4>完成</h4>
+            <div class="flow-card done"><b>doctor 命令</b><span>v0.5.0</span><p>8 项检查，安装问题有自动修复路径。</p></div>
           </div>
         </div>
       </div>
@@ -164,26 +164,26 @@
       <div class="mockup-label">
         <span>D</span>
         <div>
-          <h2 id="war-title">War Room</h2>
-          <p>Risk-first view for hard tradeoff meetings.</p>
+          <h2 id="war-title">作战室</h2>
+          <p>适合艰难取舍会议的风险优先视图。</p>
         </div>
       </div>
       <div class="war-grid">
         <article class="war-hero">
-          <p>Critical path</p>
-          <h3>Team memory cannot ship until sync, privacy, and conflict UX all work together.</h3>
+          <p>关键路径</p>
+          <h3>团队记忆要等同步、隐私、冲突 UX 同时跑通才能交付。</h3>
         </article>
-        <article class="heat"><b>Red</b><span>Team scope throws at runtime</span></article>
-        <article class="heat amber"><b>Amber</b><span>Token cost still +52%</span></article>
-        <article class="heat green"><b>Green</b><span>Phase 3 install path is ready</span></article>
+        <article class="heat"><b>红</b><span>team scope 运行时仍会抛错</span></article>
+        <article class="heat amber"><b>黄</b><span>token 成本仍然 +52%</span></article>
+        <article class="heat green"><b>绿</b><span>Phase 3 安装路径已就绪</span></article>
         <div class="decision-stack">
-          <h4>Decisions needed</h4>
-          <p>Use git PRs for v1 transport?</p>
-          <p>Make promote semi-automatic only?</p>
-          <p>Freeze wiki work until after Phase 4?</p>
+          <h4>待决策</h4>
+          <p>v1 同步通道是否使用 git PR？</p>
+          <p>promote 是否坚持半自动？</p>
+          <p>wiki 工作是否冻结到 Phase 4 之后？</p>
         </div>
         <div class="timeline-box">
-          <span>M1 MDC</span><span>M2 Sync</span><span>M3 Conflict</span><span>M4 PII</span><span>M5 CLI</span>
+          <span>M1 MDC</span><span>M2 同步</span><span>M3 冲突</span><span>M4 隐私</span><span>M5 CLI</span>
         </div>
       </div>
     </section>
@@ -192,25 +192,25 @@
       <div class="mockup-label">
         <span>E</span>
         <div>
-          <h2 id="roadmap-title">Roadmap Wall</h2>
-          <p>Strategic roadmap and kanban in one view.</p>
+          <h2 id="roadmap-title">路线图墙</h2>
+          <p>把战略路线图和执行看板放在同一屏。</p>
         </div>
       </div>
       <div class="roadmap-wall">
         <div class="roadmap-column past">
-          <h3>Shipped</h3>
-          <p>Walking skeleton, calibrator, doctor, npm package, dashboard.</p>
-          <strong>v0.1 to v0.5</strong>
+          <h3>已交付</h3>
+          <p>Walking skeleton、calibrator、doctor、npm 包、dashboard。</p>
+          <strong>v0.1 到 v0.5</strong>
         </div>
         <div class="roadmap-column present">
-          <h3>Now</h3>
-          <p>Make team memory real: shared rule files, git transport, redaction, conflict resolution.</p>
+          <h3>当前</h3>
+          <p>让团队记忆真正落地：共享规则文件、git 同步、隐私脱敏、冲突解决。</p>
           <strong>Phase 4</strong>
         </div>
         <div class="roadmap-column future">
-          <h3>Next</h3>
-          <p>Frontier RAG, richer taste memory, MCP support for Cursor and Windsurf.</p>
-          <strong>v0.9 to v1.0</strong>
+          <h3>下一步</h3>
+          <p>前沿 RAG、更丰富的 taste memory、通过 MCP 支持 Cursor 和 Windsurf。</p>
+          <strong>v0.9 到 v1.0</strong>
         </div>
       </div>
     </section>
@@ -219,24 +219,24 @@
       <div class="mockup-label">
         <span>F</span>
         <div>
-          <h2 id="salary-title">Funding Case</h2>
-          <p>Direct answer to "why keep paying this team?"</p>
+          <h2 id="salary-title">拨款理由</h2>
+          <p>直接回答“为什么还值得继续给这个团队发工资？”</p>
         </div>
       </div>
       <div class="salary-sheet">
         <div class="salary-head">
-          <p>Operating thesis</p>
-          <h3>One repeated AI mistake prevented across a team pays back faster than another static rule doc.</h3>
+          <p>运营假设</p>
+          <h3>让一个 AI 错误在团队里不再重复，比再写一份静态规则文档更快回本。</h3>
         </div>
         <div class="proof-grid">
-          <article><b>Output</b><span>Phase 1-3 delivered, public npm path ready</span></article>
-          <article><b>Leverage</b><span>Rules learned once can protect every teammate</span></article>
-          <article><b>Discipline</b><span>Contract tests, TDD, walking skeleton gates</span></article>
-          <article><b>Honesty</b><span>Team scope, MCP, token cost risks named upfront</span></article>
+          <article><b>产出</b><span>Phase 1-3 已交付，公开 npm 路径已就绪</span></article>
+          <article><b>杠杆</b><span>规则学一次，可以保护每个队友</span></article>
+          <article><b>纪律</b><span>契约测试、TDD、walking skeleton 门禁</span></article>
+          <article><b>诚实</b><span>team scope、MCP、token 成本风险提前讲清楚</span></article>
         </div>
         <div class="funding-footer">
-          <span>Next funding checkpoint</span>
-          <strong>3 users, 1 shared rule repo, 1 week of real use</strong>
+          <span>下一次拨款检查点</span>
+          <strong>3 个用户、1 个共享规则仓库、1 周真实使用</strong>
         </div>
       </div>
     </section>
