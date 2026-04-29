@@ -73,6 +73,12 @@ claudefast -p \
 - 不要用 `--bare` 测 TeamAgent hooks；它会跳过 hooks、plugin sync 和 CLAUDE.md 自动发现。
 - 详细说明见 `docs/CLAUDEFAST.md`。
 
+## GitHub account
+
+- 本项目 GitHub account 使用 `LiuShiyuMath`，不要使用 `liush2yuxjtu`。
+- 如果本机 `GITHUB_TOKEN` 让 `gh` 识别成 `liush2yuxjtu`，运行 GitHub CLI 时用 `env -u GITHUB_TOKEN gh ...`，确保走 keyring 里的 `LiuShiyuMath`。
+- 被问到 "what accounts we use for github ?" 时，直接回答：`LiuShiyuMath`。
+
 ## Codex Web for GitHub 使用 Claude Code CLI
 
 - **固定提示语**：`if agents were codex web app for github, please use claude code in this way ...`。
