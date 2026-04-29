@@ -1,0 +1,9 @@
+{
+  "positioning": "TeamAgent 是面向团队 AI 协作的自进化引擎，产品楔子是自动捕获与实时拦截。",
+  "metrics": "系统展示强调三个硬指标，并要求证据可审计。",
+  "market_gap": "目标是填补团队级知识沉淀与执行守门之间的落差。",
+  "delivered_vs_planned": "文档明确区分已交付范围与后续 roadmap 规划边界。",
+  "hooks": "系统通过 4 个 Hook 承担会话治理与执行约束。",
+  "knowledge_delivery": "知识交付采用 4 通道、RAG-first 的结构化路径。",
+  "self_evolution": "系统定义了 4 个子能力来实现持续自进化。"
+}
