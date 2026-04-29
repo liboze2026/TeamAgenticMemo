@@ -128,9 +128,8 @@ export async function executePitfall(
 ): Promise<string> {
   const paths = resolvePaths(opts);
   const now = (opts.now ?? (() => new Date().toISOString()))();
-  const mode = parseVisibilityMode(
-    (opts.env ?? process.env).TEAMAGENT_VISIBILITY,
-  );
+  const env = opts.env ?? process.env;
+  const mode = parseVisibilityMode(env.TEAMAGENT_VISIBILITY);
 
   fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
   fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
@@ -175,8 +174,24 @@ export async function executePitfall(
     }
   } catch { /* 向量同步失败不阻断 pitfall */ }
 
-  // 异步生成 tool_context_description（不阻塞，后台写入）
-  generateToolContextAsync(entry, paths.projectDbPath).catch(() => {/* best-effort */});
+  // 异步生成 tool_context_description（不阻塞，后台写入）。
+  // 测试注入 embedder 时避免启动隐藏的真实 LLM/native embedder 后台工作。
+  if (!opts.embedder && process.env.VITEST !== "true" && env.TEAMAGENT_DISABLE_TOOL_CONTEXT !== "1") {
+    generateToolContextAsync(entry, paths.projectDbPath).catch(() => {/* best-effort */});
+  }
+
+  // B-065: 真实写入位置取决于 entry.type:
+  //   avoidance (有 wrong_pattern) → 进 CLAUDE.md 知识块 + skill 文件
+  //   practice  (无 wrong_pattern) → 仅 skill 文件，CLAUDE.md 不含此规则
+  // 之前 target 永远是 (CLAUDE.md, count=0)，渲染成"传播到 CLAUDE.md 第 0 行"，
+  // 让用户误以为 practice 类规则在 CLAUDE.md 生效（实际只在 SKILL.md）。
+  // 修复：根据类型选择正确文件，且 count 用真实 blockLineCount。
+  const home = opts.homeDir ?? os.homedir();
+  const skillMdPath = path.join(home, ".claude", "skills", "teamagent", entry.id, "SKILL.md");
+  const target: { file: string; count?: number } =
+    entry.type === "practice"
+      ? { file: skillMdPath }
+      : { file: compileResult.markdown.path, count: compileResult.markdown.blockLineCount };
 
   const bus = new InMemoryAttributionBus();
   bus.emit({
@@ -184,7 +199,7 @@ export async function executePitfall(
     action: `添加知识条目 ${entry.id} (${entry.category}/${entry.tags[0]})`,
     severity: "highlight",
     timestamp: now,
-    target: { file: compileResult.markdown.path, count: 0 },
+    target,
     before: { knowledgeCount: before },
     after: {
       knowledgeCount: after,
@@ -312,6 +327,14 @@ async function generateToolContextAsync(
   }
 }
 
+/**
+ * B-067: per-field length cap for pitfall non-interactive input. 1000 chars
+ * is generous for any natural-language pitfall description; values beyond
+ * this strongly suggest abuse or accidental paste of large content. The cap
+ * prevents one entry from dominating the 3000-token CLAUDE.md compile budget.
+ */
+const PITFALL_FIELD_MAX = 1000;
+
 /** 必填字段缺失或全空时抛出，由 bin.ts 捕获并以非零退出码报错。 */
 export class PitfallValidationError extends Error {
   constructor(public readonly missing: string[]) {
@@ -361,6 +384,20 @@ export function parsePitfallArgs(argv: string[]): PitfallInput | null {
   if (!correct) missing.push("--correct");
   if (!reason) missing.push("--reason");
   if (missing.length > 0) throw new PitfallValidationError(missing);
+
+  // B-067: enforce per-field length cap. Without this, 10000-char trigger
+  // gets stored, vectorized, and compiled into CLAUDE.md (3000-token budget)
+  // — a single bad entry can blow out the entire knowledge block.
+  const overLong: string[] = [];
+  if (trigger.length > PITFALL_FIELD_MAX) overLong.push(`--trigger 长度 ${trigger.length}`);
+  if (wrong.length > PITFALL_FIELD_MAX) overLong.push(`--wrong 长度 ${wrong.length}`);
+  if (correct.length > PITFALL_FIELD_MAX) overLong.push(`--correct 长度 ${correct.length}`);
+  if (reason.length > PITFALL_FIELD_MAX) overLong.push(`--reason 长度 ${reason.length}`);
+  if (overLong.length > 0) {
+    throw new PitfallValidationError([
+      `字段超长（每字段最大 ${PITFALL_FIELD_MAX} 字符）: ${overLong.join(", ")}`,
+    ]);
+  }
 
   const tags = tagsRaw
     ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean)
