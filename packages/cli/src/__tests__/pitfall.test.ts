@@ -280,6 +280,26 @@ describe("executePitfall: 自动向量同步", () => {
     expect(vecCount.n).toBe(1);
   });
 
+  it("embedder 失败时也不崩溃（embedder 是 best-effort）", async () => {
+    const failingEmbedder = {
+      async embed(): Promise<number[][]> {
+        throw new Error("embedding unavailable");
+      },
+    };
+    await expect(
+      executePitfall(
+        { trigger: "t", wrong: "w", correct: "c", reason: "r" },
+        {
+          cwd: tmp.cwd,
+          homeDir: tmp.home,
+          now: () => fixedNow,
+          env: {},
+          embedder: failingEmbedder,
+        },
+      ),
+    ).resolves.not.toThrow();
+  });
+
   it.skipIf(process.platform === "win32" && process.env.CI === "true")(
     "不提供 embedder 时也不崩溃（embedder 是 best-effort）",
     async () => {

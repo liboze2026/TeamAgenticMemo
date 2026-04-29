@@ -175,8 +175,8 @@ export async function executePitfall(
   } catch { /* 向量同步失败不阻断 pitfall */ }
 
   // 异步生成 tool_context_description（不阻塞，后台写入）。
-  // Vitest 中避免启动真实 native embedder，Windows CI 上它可能在后台硬退出进程。
-  if (process.env.VITEST !== "true" && env.TEAMAGENT_DISABLE_TOOL_CONTEXT !== "1") {
+  // 测试注入 embedder 时避免启动隐藏的真实 LLM/native embedder 后台工作。
+  if (!opts.embedder && process.env.VITEST !== "true" && env.TEAMAGENT_DISABLE_TOOL_CONTEXT !== "1") {
     generateToolContextAsync(entry, paths.projectDbPath).catch(() => {/* best-effort */});
   }
 
