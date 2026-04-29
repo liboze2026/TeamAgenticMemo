@@ -142,4 +142,53 @@ describe("installUserHook", () => {
     expect(after.hooks.SessionStart).toHaveLength(1);
     expect(after.hooks.SessionStart[0].hooks[0].command).toBe("echo unrelated");
   });
+
+  // B-091: settings.json must reference a stable user-owned location, not
+  // the bundle path inside whichever node_modules / tmp clone happened to
+  // run install-user-hook. Otherwise nvm version switches, npm reinstalls,
+  // or `/private/tmp/<repo>` clones being cleaned all break the hook.
+  // Repro: previously a `pnpm teamagent install-user-hook` from a tmp clone
+  // wrote `node /private/tmp/TeamBrain/packages/teamagent/dist/bin-session-start.cjs`
+  // into ~/.claude/settings.json; once /tmp was cleaned, every Claude Code
+  // session opened with `Cannot find module ...bin-session-start.cjs`.
+  describe("稳定路径 (B-091)", () => {
+    it("把 bundle 复制到 ~/.teamagent/hooks/ 并写入稳定路径", () => {
+      fs.writeFileSync(sessionStartEntry, "// fresh bundle content");
+      const r = installUserHook({ homeDir: home, sessionStartEntry });
+
+      const stagedPath = path.join(home, ".teamagent", "hooks", "bin-session-start.cjs");
+      expect(fs.existsSync(stagedPath)).toBe(true);
+      expect(fs.readFileSync(stagedPath, "utf-8")).toBe("// fresh bundle content");
+
+      const settings = JSON.parse(fs.readFileSync(r.settingsPath, "utf-8"));
+      const cmd: string = settings.hooks.SessionStart[0].hooks[0].command;
+      // Hook must point at the staged copy, not at the source bundle path
+      expect(cmd).toContain(stagedPath.replace(/\\/g, "/"));
+      expect(cmd).not.toContain(sessionStartEntry.replace(/\\/g, "/"));
+    });
+
+    it("重装时刷新已暂存的 hook bundle (内容更新流到 stable path)", () => {
+      fs.writeFileSync(sessionStartEntry, "// v1");
+      installUserHook({ homeDir: home, sessionStartEntry });
+      const stagedPath = path.join(home, ".teamagent", "hooks", "bin-session-start.cjs");
+      expect(fs.readFileSync(stagedPath, "utf-8")).toBe("// v1");
+
+      // Simulate teamagent upgrade: source bundle content changes
+      fs.writeFileSync(sessionStartEntry, "// v2 with bug fix");
+      installUserHook({ homeDir: home, sessionStartEntry });
+      expect(fs.readFileSync(stagedPath, "utf-8")).toBe("// v2 with bug fix");
+    });
+
+    it("源 bundle 在临时目录清理后, hook 仍可解析 (路径不依赖源)", () => {
+      installUserHook({ homeDir: home, sessionStartEntry });
+      const stagedPath = path.join(home, ".teamagent", "hooks", "bin-session-start.cjs");
+
+      // Wipe the source bundle (simulates `/private/tmp/TeamBrain` being cleaned,
+      // or `npm uninstall -g teamagent` followed by switching nvm versions)
+      fs.rmSync(path.dirname(sessionStartEntry), { recursive: true, force: true });
+
+      // Staged copy survives — that's the whole point of the stable path
+      expect(fs.existsSync(stagedPath)).toBe(true);
+    });
+  });
 });

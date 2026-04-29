@@ -89,6 +89,15 @@ export function installUserHook(
     );
   }
 
+  // B-091: stage the bundle to a stable user-owned location and reference
+  // *that* in settings.json — not the bundle inside whichever node_modules /
+  // tmp clone produced this install. Otherwise nvm version switches, npm
+  // reinstalls, or `/private/tmp/<repo>` cleanups silently break every
+  // future Claude Code SessionStart hook.
+  const stagedPath = path.join(home, ".teamagent", "hooks", "bin-session-start.cjs");
+  fs.mkdirSync(path.dirname(stagedPath), { recursive: true });
+  fs.copyFileSync(hookEntry, stagedPath);
+
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
 
   // Backup 已有 settings.json (带时间戳, 不覆盖历史备份)
@@ -118,23 +127,24 @@ export function installUserHook(
   const removedLegacy = before - settings.hooks.SessionStart.length;
 
   // After cleanup we always append a fresh tagged entry pointing at the
-  // current bundle path. `alreadyInstalled` reflects whether the same
-  // tagged entry was already present BEFORE cleanup, so callers can
-  // distinguish first-install from re-install for messaging.
+  // staged bundle path (~/.teamagent/hooks/bin-session-start.cjs).
+  // `alreadyInstalled` reflects whether the same tagged entry was already
+  // present BEFORE cleanup, so callers can distinguish first-install from
+  // re-install for messaging.
   const alreadyInstalled = removedLegacy > 0;
   settings.hooks.SessionStart.push({
     _teamagentTag: SESSION_START_TAG,
     hooks: [
       {
         type: "command",
-        command: `node ${shellQuote(toForwardSlash(hookEntry))}`,
+        command: `node ${shellQuote(toForwardSlash(stagedPath))}`,
         timeout: 10,
       },
     ],
   });
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-  return { settingsPath, backupPath, hookEntry, alreadyInstalled };
+  return { settingsPath, backupPath, hookEntry: stagedPath, alreadyInstalled };
 }
 
 /**
