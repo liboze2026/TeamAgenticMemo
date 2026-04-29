@@ -22,7 +22,9 @@ function makeDeps(over: Partial<UpdaterDeps> = {}): UpdaterDeps {
 
 function lastWrittenState(deps: UpdaterDeps): UpdateState {
   const calls = (deps.writeState as ReturnType<typeof vi.fn>).mock.calls;
-  return calls[calls.length - 1][0] as UpdateState;
+  const last = calls[calls.length - 1];
+  if (!last) throw new Error("writeState was never called");
+  return last[0] as UpdateState;
 }
 
 describe("runUpdater", () => {
