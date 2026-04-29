@@ -24,6 +24,8 @@ packages/*/*.tgz
 scripts/out/reclassify-*
 # claudefast stream-json smoke outputs (timestamped, regenerated per run)
 scripts/out/claudefast-stream-json/
+# Codex raw-chat verification outputs (timestamped, regenerated per run)
+scripts/out/codex-raw-chat-*/
 # CLAUDE.md compile-hook write-failure leftovers
 CLAUDE.md.tmp-*
 # Machine-local Claude Code settings (contains absolute hook paths specific to each dev's machine).

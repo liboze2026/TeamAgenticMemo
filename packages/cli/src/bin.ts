@@ -280,6 +280,13 @@ async function main(): Promise<void> {
       if (!result.ok) process.exit(1);
       return;
     }
+    case "install-codex": {
+      const opts = parseInitArgs(rest);
+      const result = await executeInit({ ...opts, target: "codex" });
+      process.stdout.write(renderInitResult(result));
+      if (!result.ok) process.exit(1);
+      return;
+    }
     case "disable": {
       const r = disable();
       if (r.removed) {
@@ -567,9 +574,12 @@ async function main(): Promise<void> {
           "                                   --commit: 通过 LLM 提取成知识条目并写入知识库 + 重编译 CLAUDE.md",
           "  teamagent review [N] [--scope=personal|team|global]",
           "                                   列出最近 N 条知识（默认 10），供人工复核",
-          "  teamagent init [--dry-run] [--skip-import] [--skip-hook] [--install-plugins]",
-          "                                   一键安装到当前项目：建目录 + 注入元原则 + 导入已有规则 + 注册 Hook + 编译 CLAUDE.md",
+          "  teamagent init [--dry-run] [--skip-import] [--skip-hook] [--install-plugins] [--target=claude|codex|both]",
+          "                                   一键安装到当前项目：建目录 + 注入元原则 + 导入已有规则 + 注册 Hook + 编译规则文件",
+          "                                   默认 target=claude；codex 会创建 AGENTS.md/.codex/skills 软链接且不注册 Claude hook",
           "                                   --install-plugins: 同时注册团队标配插件（opt-in，改写用户全局 settings）",
+          "  teamagent install-codex [--dry-run] [--skip-import]",
+          "                                   Codex 快捷安装：编译 CLAUDE.md，并创建 AGENTS.md -> CLAUDE.md",
           "  teamagent doctor [--fix] [--json]",
           "                                   诊断安装环境（Node版本/Claude Code/sqlite-vec/Hook/CLAUDE.md）",
           "                                   --fix: 自动修复能自动修的问题",
@@ -597,8 +607,8 @@ async function main(): Promise<void> {
           "                                   真实 SQLite + analyze + compile + PreToolUse 测评学习、触发、误触发和新成员可见性",
           "  teamagent dogfood-report [--output=path]",
           "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
-          "  teamagent compile [--dry-run] [--skills-only] [--markdown-only] [--force]",
-          "                                   编译双出口：CLAUDE.md (canonical+, 3000 token 预算) + Agent Skills (stable+)",
+          "  teamagent compile [--dry-run] [--skills-only] [--markdown-only] [--force] [--target=claude|codex|both]",
+          "                                   编译出口：CLAUDE.md (canonical+, 3000 token 预算) + Claude Agent Skills (stable+)；Codex 通过软链接读取",
           "                                   --dry-run: 预览将写/删哪些文件，不实际写入",
           "                                   --skills-only / --markdown-only: 只写其中一路出口",
           "  teamagent config stop-mode <sync|async>  切换 Stop hook 运行模式（默认 sync）",
