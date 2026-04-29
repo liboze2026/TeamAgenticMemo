@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TeamBrain Kanban Mockups</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="TeamBrain kanban mockups">
+      <span class="brand-mark">TB</span>
+      <span>
+        <strong>TeamBrain Kanban</strong>
+        <small>six static front-end directions</small>
+      </span>
+    </a>
+    <nav class="top-nav" aria-label="Mockup variants">
+      <a href="#command-center">Command</a>
+      <a href="#boardroom">Boardroom</a>
+      <a href="#team-flow">Team Flow</a>
+      <a href="#war-room">War Room</a>
+      <a href="#roadmap-wall">Roadmap</a>
+      <a href="#salary-case">Funding</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="intro-panel">
+      <div>
+        <p class="eyebrow">For team members, tech leads, bosses, and investors</p>
+        <h1>Kanban front-end mockups that make execution legible.</h1>
+      </div>
+      <p class="intro-copy">Each direction uses the same TeamAgent reality: Phase 1-3 shipped, Phase 4 team memory is the live bet, token overhead and team sync are the honest risks. No interaction is implemented yet.</p>
+    </section>
+
+    <section class="mockup command" id="command-center" aria-labelledby="command-title">
+      <div class="mockup-label">
+        <span>A</span>
+        <div>
+          <h2 id="command-title">Command Center</h2>
+          <p>Dense operator view for tech lead and boss review.</p>
+        </div>
+      </div>
+      <div class="command-shell">
+        <aside class="rail">
+          <strong>TeamBrain</strong>
+          <a class="active">Execution</a>
+          <a>Risks</a>
+          <a>Evidence</a>
+          <a>People</a>
+        </aside>
+        <div class="workspace">
+          <div class="workspace-head">
+            <div>
+              <p class="muted">Current cycle</p>
+              <h3>Phase 4 team memory v1</h3>
+            </div>
+            <div class="score-chip">82% confidence</div>
+          </div>
+          <div class="metrics-row">
+            <article><span>2432</span><small>hook events</small></article>
+            <article><span>73</span><small>active rules</small></article>
+            <article><span>+52%</span><small>token cost risk</small></article>
+            <article><span>3</span><small>decisions needed</small></article>
+          </div>
+          <div class="board four">
+            <div class="lane">
+              <h4>Now</h4>
+              <div class="task hot"><b>MDC export/import</b><p>File format that can survive review.</p><small>Owner: LS - due Fri</small></div>
+              <div class="task"><b>Git transport</b><p>Pull team rules into local DB.</p><small>Owner: Core</small></div>
+            </div>
+            <div class="lane">
+              <h4>Next</h4>
+              <div class="task"><b>Conflict resolver</b><p>Mark contested rules before they hurt users.</p><small>Owner: CLI</small></div>
+              <div class="task"><b>PII redactor</b><p>Block emails, hostnames, paths.</p><small>Owner: Security</small></div>
+            </div>
+            <div class="lane">
+              <h4>Blocked</h4>
+              <div class="task blocked"><b>Team scope runtime</b><p>DualLayerStore still throws on team scope.</p><small>Needs architecture decision</small></div>
+            </div>
+            <div class="lane">
+              <h4>Evidence</h4>
+              <div class="task done"><b>Phase 3 ready</b><p>doctor, npm package, README shipped.</p><small>v0.5.0</small></div>
+              <div class="task done"><b>Benchmark PRR</b><p>18/18 baseline errors to 0/18.</p><small>bench report</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mockup boardroom" id="boardroom" aria-labelledby="boardroom-title">
+      <div class="mockup-label">
+        <span>B</span>
+        <div>
+          <h2 id="boardroom-title">Investor Boardroom</h2>
+          <p>Clean progress narrative for funders and executives.</p>
+        </div>
+      </div>
+      <div class="boardroom-page">
+        <div class="letterhead">
+          <div>
+            <p>April 29, 2026</p>
+            <h3>TeamAgent Progress Memo</h3>
+          </div>
+          <strong>Confidence: high, with named risks</strong>
+        </div>
+        <div class="memo-grid">
+          <article class="memo-main">
+            <h4>Why this work matters</h4>
+            <p>TeamAgent turns corrected AI mistakes into reusable team memory. The wedge is automatic capture plus cross-user sync, a gap not covered by current static rule systems.</p>
+            <div class="milestones">
+              <span>Phase 1 shipped</span>
+              <span>Phase 2 frozen</span>
+              <span>Phase 3 ready</span>
+              <span class="current">Phase 4 active</span>
+            </div>
+          </article>
+          <article><b>Proof</b><span>100% PRR in benchmark fixture</span></article>
+          <article><b>Adoption</b><span>Friend testing started, team sync next</span></article>
+          <article><b>Risk</b><span>Token overhead and contested rule UX</span></article>
+          <article><b>Ask</b><span>Keep funding until 3-person shared-rule trial</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="mockup flow" id="team-flow" aria-labelledby="flow-title">
+      <div class="mockup-label">
+        <span>C</span>
+        <div>
+          <h2 id="flow-title">Team Flow</h2>
+          <p>Day-to-day kanban for builders who need scanning speed.</p>
+        </div>
+      </div>
+      <div class="flow-shell">
+        <div class="flow-top">
+          <h3>This Week</h3>
+          <div class="avatars"><span>LS</span><span>DX</span><span>CLI</span><span>SEC</span></div>
+        </div>
+        <div class="flow-board">
+          <div class="swimlane">
+            <h4>Build</h4>
+            <div class="flow-card priority"><b>teamagent promote</b><span>CLI</span><p>One command to propose high-score rules into team repo.</p></div>
+            <div class="flow-card"><b>MDC parser</b><span>Core</span><p>Markdown body plus YAML frontmatter.</p></div>
+          </div>
+          <div class="swimlane">
+            <h4>Verify</h4>
+            <div class="flow-card"><b>Cross-user sync test</b><span>Ports</span><p>Alice learns, Bob receives on next session start.</p></div>
+            <div class="flow-card"><b>PII fixture pack</b><span>Security</span><p>Emails, hosts, UUIDs, local paths.</p></div>
+          </div>
+          <div class="swimlane">
+            <h4>Review</h4>
+            <div class="flow-card"><b>Contested status copy</b><span>UX</span><p>Make conflicts obvious without stopping work.</p></div>
+          </div>
+          <div class="swimlane">
+            <h4>Done</h4>
+            <div class="flow-card done"><b>Doctor command</b><span>v0.5.0</span><p>Eight checks, fix path for install issues.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mockup war" id="war-room" aria-labelledby="war-title">
+      <div class="mockup-label">
+        <span>D</span>
+        <div>
+          <h2 id="war-title">War Room</h2>
+          <p>Risk-first view for hard tradeoff meetings.</p>
+        </div>
+      </div>
+      <div class="war-grid">
+        <article class="war-hero">
+          <p>Critical path</p>
+          <h3>Team memory cannot ship until sync, privacy, and conflict UX all work together.</h3>
+        </article>
+        <article class="heat"><b>Red</b><span>Team scope throws at runtime</span></article>
+        <article class="heat amber"><b>Amber</b><span>Token cost still +52%</span></article>
+        <article class="heat green"><b>Green</b><span>Phase 3 install path is ready</span></article>
+        <div class="decision-stack">
+          <h4>Decisions needed</h4>
+          <p>Use git PRs for v1 transport?</p>
+          <p>Make promote semi-automatic only?</p>
+          <p>Freeze wiki work until after Phase 4?</p>
+        </div>
+        <div class="timeline-box">
+          <span>M1 MDC</span><span>M2 Sync</span><span>M3 Conflict</span><span>M4 PII</span><span>M5 CLI</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="mockup roadmap" id="roadmap-wall" aria-labelledby="roadmap-title">
+      <div class="mockup-label">
+        <span>E</span>
+        <div>
+          <h2 id="roadmap-title">Roadmap Wall</h2>
+          <p>Strategic roadmap and kanban in one view.</p>
+        </div>
+      </div>
+      <div class="roadmap-wall">
+        <div class="roadmap-column past">
+          <h3>Shipped</h3>
+          <p>Walking skeleton, calibrator, doctor, npm package, dashboard.</p>
+          <strong>v0.1 to v0.5</strong>
+        </div>
+        <div class="roadmap-column present">
+          <h3>Now</h3>
+          <p>Make team memory real: shared rule files, git transport, redaction, conflict resolution.</p>
+          <strong>Phase 4</strong>
+        </div>
+        <div class="roadmap-column future">
+          <h3>Next</h3>
+          <p>Frontier RAG, richer taste memory, MCP support for Cursor and Windsurf.</p>
+          <strong>v0.9 to v1.0</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="mockup salary" id="salary-case" aria-labelledby="salary-title">
+      <div class="mockup-label">
+        <span>F</span>
+        <div>
+          <h2 id="salary-title">Funding Case</h2>
+          <p>Direct answer to "why keep paying this team?"</p>
+        </div>
+      </div>
+      <div class="salary-sheet">
+        <div class="salary-head">
+          <p>Operating thesis</p>
+          <h3>One repeated AI mistake prevented across a team pays back faster than another static rule doc.</h3>
+        </div>
+        <div class="proof-grid">
+          <article><b>Output</b><span>Phase 1-3 delivered, public npm path ready</span></article>
+          <article><b>Leverage</b><span>Rules learned once can protect every teammate</span></article>
+          <article><b>Discipline</b><span>Contract tests, TDD, walking skeleton gates</span></article>
+          <article><b>Honesty</b><span>Team scope, MCP, token cost risks named upfront</span></article>
+        </div>
+        <div class="funding-footer">
+          <span>Next funding checkpoint</span>
+          <strong>3 users, 1 shared rule repo, 1 week of real use</strong>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
