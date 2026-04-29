@@ -53,6 +53,7 @@ the indexes below to choose what to read first.
 | `specs/` | Foundational product specs, backlog, and direction memos. |
 | `superpowers/specs/` | Later milestone design specs and roadmaps. |
 | `superpowers/plans/` | Task-level implementation plans for later milestones. |
+| `.gstack/projects/` | Approved `/office-hours` design docs that downstream gstack review skills can discover automatically. |
 | `notes/` | Small decision records. |
 | `feature-verification.md` | Feature/fix verification gate and evidence requirements. |
 | `pr-14-status.md` | PR #14 local status index for restricted verification sessions. |
