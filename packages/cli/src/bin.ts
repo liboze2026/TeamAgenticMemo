@@ -456,6 +456,11 @@ async function main(): Promise<void> {
       if (!result.ok) process.exit(1);
       return;
     }
+    case "warmup": {
+      const { runWarmup } = await import("./commands/warmup.js");
+      const result = await runWarmup();
+      process.exit(result.ok ? 0 : 1);
+    }
     case "pair": {
       const parsed = parsePairArgs(rest);
       if (parsed.subcommand === "capsule") {
