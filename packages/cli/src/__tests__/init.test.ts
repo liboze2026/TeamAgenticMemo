@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import nodeFs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -138,7 +138,13 @@ describe("executeInit", () => {
   it("target=codex pre-check validates CLAUDE.md because codex still compiles it", async () => {
     const claudePath = path.join(tmp.cwd, "CLAUDE.md");
     nodeFs.writeFileSync(claudePath, "# locked\n");
-    nodeFs.chmodSync(claudePath, 0o444);
+
+    const accessSpy = vi.spyOn(nodeFs, "accessSync").mockImplementation((p, mode) => {
+      if (p === claudePath) {
+        throw new Error("EACCES");
+      }
+      return undefined as unknown as void;
+    });
 
     const r = await executeInit({
       ...commonOpts(),
@@ -146,6 +152,7 @@ describe("executeInit", () => {
       llmClient: stubLLM(OK_LLM_RESPONSE),
     });
 
+    accessSpy.mockRestore();
     expect(r.ok).toBe(false);
     expect(r.steps[0]).toMatchObject({
       step: "pre-check",
