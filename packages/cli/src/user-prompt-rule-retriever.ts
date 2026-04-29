@@ -55,12 +55,20 @@ export function buildTechStackText(cwd: string): string {
 export function buildTerminalSummary(tier1: KnowledgeEntry[], tier2: KnowledgeEntry[]): string {
   const all = [...tier1, ...tier2];
   if (all.length === 0) return "";
-  const lines = [`◈ TeamAgent: 找到 ${all.length} 条相关经验`];
-  for (const r of all) {
-    const conf = r.confidence.toFixed(2);
-    lines.push(`  · ${r.trigger.slice(0, 45)} → ${r.correct_pattern.slice(0, 50)} [${conf}]`);
-  }
-  return lines.join("\n");
+  const summary = all
+    .map((r) => `${r.trigger.slice(0, 28)} -> ${r.correct_pattern.slice(0, 34)}`)
+    .join("; ");
+  const content = `找到 ${all.length} 条相关经验: ${summary}`;
+  const maxContentLength = 150;
+  const clipped =
+    content.length > maxContentLength
+      ? `${content.slice(0, maxContentLength - 3)}...`
+      : content;
+  return [
+    "========|| TeamAgent ||========",
+    `|| ${clipped} ||`,
+    "========||===========||========",
+  ].join("\n");
 }
 
 export function formatRuleInjection(rules: KnowledgeEntry[], tier: "T1" | "T2"): string {
