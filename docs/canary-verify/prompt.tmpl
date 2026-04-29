@@ -1,0 +1,16 @@
+You are a JSON extractor. Read the YAML frontmatter (between the first two `---` markers) of this file:
+
+  __SKILL_PATH__
+
+Output ONLY a single JSON object on stdout, with no prose, no markdown fence, no leading/trailing text.
+
+The JSON object MUST have exactly these keys, with these types and rules:
+
+  - "name"          : string, the `name:` field verbatim.
+  - "version"       : string, the `version:` field verbatim.
+  - "preamble_tier" : integer, the `preamble-tier:` field as an integer.
+  - "allowed_tools" : array of strings, the `allowed-tools:` list, sorted ascending (case-sensitive).
+  - "triggers"      : array of strings, the `triggers:` list, sorted ascending (case-sensitive).
+
+Do NOT include the `description:` field, do NOT include any extra keys, do NOT add comments.
+Do NOT wrap in ```json fences. Output the raw JSON object only.
