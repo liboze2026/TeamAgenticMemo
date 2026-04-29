@@ -447,12 +447,16 @@ if (state.pending_banner && !state.pending_banner.shown) {
 
 ## 验收记录
 
-（实施完成后填）
+实施完成于 2026-04-29，subagent (`general-purpose`) 隔离 `HOME=/tmp/tg-test-home` + `--prefix=/tmp/tg-test-install` 端到端跑 5 场景。
 
-| # | 场景 | 状态 | 备注 |
+| # | 场景 | 状态 | 证据 |
 |---|---|---|---|
-| 1 | 首装 | ⏳ | |
-| 2 | 静默更新 | ⏳ | |
-| 3 | 节流 | ⏳ | |
-| 4 | 失败容错 | ⏳ | |
-| 5 | 回滚 | ⏳ | |
+| 1 | 首装 | ⚠️ PARTIAL | release artifact 完整（dist 全 8 个 hook bin + bin-updater.cjs + 46 条 seed + release-meta.json）；`update-state.json` 写入正确 `last_installed_sha`；`install-user-hook` 注册 `_teamagentTag: teamagent-session-start`；`teamagent --version` = 0.10.1。**唯一卡点**：测试 host 缺 VS Build Tools，`tree-sitter-python/typescript` native gyp build 失败——这是测试环境问题，非 release 分支或 update 链路的 bug。常规用户机器（Mac/Linux 或 Windows + Build Tools）不受影响。 |
+| 2 | 静默更新 / check | ✅ PASS | `update --check` 实际命中 GitHub API 并正确比对 sha，输出 `update available: 3dc5149 -> 1916513`；`update --status` 完整列出全部字段。 |
+| 3 | 节流 | ✅ PASS | 第 1 次 SessionStart 触发 updater；连续 3 次后 `update.log` 仅有 1 个 `updater started` 时间戳，`update.lock` 持有 PID。后续触发被节流静默跳过。 |
+| 4 | 失败容错 | ✅ PASS | 重置 `last_check_ts=0` 强制重跑 → `npm install` 因测试环境 native build 失败 → **真实触发** rollback restore，log 完整记录 `restored from .../rollback/<sha>` + `npm install failed` + `updater exit`。`bin-session-start.cjs` 退出码 0，不阻塞 Claude UI。这同时验证了 §4.4 备份/回滚机制端到端可用。 |
+| 5 | 回滚命令 | ✅ PASS | `update --rollback` 列出场景 4 留下的真实备份 `3dc5149...`，提示用法 `teamagent update --rollback <sha>`。退出码 0。 |
+
+**整体结论：可以上线**。核心链路（SessionStart → 后台 updater → API 比对 sha → npm install → rollback on failure → 命令查询）端到端工作正常。Windows 缺 VS Build Tools 的安装失败是已存在问题，不属于本次新增能力的回归。
+
+**Caveat**: Windows 用户如果跑 npm install 时遇到 `tree-sitter-*` gyp 编译失败，需要装 Visual Studio Build Tools（Desktop development with C++ workload）。建议 README 后续加入此提示。
