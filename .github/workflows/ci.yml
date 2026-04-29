@@ -25,11 +25,11 @@ jobs:
             test-command: pnpm vitest run packages/cli/src/__tests__/bin-stop.test.ts packages/cli/src/__tests__/init.test.ts packages/adapters/src/storage/sqlite/__tests__/schema-v6.test.ts
             verify-command: echo "skip verify on Windows smoke lane"
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v5
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 9
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
