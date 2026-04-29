@@ -107,7 +107,13 @@ export async function runIngestPipeline(
       continue;
     }
 
-    if (!deps.dryRun) deps.store.add(entry);
+    if (!deps.dryRun) {
+      if (deps.store.addWithEmbedding) {
+        await deps.store.addWithEmbedding(entry);
+      } else {
+        deps.store.add(entry);
+      }
+    }
     accepted.push(entry);
     emit(deps.bus, {
       source: "ingest",
