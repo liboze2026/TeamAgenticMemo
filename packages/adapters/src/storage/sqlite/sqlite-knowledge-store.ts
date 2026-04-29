@@ -2,6 +2,15 @@ import type { DatabaseSync } from "node:sqlite";
 import type { KnowledgeEntry, Scope } from "@teamagent/types";
 import { DEFAULT_FIRE_THRESHOLD } from "@teamagent/types";
 import { normalizeChannel } from "@teamagent/types";
+import type { RuleEmbedder } from "@teamagent/ports";
+import { syncRuleVectors, syncToolVector, deleteRuleVectors } from "./vec-sync.js";
+
+export interface SqliteKnowledgeStoreOptions {
+  /** Optional rule embedder. When provided, addWithEmbedding/updateWithEmbedding
+   *  automatically populate knowledge_trigger_vec/knowledge_pattern_vec/knowledge_tool_vec
+   *  and stamp embedder_model_id, eliminating the need to run migrate-v6 manually. */
+  embedder?: RuleEmbedder;
+}
 
 /** Flattened row shape coming from SQLite. */
 export interface KnowledgeRow {
@@ -205,9 +214,75 @@ const DELETE_BY_ID = "DELETE FROM knowledge WHERE id = @id";
 
 export class SqliteKnowledgeStore {
   private db: DatabaseSync;
+  private embedder: RuleEmbedder | undefined;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, opts: SqliteKnowledgeStoreOptions = {}) {
     this.db = db;
+    this.embedder = opts.embedder;
+  }
+
+  /**
+   * Insert + auto-embed in one shot. Behaviour:
+   *   1. Persist row via add() (synchronous SQL + FTS5).
+   *   2. If an embedder is wired and at least one description field is non-empty,
+   *      encode trigger/pattern/tool_context descriptions, write vec0 rows,
+   *      and stamp embedder_model_id so downstream semanticMatch can see the rule.
+   *   3. Embedding failure is swallowed (logged to stderr) — the row is not lost;
+   *      operators can run `pnpm teamagent migrate-v6 --repair-all` to retry.
+   *
+   * Returning a Promise lets callers (init/pitfall/extract pipelines) await
+   * embedding completion before status output. Hot-path PreToolUse hook reads
+   * via findActive(); this is the rule write-path, so a few hundred ms of
+   * embedder latency is acceptable here.
+   */
+  async addWithEmbedding(entry: KnowledgeEntry): Promise<void> {
+    this.add(entry);
+    await this.syncEmbeddingsFor(entry).catch((err) => {
+      process.stderr.write(
+        `[teamagent] auto-embed failed for ${entry.id}: ${(err as Error).message}\n`,
+      );
+    });
+  }
+
+  async updateWithEmbedding(
+    id: string,
+    patch: Partial<KnowledgeEntry> & Record<string, unknown>,
+  ): Promise<void> {
+    this.update(id, patch);
+    const merged = this.getById(id);
+    if (!merged) return;
+    await this.syncEmbeddingsFor(merged).catch((err) => {
+      process.stderr.write(
+        `[teamagent] auto-embed update failed for ${id}: ${(err as Error).message}\n`,
+      );
+    });
+  }
+
+  private async syncEmbeddingsFor(entry: KnowledgeEntry): Promise<void> {
+    if (!this.embedder) return;
+    const e = entry as any;
+    const trigDescr: string = e.trigger_description ?? "";
+    const patDescr: string = e.pattern_description ?? "";
+    const toolDescr: string = e.tool_context_description ?? "";
+    if (!trigDescr && !patDescr && !toolDescr) return;
+
+    // Encode in one batch so the model is loaded only once across descriptions.
+    const texts = [trigDescr || " ", patDescr || " ", toolDescr || " "];
+    const vecs = await this.embedder.embed(texts);
+    if (!vecs || vecs.length < 2) {
+      throw new Error("embedder returned insufficient vectors");
+    }
+    const tvec = new Float32Array(vecs[0]);
+    const pvec = new Float32Array(vecs[1]);
+    syncRuleVectors(this.db, entry.id, tvec, pvec);
+    if (toolDescr && vecs[2]) {
+      syncToolVector(this.db, entry.id, new Float32Array(vecs[2]));
+    }
+    // Stamp the model id so future migrations / health checks know this row
+    // is up to date with the current embedder.
+    this.db
+      .prepare("UPDATE knowledge SET embedder_model_id = ? WHERE id = ?")
+      .run(this.embedder.modelId, entry.id);
   }
 
   add(entry: KnowledgeEntry): void {
