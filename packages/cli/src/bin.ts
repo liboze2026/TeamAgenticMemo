@@ -46,6 +46,10 @@ import {
   parseDogfoodReportArgs,
 } from "./commands/dogfood-report.js";
 import {
+  executeBugReport,
+  parseBugReportArgs,
+} from "./commands/bug-report.js";
+import {
   DashboardArgsError,
   launchDashboard,
   parseDashboardArgs,
@@ -378,6 +382,23 @@ async function main(): Promise<void> {
       );
       return;
     }
+    case "bug-report": {
+      const opts = parseBugReportArgs(rest);
+      const result = await executeBugReport({
+        ...opts,
+        cwd: process.cwd(),
+        teamagentVersion: findPackageVersion(),
+      });
+      if (opts.stdout) {
+        process.stdout.write(result.markdown);
+      } else {
+        process.stdout.write(
+          `Bug report written: ${result.outputPath}\n` +
+            "Attach this file when reporting first-install or hook failures.\n",
+        );
+      }
+      return;
+    }
     case "dashboard": {
       try {
         const opts = parseDashboardArgs(rest);
@@ -667,6 +688,8 @@ async function main(): Promise<void> {
           "                                   Recording Memory 导入、检索、注入、指标和 golden benchmark",
           "  teamagent dogfood-report [--output=path]",
           "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
+          "  teamagent bug-report [--out=path] [--stdout]",
+          "                                   生成可附到 issue 的诊断报告：系统信息 + hook 配置 + 原始日志（自动脱敏）",
           "  teamagent dashboard --watch [--open] [--port=8787] [--interval=2s]",
           "                                   启动实时 HTML dashboard：生成 docs/dashboard.html，周期刷新真实规则/事件数据并本地服务",
           "  teamagent dashboard --once",

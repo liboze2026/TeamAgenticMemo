@@ -91,6 +91,7 @@ teamagent update --enable               # 重新打开
 teamagent update --rollback             # 列所有备份 sha
 teamagent update --rollback <sha>       # 手动回到任一备份版本
 teamagent update --logs                 # 看 ~/.teamagent/update.log 末尾 50 行
+teamagent bug-report                    # 生成系统信息 + hook 配置 + 原始日志的脱敏报告
 ```
 
 **环境变量**：
@@ -266,6 +267,9 @@ teamagent demo hook Bash command='...'  # 离线模拟 PreToolUse 看会拦谁
 **装完 hook 不工作？** 必须**完全退出并重开** Claude Code（不是刷新页面）。
 
 **sqlite-vec 加载失败？** 跑 `teamagent doctor --fix`。
+
+**首装后看到 UserPromptSubmit hook error？** 跑 `teamagent bug-report`，把生成的
+`~/.teamagent/bug-reports/teamagent-bug-report-*.md` 附到 issue；报告会包含系统信息、hook 命令、TeamAgent 原始日志，并自动脱敏常见 token。
 
 **插件命令报错？** `install-plugins` 调用 `claude plugin` CLI。确认 `claude --version` 能跑、机器能访问 GitHub。
 
