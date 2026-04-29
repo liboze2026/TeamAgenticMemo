@@ -3,241 +3,220 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TeamBrain 看板前端 Mockup</title>
+  <title>TeamBrain 团队执行看板</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <header class="site-header">
-    <a class="brand" href="#top" aria-label="TeamBrain 看板 mockup">
-      <span class="brand-mark">TB</span>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="#command-center" aria-label="TeamBrain 团队执行看板">
+      <span class="brand-glyph">T</span>
       <span>
-        <strong>TeamBrain 看板</strong>
-        <small>6 个静态前端方向</small>
+        <strong>TeamBrain</strong>
+        <small>团队执行看板 · 2026.04.29</small>
       </span>
     </a>
-    <nav class="top-nav" aria-label="Mockup 版本">
-      <a href="#command-center">指挥中心</a>
-      <a href="#boardroom">投资人版</a>
-      <a href="#team-flow">团队流</a>
-      <a href="#war-room">作战室</a>
-      <a href="#roadmap-wall">路线图</a>
-      <a href="#salary-case">拨款理由</a>
+    <nav class="quick-nav" aria-label="页面导航">
+      <a href="#command-center">总览</a>
+      <a href="#team-flow">任务</a>
+      <a href="#war-room">风险</a>
+      <a href="#boardroom">汇报</a>
+      <a href="#roadmap-wall">路线</a>
+      <a href="#salary-case">拨款</a>
     </nav>
   </header>
 
-  <main id="top">
-    <section class="intro-panel">
-      <div>
-        <p class="eyebrow">给团队成员、技术负责人、老板和投资人看</p>
-        <h1>让执行进展一眼看懂的看板前端 Mockup。</h1>
-      </div>
-      <p class="intro-copy">6 个方向使用同一组 TeamAgent 事实：Phase 1-3 已交付，Phase 4 团队记忆是当前主战场，token 开销和团队同步是需要诚实暴露的风险。当前只做静态前端展示，不实现交互。</p>
-    </section>
+  <main class="shell">
+    <aside class="audience-rail" aria-label="受众">
+      <p>这页给谁看</p>
+      <a href="#team-flow"><span>01</span>团队成员</a>
+      <a href="#war-room"><span>02</span>技术负责人</a>
+      <a href="#salary-case"><span>03</span>老板 / 投资人</a>
+    </aside>
 
-    <section class="mockup command" id="command-center" aria-labelledby="command-title">
-      <div class="mockup-label">
-        <span>A</span>
-        <div>
-          <h2 id="command-title">执行指挥中心</h2>
-          <p>给技术负责人和老板复盘用的高密执行视图。</p>
-        </div>
+    <section class="hero" id="command-center" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="kicker">Phase 4 · 团队记忆 v1</p>
+        <h1 id="hero-title">我们不是在做一个看板。我们在证明团队踩过的坑可以只踩一次。</h1>
+        <p class="hero-lede">TeamAgent 已经从单人本地工具走到团队共享前夜。当前看板回答三件事：今天谁在推进什么，哪里会卡住，为什么这件事值得继续投入。</p>
       </div>
-      <div class="command-shell">
-        <aside class="rail">
-          <strong>TeamBrain</strong>
-          <a class="active">执行</a>
-          <a>风险</a>
-          <a>证据</a>
-          <a>人员</a>
-        </aside>
-        <div class="workspace">
-          <div class="workspace-head">
-            <div>
-              <p class="muted">当前周期</p>
-              <h3>Phase 4 团队记忆 v1</h3>
-            </div>
-            <div class="score-chip">82% 信心</div>
-          </div>
-          <div class="metrics-row">
-            <article><span>2432</span><small>hook 事件</small></article>
-            <article><span>73</span><small>活跃规则</small></article>
-            <article><span>+52%</span><small>token 成本风险</small></article>
-            <article><span>3</span><small>待决策事项</small></article>
-          </div>
-          <div class="board four">
-            <div class="lane">
-              <h4>进行中</h4>
-              <div class="task hot"><b>MDC 导出 / 导入</b><p>能进入 review、能被 diff 的规则文件格式。</p><small>负责人：LS - 周五前</small></div>
-              <div class="task"><b>Git 同步通道</b><p>把团队规则拉进本地数据库。</p><small>负责人：Core</small></div>
-            </div>
-            <div class="lane">
-              <h4>下一步</h4>
-              <div class="task"><b>冲突解决器</b><p>在规则伤到用户之前，把争议规则标出来。</p><small>负责人：CLI</small></div>
-              <div class="task"><b>隐私脱敏</b><p>拦住邮箱、内部主机名、本地路径。</p><small>负责人：Security</small></div>
-            </div>
-            <div class="lane">
-              <h4>阻塞</h4>
-              <div class="task blocked"><b>team scope 运行时</b><p>DualLayerStore 遇到 team scope 仍会抛错。</p><small>需要架构决策</small></div>
-            </div>
-            <div class="lane">
-              <h4>证据</h4>
-              <div class="task done"><b>Phase 3 已就绪</b><p>doctor、npm 包、README 已交付。</p><small>v0.5.0</small></div>
-              <div class="task done"><b>Benchmark PRR</b><p>baseline 18/18 犯错降到 0/18。</p><small>benchmark 报告</small></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <section class="mockup boardroom" id="boardroom" aria-labelledby="boardroom-title">
-      <div class="mockup-label">
-        <span>B</span>
+      <div class="readiness-card" aria-label="交付信心">
+        <div class="dial">
+          <span>82</span>
+          <small>%</small>
+        </div>
         <div>
-          <h2 id="boardroom-title">投资人会议室</h2>
-          <p>给投资人和管理者看的清晰进展叙事。</p>
+          <p>交付信心</p>
+          <strong>可控，但不能假装没有风险</strong>
         </div>
       </div>
-      <div class="boardroom-page">
-        <div class="letterhead">
-          <div>
-            <p>2026 年 4 月 29 日</p>
-            <h3>TeamAgent 进展备忘录</h3>
-          </div>
-          <strong>信心：高，但风险已明确列出</strong>
-        </div>
-        <div class="memo-grid">
-          <article class="memo-main">
-            <h4>为什么这件事值得做</h4>
-            <p>TeamAgent 把 AI 被纠正过的错误变成可复用的团队记忆。真正的切入点是“自动捕获 + 跨用户同步”，这是现有静态规则系统还没有覆盖的空白。</p>
-            <div class="milestones">
-              <span>Phase 1 已交付</span>
-              <span>Phase 2 已冻结</span>
-              <span>Phase 3 已就绪</span>
-              <span class="current">Phase 4 进行中</span>
-            </div>
-          </article>
-          <article><b>证据</b><span>benchmark fixture 中 PRR 达到 100%</span></article>
-          <article><b>试用</b><span>同事试用已开始，下一步是团队同步</span></article>
-          <article><b>风险</b><span>token 开销与争议规则 UX</span></article>
-          <article><b>请求</b><span>支持到 3 人共享规则仓库试验完成</span></article>
-        </div>
-      </div>
-    </section>
 
-    <section class="mockup flow" id="team-flow" aria-labelledby="flow-title">
-      <div class="mockup-label">
-        <span>C</span>
-        <div>
-          <h2 id="flow-title">团队工作流</h2>
-          <p>给一线开发者日常扫描用的实用看板。</p>
-        </div>
-      </div>
-      <div class="flow-shell">
-        <div class="flow-top">
-          <h3>本周</h3>
-          <div class="avatars"><span>LS</span><span>DX</span><span>CLI</span><span>SEC</span></div>
-        </div>
-        <div class="flow-board">
-          <div class="swimlane">
-            <h4>开发</h4>
-            <div class="flow-card priority"><b>teamagent promote</b><span>CLI</span><p>一条命令把高分规则提议进团队仓库。</p></div>
-            <div class="flow-card"><b>MDC 解析器</b><span>Core</span><p>Markdown 正文加 YAML frontmatter。</p></div>
-          </div>
-          <div class="swimlane">
-            <h4>验证</h4>
-            <div class="flow-card"><b>跨用户同步测试</b><span>Ports</span><p>Alice 学到规则，Bob 下次启动 session 时收到。</p></div>
-            <div class="flow-card"><b>PII 测试集</b><span>Security</span><p>邮箱、主机名、UUID、本地路径。</p></div>
-          </div>
-          <div class="swimlane">
-            <h4>评审</h4>
-            <div class="flow-card"><b>争议状态文案</b><span>UX</span><p>让冲突足够明显，同时不打断正常工作。</p></div>
-          </div>
-          <div class="swimlane">
-            <h4>完成</h4>
-            <div class="flow-card done"><b>doctor 命令</b><span>v0.5.0</span><p>8 项检查，安装问题有自动修复路径。</p></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="mockup war" id="war-room" aria-labelledby="war-title">
-      <div class="mockup-label">
-        <span>D</span>
-        <div>
-          <h2 id="war-title">作战室</h2>
-          <p>适合艰难取舍会议的风险优先视图。</p>
-        </div>
-      </div>
-      <div class="war-grid">
-        <article class="war-hero">
-          <p>关键路径</p>
-          <h3>团队记忆要等同步、隐私、冲突 UX 同时跑通才能交付。</h3>
+      <div class="signal-grid" aria-label="核心信号">
+        <article>
+          <span>2,432</span>
+          <p>累计 hook 触发</p>
         </article>
-        <article class="heat"><b>红</b><span>team scope 运行时仍会抛错</span></article>
-        <article class="heat amber"><b>黄</b><span>token 成本仍然 +52%</span></article>
-        <article class="heat green"><b>绿</b><span>Phase 3 安装路径已就绪</span></article>
-        <div class="decision-stack">
-          <h4>待决策</h4>
-          <p>v1 同步通道是否使用 git PR？</p>
-          <p>promote 是否坚持半自动？</p>
-          <p>wiki 工作是否冻结到 Phase 4 之后？</p>
-        </div>
-        <div class="timeline-box">
-          <span>M1 MDC</span><span>M2 同步</span><span>M3 冲突</span><span>M4 隐私</span><span>M5 CLI</span>
-        </div>
+        <article>
+          <span>73</span>
+          <p>活跃知识规则</p>
+        </article>
+        <article class="warning">
+          <span>+52%</span>
+          <p>token 成本风险</p>
+        </article>
+        <article>
+          <span>3</span>
+          <p>等待负责人拍板</p>
+        </article>
       </div>
     </section>
 
-    <section class="mockup roadmap" id="roadmap-wall" aria-labelledby="roadmap-title">
-      <div class="mockup-label">
-        <span>E</span>
-        <div>
-          <h2 id="roadmap-title">路线图墙</h2>
-          <p>把战略路线图和执行看板放在同一屏。</p>
-        </div>
+    <section class="workgrid" id="team-flow" aria-labelledby="work-title">
+      <div class="section-heading">
+        <p>团队视角</p>
+        <h2 id="work-title">本周执行板</h2>
       </div>
-      <div class="roadmap-wall">
-        <div class="roadmap-column past">
-          <h3>已交付</h3>
-          <p>Walking skeleton、calibrator、doctor、npm 包、dashboard。</p>
-          <strong>v0.1 到 v0.5</strong>
-        </div>
-        <div class="roadmap-column present">
-          <h3>当前</h3>
-          <p>让团队记忆真正落地：共享规则文件、git 同步、隐私脱敏、冲突解决。</p>
-          <strong>Phase 4</strong>
-        </div>
-        <div class="roadmap-column future">
-          <h3>下一步</h3>
-          <p>前沿 RAG、更丰富的 taste memory、通过 MCP 支持 Cursor 和 Windsurf。</p>
-          <strong>v0.9 到 v1.0</strong>
-        </div>
+      <div class="lanes">
+        <article class="lane must">
+          <header>
+            <span>Must Ship</span>
+            <strong>必须交付</strong>
+          </header>
+          <div class="task priority">
+            <div class="task-meta"><span>LS</span><span>周五</span></div>
+            <h3>MDC 导出 / 导入</h3>
+            <p>规则用 markdown 正文 + YAML frontmatter 表达，能 review、能 diff、能进团队仓库。</p>
+          </div>
+          <div class="task">
+            <div class="task-meta"><span>Core</span><span>M1</span></div>
+            <h3>Port 契约测试</h3>
+            <p>新增 Port 先写契约测试，再让实现复用同一套 contracts。</p>
+          </div>
+        </article>
+
+        <article class="lane build">
+          <header>
+            <span>Build</span>
+            <strong>正在推进</strong>
+          </header>
+          <div class="task">
+            <div class="task-meta"><span>CLI</span><span>M5</span></div>
+            <h3>teamagent promote</h3>
+            <p>把高置信个人规则半自动提议到团队规则仓库，避免 Cursor Memories 那类全自动反噬。</p>
+          </div>
+          <div class="task">
+            <div class="task-meta"><span>Sync</span><span>M2</span></div>
+            <h3>Git 同步通道</h3>
+            <p>A 学到的规则 PR merge 后，B 下次 session start 能自动拉取并注入。</p>
+          </div>
+        </article>
+
+        <article class="lane blocked" id="war-room">
+          <header>
+            <span>Risk</span>
+            <strong>风险 / 阻塞</strong>
+          </header>
+          <div class="risk-ticket red">
+            <b>运行时阻塞</b>
+            <p>DualLayerStore 遇到 team scope 仍会抛错。</p>
+          </div>
+          <div class="risk-ticket amber">
+            <b>成本压力</b>
+            <p>当前 token 开销 +52%，需要分层注入和更精准触发。</p>
+          </div>
+          <div class="risk-ticket">
+            <b>隐私守门</b>
+            <p>导出规则前必须拦下邮箱、内部主机名、UUID、本地路径。</p>
+          </div>
+        </article>
+
+        <article class="lane proof">
+          <header>
+            <span>Proof</span>
+            <strong>已经证明</strong>
+          </header>
+          <div class="proof-card">
+            <small>Benchmark</small>
+            <strong>18/18 → 0/18</strong>
+            <p>baseline 反复犯错，TeamAgent 在 fixture 中全部拦住。</p>
+          </div>
+          <div class="proof-card">
+            <small>Phase 3</small>
+            <strong>npm 安装路径已就绪</strong>
+            <p>doctor、README、发布包、友测反馈修复都已完成。</p>
+          </div>
+        </article>
       </div>
     </section>
 
-    <section class="mockup salary" id="salary-case" aria-labelledby="salary-title">
-      <div class="mockup-label">
-        <span>F</span>
-        <div>
-          <h2 id="salary-title">拨款理由</h2>
-          <p>直接回答“为什么还值得继续给这个团队发工资？”</p>
-        </div>
+    <section class="brief" id="boardroom" aria-labelledby="brief-title">
+      <div class="brief-main">
+        <p class="kicker">老板 / 投资人视角</p>
+        <h2 id="brief-title">继续投的理由不是“我们很努力”，而是系统已经开始产生复利。</h2>
+        <p>TeamAgent 的价值不是多写一份规则文档，而是把被纠正过的错误自动沉淀、自动扩散、下次犯错前实时提醒。Phase 4 的核心是把这个能力从单人放大到团队。</p>
       </div>
-      <div class="salary-sheet">
-        <div class="salary-head">
-          <p>运营假设</p>
-          <h3>让一个 AI 错误在团队里不再重复，比再写一份静态规则文档更快回本。</h3>
-        </div>
-        <div class="proof-grid">
-          <article><b>产出</b><span>Phase 1-3 已交付，公开 npm 路径已就绪</span></article>
-          <article><b>杠杆</b><span>规则学一次，可以保护每个队友</span></article>
-          <article><b>纪律</b><span>契约测试、TDD、walking skeleton 门禁</span></article>
-          <article><b>诚实</b><span>team scope、MCP、token 成本风险提前讲清楚</span></article>
-        </div>
-        <div class="funding-footer">
-          <span>下一次拨款检查点</span>
-          <strong>3 个用户、1 个共享规则仓库、1 周真实使用</strong>
-        </div>
+      <div class="brief-stack">
+        <article>
+          <span>01</span>
+          <b>已交付</b>
+          <p>Phase 1-3 已经跑通：walking skeleton、calibrator、doctor、npm 包、dashboard。</p>
+        </article>
+        <article>
+          <span>02</span>
+          <b>当前赌注</b>
+          <p>自动捕获 + 跨用户同步。这个组合是市场空白，不是普通团队规则库。</p>
+        </article>
+        <article>
+          <span>03</span>
+          <b>下一次检查点</b>
+          <p>3 个真实用户，1 个共享规则仓库，连续 1 周使用，团队规则拒绝次数 ≤ 5。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="roadmap-panel" id="roadmap-wall" aria-labelledby="roadmap-title">
+      <div class="section-heading">
+        <p>路线图</p>
+        <h2 id="roadmap-title">从个人免疫到团队免疫</h2>
+      </div>
+      <div class="roadmap">
+        <article>
+          <span>Done</span>
+          <h3>Phase 1-3</h3>
+          <p>单人本地可用，doctor 和 npm 安装路径已经准备好。</p>
+        </article>
+        <article class="current">
+          <span>Now</span>
+          <h3>Phase 4</h3>
+          <p>MDC、git sync、contested 冲突、PII redactor、promote/reject CLI。</p>
+        </article>
+        <article>
+          <span>Next</span>
+          <h3>Phase 5-6</h3>
+          <p>前沿 RAG、taste memory、多 AI 工具 MCP 接入。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="funding" id="salary-case" aria-labelledby="funding-title">
+      <div>
+        <p class="kicker">拨款判断</p>
+        <h2 id="funding-title">继续给工资的条件很简单：让 3 个人真的少踩坑。</h2>
+      </div>
+      <div class="funding-metrics">
+        <article>
+          <small>团队价值</small>
+          <strong>资深经验自动扩散</strong>
+        </article>
+        <article>
+          <small>工程纪律</small>
+          <strong>TDD + 契约测试 + 每阶段 skeleton 不断</strong>
+        </article>
+        <article>
+          <small>诚实边界</small>
+          <strong>team scope、MCP、token 成本没有假装完成</strong>
+        </article>
       </div>
     </section>
   </main>
