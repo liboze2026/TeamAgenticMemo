@@ -83,12 +83,9 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
     );
     const top = sorted[0];
     const nowDate = new Date(now);
-    const reason =
-      top.enforcement === "block"
-        ? formatBlockReason(top, nowDate)
-        : formatWarnMessage(top, nowDate);
 
     if (top.enforcement === "block") {
+      const reason = formatBlockReason(top, nowDate);
       deps.eventLog.append({
         id: `e-${tool_use_id}-blocked`,
         kind: "hook-pre.blocked",
@@ -101,7 +98,24 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
       return { permissionDecision: "deny", permissionDecisionReason: reason };
     }
 
+    // passive → 静默观察：发 hook-pre.passive_matched (PostToolUse 通过 startsWith("hook-pre.")
+    // 自动累计 hit_count；不发 systemMessage，不污染 helped 计数)。这是 calibrator 升档
+    // passive→suggest→warn→block 的唯一证据来源。
+    if (top.enforcement === "passive") {
+      deps.eventLog.append({
+        id: `e-${tool_use_id}-passive`,
+        kind: "hook-pre.passive_matched",
+        knowledge_id: top.id,
+        tool_use_id,
+        tool_name,
+        timestamp: now,
+        schema_version: 1,
+      });
+      return { permissionDecision: "allow" };
+    }
+
     // warn / suggest → allow + systemMessage hint
+    const reason = formatWarnMessage(top, nowDate);
     deps.eventLog.append({
       id: `e-${tool_use_id}-warned`,
       kind: "hook-pre.warned",
