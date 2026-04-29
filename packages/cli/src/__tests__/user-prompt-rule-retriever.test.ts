@@ -64,10 +64,10 @@ describe("buildTerminalSummary", () => {
     expect(buildTerminalSummary([], [])).toBe("");
   });
 
-  it("includes ◈ TeamAgent header with count", () => {
+  it("includes ASCII block header with count", () => {
     const rules = [makeRule("r1", "调用外部 HTTP API 时", "fetch + 错误处理")];
     const text = buildTerminalSummary(rules, []);
-    expect(text).toContain("◈ TeamAgent");
+    expect(text).toContain("========|| TeamAgent ||========");
     expect(text).toContain("1");
   });
 
@@ -88,6 +88,17 @@ describe("buildTerminalSummary", () => {
     expect(text).toContain("2");
     expect(text).toContain("触发1");
     expect(text).toContain("触发2");
+  });
+
+  it("uses at most three lines", () => {
+    const rules = [
+      makeRule("r1", "调用外部 HTTP API 时", "fetch"),
+      makeRule("r2", "git push 到主分支", "PR 流程"),
+      makeRule("r3", "提交代码时", "一次一件事"),
+    ];
+    const text = buildTerminalSummary(rules, []);
+    expect(text.split("\n")).toHaveLength(3);
+    expect(text.split("\n")[1]).toMatch(/^\|\| .* \|\|$/);
   });
 });
 
