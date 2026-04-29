@@ -37,8 +37,12 @@ export default defineConfig({
     "zod",
     "@xenova/transformers",
   ],
-  // sharp, onnxruntime-node: native .node addons that cannot be bundled
-  external: ["sharp", "onnxruntime-node", "jsdom"],
+  // sharp, onnxruntime-node, sqlite-vec: native .node addons cannot be bundled.
+  // sqlite-vec in particular: when inlined, its loadablePath() resolves relative to the
+  // bundle's __dirname, which doesn't have the platform-specific .node binary, so the
+  // require silently fails and openDb's _sqliteVecLoad stays undefined → vec0 module
+  // never gets registered → all dense vec MATCH queries report "no such module: vec0".
+  external: ["sharp", "onnxruntime-node", "jsdom", "sqlite-vec"],
   // 注入 __dirname/__filename/__esm 等 CJS shims，让 import.meta.url 在 CJS bundle 正常工作
   shims: true,
   // statusline 故意不 bundle —— tsup CJS 会把 require("node:sqlite") 重写成

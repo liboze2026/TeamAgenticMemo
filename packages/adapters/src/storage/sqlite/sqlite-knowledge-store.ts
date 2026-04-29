@@ -269,14 +269,15 @@ export class SqliteKnowledgeStore {
     // Encode in one batch so the model is loaded only once across descriptions.
     const texts = [trigDescr || " ", patDescr || " ", toolDescr || " "];
     const vecs = await this.embedder.embed(texts);
-    if (!vecs || vecs.length < 2) {
+    const t = vecs?.[0];
+    const p = vecs?.[1];
+    if (!t || !p) {
       throw new Error("embedder returned insufficient vectors");
     }
-    const tvec = new Float32Array(vecs[0]);
-    const pvec = new Float32Array(vecs[1]);
-    syncRuleVectors(this.db, entry.id, tvec, pvec);
-    if (toolDescr && vecs[2]) {
-      syncToolVector(this.db, entry.id, new Float32Array(vecs[2]));
+    syncRuleVectors(this.db, entry.id, new Float32Array(t), new Float32Array(p));
+    const toolVec = vecs[2];
+    if (toolDescr && toolVec) {
+      syncToolVector(this.db, entry.id, new Float32Array(toolVec));
     }
     // Stamp the model id so future migrations / health checks know this row
     // is up to date with the current embedder.
