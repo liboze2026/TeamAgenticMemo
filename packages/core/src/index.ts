@@ -138,6 +138,7 @@ export {
   type UpdateState,
   type PendingBanner,
 } from "./update/update-state.js";
+export { shouldCheckUpdate, type ShouldCheckInput } from "./update/should-check.js";
 export {
   scanNarrative,
   formatPendingRecord,
