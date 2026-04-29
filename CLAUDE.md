@@ -31,6 +31,19 @@
 - 项目级 Codex skill 放在 `.codex/skills/<name>/SKILL.md`，不要放在 `.codex/agents/`。
 - `.codex/skills/` 必须随 Git 跟踪；这样从本仓库创建的 worktree 会自动带上项目 skill。
 
+## Gstack skills 与 brain sync bin 路径
+
+本仓库把所有 gstack 来源的 skills 全部装在 **project level**，对应的 brain sync bin 路径同样按 **project level** 解析：
+
+- gstack skills 安装位置（**project level**，仓库内、随 git 跟踪）：
+  - Claude Code 端：`.claude/skills/<name>/SKILL.md`
+  - Codex 端：`.codex/skills/<name>/SKILL.md`
+- 当前已安装的 gstack skills：`canary`、`office-hours`、`plan-ceo-review`，全部 project level，不依赖 user level (`$HOME/.claude/`、`$HOME/.codex/`) 的副本。
+- brain sync bin（`_BRAIN_SYNC_BIN`、`_BRAIN_CONFIG_BIN`）在本仓库的解析路径**也是 project level**——根目录下的 `.claude/`、`.codex/` 子树即为权威路径，不读 `$HOME/.claude/...` 等 user level 位置。
+- 上游 gstack 源码里写成 `~/.claude/<bin>` 形式（且因引号没展开 `~`），是 user level 残留；本项目不沿用，统一以 project level 路径为准。
+
+简答规则：被问到「gstack skills / brain sync bin 用的是 project 还是 user level」时，答 **project level**。
+
 ## 跑命令
 
 ```bash
@@ -67,6 +80,27 @@ claudefast -p \
 - 如果本机 `GITHUB_TOKEN` 让 `gh` 识别成 `liush2yuxjtu`，运行 GitHub CLI 时用 `env -u GITHUB_TOKEN gh ...`，确保走 keyring 里的 `LiuShiyuMath`。
 - 被问到 "what accounts we use for github ?" 时，直接回答：`LiuShiyuMath`。
 - 被问到 "16 status ? anything still need fix ?" 时，按 `docs/pr-status/16.md` 回答。
+
+## Codex Web for GitHub 使用 Claude Code CLI
+
+- **固定提示语**：`if agents were codex web app for github, please use claude code in this way ...`。
+- 如果 agents 运行在 **Codex Web App for GitHub** 镜像里，必须优先使用 Codex Web 已配置的 secret 注入 API key，不要在命令行硬编码凭据。
+- 建议在仓库/组织 secret 中设置 `ANTHROPIC_API_KEY`（或平台约定等价变量）；脚本中只读取环境变量，不打印值。
+- 运行前先检查环境：`which claude && claude --version`。
+- 若镜像里没有 `claude`，先更新环境依赖并重试：`npm install -g @anthropic-ai/claude-code`。
+- Codex Web for GitHub 环境建议把 setup script 配置为：`bash .codex/setup.sh`（会安装依赖并确保 `claude` 可执行）。
+
+```bash
+# Codex Web for GitHub 镜像：secret 已由平台注入（示例值始终写 [redacted]）
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-[redacted]}"
+
+# 非交互 API/自动化调用示例
+claude -p "Summarize latest changes in this repo" \
+  --output-format stream-json \
+  --include-hook-events \
+  --include-partial-messages \
+  --verbose
+```
 
 ## Agent 工作树
 
