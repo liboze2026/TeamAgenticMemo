@@ -20,7 +20,8 @@
     "benchmark": "pnpm --filter @teamagent/benchmark bench",
     "build:publish": "pnpm --filter teamagent build",
     "prepublish:teamagent": "pnpm build:publish && cd packages/teamagent && npm pack --dry-run",
-    "dashboard": "node scripts/generate-dashboard.cjs"
+    "dashboard": "node scripts/generate-dashboard.cjs",
+    "setup:codex-cloud": "bash scripts/setup-codex-cloud.sh"
   },
   "engines": {
     "node": ">=22.5.0"

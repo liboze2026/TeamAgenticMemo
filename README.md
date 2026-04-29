@@ -73,6 +73,29 @@ teamagent update --logs                 # 看 ~/.teamagent/update.log 末尾 50 
 
 ---
 
+
+## Codex Cloud 环境（预装 claude/claudefast）
+
+如果你在 Codex Cloud 容器里看到 `claudefast: command not found` 或 `claude: command not found`，在项目根目录执行：
+
+```bash
+pnpm setup:codex-cloud
+```
+
+它会做两件事：
+
+1. 全局安装 `@anthropic-ai/claude-code`（提供 `claude`）
+2. 创建 `~/.local/bin/claudefast` shim（等价转发到 `claude`）
+
+执行后建议验证：
+
+```bash
+claude -p "hi"
+claudefast -p "hi"
+```
+
+---
+
 ## 它做了什么
 
 ```
