@@ -85,6 +85,8 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
     const nowDate = new Date(now);
 
     if (top.enforcement === "block") {
+      // 软化策略：永远不硬阻塞 Claude Code，只当作"强烈提醒"通过 systemMessage 展示。
+      // 事件 kind 仍记 hook-pre.blocked，保留 calibrator / 升档统计逻辑不变。
       const reason = formatBlockReason(top, nowDate);
       deps.eventLog.append({
         id: `e-${tool_use_id}-blocked`,
@@ -95,7 +97,7 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
         timestamp: now,
         schema_version: 1,
       });
-      return { permissionDecision: "deny", permissionDecisionReason: reason };
+      return { permissionDecision: "allow", systemMessage: reason };
     }
 
     // passive → 静默观察：发 hook-pre.passive_matched (PostToolUse 通过 startsWith("hook-pre.")
@@ -167,7 +169,7 @@ function formatBlockReason(rule: any, now: Date): string {
   if (wrong) lines.push(...formatRuleField("避免", wrong));
   if (correct) lines.push(...formatRuleField("使用", correct));
   if (reasoning) lines.push(...formatRuleField("理由", reasoning));
-  return formatAsciiRuleBlock("TeamAgent 阻止操作", lines);
+  return formatAsciiRuleBlock("TeamAgent 强烈提醒", lines);
 }
 
 const RULE_BOX_WIDTH = 72;

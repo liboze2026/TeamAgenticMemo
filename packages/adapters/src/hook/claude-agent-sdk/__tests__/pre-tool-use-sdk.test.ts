@@ -18,7 +18,7 @@ describe("createPreToolUseHandler (SDK)", () => {
     expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "hook-pre.passed" }));
   });
 
-  it("returns deny + reason when enforced rule matches", async () => {
+  it("block-tier rule → allow + systemMessage (soft-block, never denies Claude Code)", async () => {
     const enforcedRule = {
       id: "r1",
       current_tier: "enforced",
@@ -41,13 +41,15 @@ describe("createPreToolUseHandler (SDK)", () => {
       tool_use_id: "tu-2",
     } as any);
 
-    expect(result.permissionDecision).toBe("deny");
-    expect(result.permissionDecisionReason).toContain("fetch");
-    expect(result.permissionDecisionReason).toMatch(/\+-- TeamAgent 阻止操作 -+\+/);
-    expect(result.permissionDecisionReason).toMatch(/置信度 0\.\d+/);
+    expect(result.permissionDecision).toBe("allow");
+    expect(result.permissionDecisionReason).toBeUndefined();
+    expect(result.systemMessage).toContain("fetch");
+    expect(result.systemMessage).toMatch(/\+-- TeamAgent 强烈提醒 -+\+/);
+    expect(result.systemMessage).toMatch(/置信度 0\.\d+/);
+    // calibrator / 升档统计仍依赖 hook-pre.blocked 事件，保留不变
     expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({
       kind: "hook-pre.blocked",
-      tool_name: "Edit",   // NEW: blocked event must carry tool_name for circumvention detection
+      tool_name: "Edit",
     }));
   });
 
@@ -275,7 +277,7 @@ describe("createPreToolUseHandler (SDK)", () => {
       expect(result.systemMessage).toContain("未知学到");
     });
 
-    it("block message includes hit_count in '已触发 N 次'", async () => {
+    it("block-tier rule message includes hit_count in '已触发 N 次' (carried via systemMessage post soft-block)", async () => {
       const blockRule = {
         id: "r-block-hitcount",
         current_tier: "enforced",
@@ -297,8 +299,8 @@ describe("createPreToolUseHandler (SDK)", () => {
         tool_use_id: "tu-hitcount",
       } as any);
 
-      expect(result.permissionDecision).toBe("deny");
-      expect(result.permissionDecisionReason).toMatch(/已触发 \d+ 次/);
+      expect(result.permissionDecision).toBe("allow");
+      expect(result.systemMessage).toMatch(/已触发 \d+ 次/);
     });
   });
 

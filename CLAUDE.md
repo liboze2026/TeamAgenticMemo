@@ -126,7 +126,7 @@ claude -p "Summarize latest changes in this repo" \
 *以上为人工维护的开发约定。从 M1 开始，CLAUDE.md 会多一个 TEAMAGENT:START/END 区块，由系统自动维护"已学到的经验"。*
 
 <!-- TEAMAGENT:START - 自动管理，请勿手动编辑 -->
-## TeamAgent 经验（200条活跃知识，为你编译了 30 条（token 预算 3000）)
+## TeamAgent 经验（206条活跃知识，为你编译了 30 条（token 预算 3000）)
 - 使用 忽略 <local-command-caveat> 包裹的消息，除非用户明确要求分析 而非 <local-command-caveat>——该标签内容由本地命令自动生成，非用户意图表达；AI 主动响应会污染对话上下文，误把系统噪声当用户指令 [1.00] [预置]
 - 移除用户反馈的检查条件，仅基于失败本身触发分析——用户反馈约束是冗余的；所有错都应进入分析管道，由规则库自主决定是否学习，而非前置过滤 [0.95]
 - 规则类型（practice/avoidance）应只影响处理策略（enforcement），不应影响 matching 逻辑；所有规则都应参与匹配——在 matcher 中过滤 practice 类规则导致其永不触发，失去学习反馈信号和评分机制；类型应仅控制 block/warn/score 行为，而非决定规则是否生效 [0.95]
@@ -140,7 +140,6 @@ claude -p "Summarize latest changes in this repo" \
 - 维护游标，增量扫描新增 turn，去重已处理；仅在 /new、/clear、/compact、退出、关闭窗口时做完整重扫——Stop 每轮触发，全量重扫导致 token 消耗呈平方增长；增量扫描维护游标可避免重复，关键时刻完整重扫确保一致性 [0.90]
 - 自动化拉取 + 自动清理过时数据——手动维护导致数据陈旧（拉取滞后5天）和无效数据堆积，自动化+清理确保知识及时可用且命中率高 [0.90]
 - 立即用 TaskOutput 工具按 task-id 读取输出，继续流程——task-notification 本身就是完成信号，harness 发出即表示任务已完；立即处理充分利用并行性而非阻塞 [0.90]
-- 忽略标签内所有内容，除非用户明确要求分析——<local-command-caveat> 由本地命令自动生成而非用户意图，响应会把系统噪声当指令污染对话 [0.90]
 - 分别为 Windows（where/findstr/PowerShell）和 Unix（which/grep）提供诊断命令，或明确标注环境要求——Unix 命令（which, grep, cat |）在 Windows cmd 原生环境不可用；跨平台用户群需要对应平台的等价命令，混合给两个平台的指令会导致 Windows 用户卡住且困惑 [0.90]
 - 当遇到 `<local-command-caveat>` 标签，忽略其包裹的内容，除非用户明确要求分析或响应——该标签标记系统生成的消息（如本地命令输出），非用户的显式意图；直接响应会污染对话上下文并误把工具输出当作用户指令 [0.90]
 - 调用 finishing-a-development-branch skill 时必须完整执行规范流程：(1) 宣布正在使用该 skill (2) Verify tests pass (3) Present options (4) Execute user's choice (5) Clean up——skill 规范流程确保测试验证不被跳过、用户保有选择掌控权；直接声称完成或跳步会隐藏测试失败并越过用户确认 [0.90]
@@ -149,6 +148,7 @@ claude -p "Summarize latest changes in this repo" \
 - 先完成根因调查（Phase 1），确认根因后再提出任何修复方案；不得跳过阶段直接 patch——systematic-debugging 铁律：'NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST'；跳过调查直接 fix 是症状修复而非根因修复，会掩盖真实问题并引入新 bug [0.90]
 - 先完成 Phase 1 根因分析，确认根本原因后再提出修复建议——跳过根因分析直接修补会掩盖真实问题、产生新 bug；系统调查能确保针对根本成因，修复可靠且可持续 [0.90]
 - 检查运行日志，验证代码在运行时的实际执行路径和触发情况，而非仅基于代码静态分析推断——代码静态分析和实际运行时行为存在偏差；语义匹配、规则触发等系统功能可能因模块未加载、条件不满足等原因未生效，必须通过运行日志确认实际执行流 [0.90]
+- 忽略标签内所有内容，除非用户明确要求分析——<local-command-caveat> 由本地命令自动生成而非用户意图，响应会把系统噪声当指令污染对话 [0.90] [预置]
 - 使用 Hook 系统完整工作；flag 仅隐藏 Claude Code UI 权限交互弹窗 而非 --dangerously-skip-permissions——Flag 名字暗示禁用全部权限检查，实际只跳过交互式弹窗。PreToolUse/PostToolUse/Stop/SessionStart 等 hook 独立于此标志完整运行，不受影响 [0.90] [预置]
 - 先把凭据/环境持久化到项目配置（增量、不改已有内容），再让 subagent 自主完成；远程实验需先检测空闲显卡避免影响他人——反复追问凭据打断用户节奏；配置应一次记录永久复用。subagent 应自主推进而非报 BLOCKED。共享 GPU 资源需礼让他人实验 [0.95]
 - 按产品经理视角讲架构、流程、关键原理,略过代码级细节——默认倾向给技术细节会淹没非技术受众；产品经理需要整体认知(架构/流程/原理)而非实现,讲解粒度要匹配听众心智模型 [0.95]
@@ -157,6 +157,6 @@ claude -p "Summarize latest changes in this repo" \
 - 全局单次init，所有项目共享规则——全局 init 避免重复配置和规则分散，保证用户所有项目规则一致，降低管理成本 [0.95]
 - 先澄清和解释系统逻辑细节，获得用户确认理解后再给建议——用户若不理解系统为何如此，对改动方案缺乏信心；同步理解是决策的前置条件，避免改动后产生新的疑虑 [0.95]
 - 遇到用户提出的概念和名词优先到 web 中 search，而非依赖自身记忆——LLM 记忆可能过时或有幻觉，web search 确保信息最新准确，特别是对新术语和概念的理解 [0.95]
-> 还有 90 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）
-> 另有 46 条因与已选条目近义（Jaccard ≥ 0.6）被多样性过滤
+> 还有 98 条 canonical+ 规则因 token 预算未显示（teamagent compile --dry-run 查看）
+> 另有 44 条因与已选条目近义（Jaccard ≥ 0.6）被多样性过滤
 <!-- TEAMAGENT:END -->
