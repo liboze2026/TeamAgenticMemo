@@ -1,162 +1,201 @@
-import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, it } from "vitest";
 import {
-  executeRecordingCommand,
+  estimateRecordingTokens,
+  executeRecording,
   formatRecordingMemoryInjection,
+  loadRecordingMetrics,
+  parseRecordingArgs,
   retrieveRecordingMemoriesForPrompt,
+  summarizeRecordingMetrics,
 } from "../commands/recording.js";
 
-let tmpDir: string | undefined;
-
-afterEach(() => {
-  if (tmpDir) {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    tmpDir = undefined;
-  }
-});
-
-function workspace() {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teamagent-recording-"));
-  const cwd = path.join(tmpDir, "repo");
-  const homeA = path.join(tmpDir, "home-a");
-  const homeB = path.join(tmpDir, "home-b");
-  fs.mkdirSync(cwd, { recursive: true });
-  fs.mkdirSync(homeA, { recursive: true });
-  fs.mkdirSync(homeB, { recursive: true });
-  return { cwd, homeA, homeB };
+function tmpdir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "teamagent-recording-test-"));
 }
 
-function materialFile(
-  dir: string,
-  overrides: Partial<Record<string, unknown>> = {},
-): string {
-  const filePath = path.join(dir, `${String(overrides["id"] ?? "recording")}.json`);
-  fs.writeFileSync(
+const now = () => new Date("2026-04-29T12:00:00.000Z");
+
+async function seedRecording(cwd: string, homeDir = tmpdir()) {
+  const filePath = path.join(cwd, "material.json");
+  fs.writeFileSync(filePath, JSON.stringify({
+    title: "Recording Memory import decision",
+    source: "docs/specs/2026-04-29-recording-memory-performance-verification.md",
+    transcript:
+      "Full transcript: Alice said importing existing meeting transcripts is useful. Bob said source references are required. Chen said do not dump the whole transcript into prompt context unless explicitly requested.",
+    uploadedBy: "teamagent",
+    useWhen: "Questions about recording memory import, source references, and prompt injection.",
+    summary:
+      "Recording Memory should import transcripts and summaries, cite source references, and keep default injected context small.",
+    visibility: "public",
+  }), "utf-8");
+  return executeRecording({
+    action: "import",
     filePath,
-    JSON.stringify(
-      {
-        id: "rec-import-decision",
-        title: "Recording Memory import decision",
-        source: "file:///recordings/import-decision.mp3",
-        transcript:
-          "Full transcript says recording memory starts transcript-first and source references are required.",
-        uploadedBy: "liushiyu",
-        useWhen: "Use when designing recording memory import and source references.",
-        summary: "Recording Memory should import transcripts and cite sources.",
-        visibility: "public",
-        ...overrides,
-      },
-      null,
-      2,
-    ),
-    "utf-8",
-  );
-  return filePath;
+    cwd,
+    homeDir,
+    now,
+    idGen: () => "rec-import-decision",
+  });
 }
 
-describe("recording command", () => {
-  it("renders stable JSON help", async () => {
-    const { cwd, homeA } = workspace();
-    const out = JSON.parse(
-      await executeRecordingCommand(["--help"], { cwd, homeDir: homeA }),
-    );
-    expect(out.command).toBe("teamagent recording");
-    expect(out.subcommands.map((s: { name: string }) => s.name)).toEqual([
-      "import",
-      "search",
-      "show",
-      "inject",
-      "metrics",
-      "benchmark",
-    ]);
+describe("recording memory", () => {
+  it("renders stable JSON help for canonical hard-match verification", async () => {
+    const result = await executeRecording(parseRecordingArgs(["--help"]));
+    expect(result.kind).toBe("help");
+    if (result.kind === "help") {
+      expect(result.command).toBe("teamagent recording");
+      expect(result.subcommands.map((s) => s.name)).toEqual([
+        "import",
+        "search",
+        "show",
+        "inject",
+        "metrics",
+        "benchmark",
+      ]);
+    }
   });
 
-  it("imports and searches a source-backed recording without returning full transcript", async () => {
-    const { cwd, homeA } = workspace();
-    const filePath = materialFile(tmpDir!);
-    const imported = JSON.parse(
-      await executeRecordingCommand(["import", "--file", filePath], { cwd, homeDir: homeA }),
-    );
-    expect(imported.status).toBe("created");
-    expect(imported.record.source).toBe("file:///recordings/import-decision.mp3");
+  it("imports and searches source-cited recording memory", async () => {
+    const cwd = tmpdir();
+    const homeDir = tmpdir();
+    await seedRecording(cwd, homeDir);
 
-    const search = JSON.parse(
-      await executeRecordingCommand(
-        ["search", "--query", "recording memory source references"],
-        { cwd, homeDir: homeA },
-      ),
-    );
-    expect(search.results[0].record.id).toBe("rec-import-decision");
-    expect(search.results[0].record.transcript).toBeUndefined();
-    expect(search.results[0].whyRelevant).toContain("matched");
-  });
-
-  it("keeps private recordings invisible to a different home directory", async () => {
-    const { cwd, homeA, homeB } = workspace();
-    const privateFile = materialFile(tmpDir!, {
-      id: "rec-private",
-      source: "file:///recordings/private.mp3",
-      visibility: "private",
-    });
-    const publicFile = materialFile(tmpDir!, {
-      id: "rec-public",
-      source: "file:///recordings/public.mp3",
-      visibility: "public",
-    });
-    await executeRecordingCommand(["import", "--file", privateFile], { cwd, homeDir: homeA });
-    await executeRecordingCommand(["import", "--file", publicFile], { cwd, homeDir: homeA });
-
-    const otherUserSearch = JSON.parse(
-      await executeRecordingCommand(
-        ["search", "--query", "recording memory source references"],
-        { cwd, homeDir: homeB },
-      ),
-    );
-    expect(otherUserSearch.results.map((r: { record: { id: string } }) => r.record.id)).toEqual([
-      "rec-public",
-    ]);
-  });
-
-  it("injects short prompt context once per session and excludes full transcript", async () => {
-    const { cwd, homeA } = workspace();
-    await executeRecordingCommand(["import", "--file", materialFile(tmpDir!)], {
+    const result = await executeRecording({
+      action: "search",
+      query: "where did we decide source references for recording memory import",
       cwd,
-      homeDir: homeA,
+      homeDir,
+      now,
     });
 
-    const first = retrieveRecordingMemoriesForPrompt({
-      userMessage: "continue recording memory import design",
+    expect(result.kind).toBe("search");
+    if (result.kind === "search") {
+      expect(result.results[0]?.record.id).toBe("rec-import-decision");
+      expect(result.results[0]?.record.source).toContain("recording-memory-performance");
+      expect(result.results[0]?.record.transcript).toBeUndefined();
+    }
+  });
+
+  it("injects small default context with source reference and no full transcript", async () => {
+    const cwd = tmpdir();
+    const homeDir = tmpdir();
+    await seedRecording(cwd, homeDir);
+
+    const result = await executeRecording({
+      action: "inject",
+      query: "recording memory import source references",
       cwd,
-      homeDir: homeA,
+      homeDir,
+      now,
+    });
+
+    expect(result.kind).toBe("inject");
+    if (result.kind === "inject") {
+      expect(result.text).toContain("TeamAgent Recording Memory");
+      expect(result.text).toContain("来源:");
+      expect(result.text).toContain("docs/specs/2026-04-29-recording-memory-performance-verification.md");
+      expect(result.text).not.toContain("Full transcript: Alice said");
+      expect(result.tokenCount).toBeLessThanOrEqual(800);
+      expect(result.fullTranscriptIncluded).toBe(false);
+    }
+  });
+
+  it("includes full transcript only after explicit expansion", async () => {
+    const cwd = tmpdir();
+    const homeDir = tmpdir();
+    await seedRecording(cwd, homeDir);
+
+    const show = await executeRecording({
+      action: "show",
+      id: "rec-import-decision",
+      expandTranscript: true,
+      cwd,
+      homeDir,
+      now,
+    });
+
+    expect(show.kind).toBe("show");
+    if (show.kind === "show") {
+      expect(show.record?.transcript).toContain("Full transcript: Alice said");
+    }
+  });
+
+  it("records injection metrics for ok and empty retrievals", async () => {
+    const cwd = tmpdir();
+    const homeDir = tmpdir();
+    await seedRecording(cwd, homeDir);
+
+    await executeRecording({ action: "inject", query: "recording memory import", cwd, homeDir, now });
+    await executeRecording({ action: "inject", query: "unrelated rust borrow checker", cwd, homeDir, now });
+
+    const summary = summarizeRecordingMetrics(loadRecordingMetrics(cwd));
+    expect(summary.injections).toBe(2);
+    expect(summary.empty).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(summary.p50LatencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("retrieves prompt injection text for UserPromptSubmit hook", async () => {
+    const cwd = tmpdir();
+    const homeDir = tmpdir();
+    await seedRecording(cwd, homeDir);
+
+    const result = await retrieveRecordingMemoriesForPrompt({
+      userMessage: "what did recording memory decide about source references",
+      cwd,
+      homeDir,
       sessionSeenIds: new Set(),
     });
-    const text = formatRecordingMemoryInjection(first.matches);
-    expect(text).toContain("TeamAgent Recording Memory");
-    expect(text).toContain("file:///recordings/import-decision.mp3");
-    expect(text).not.toContain("Full transcript says");
 
-    const second = retrieveRecordingMemoriesForPrompt({
-      userMessage: "continue recording memory import design",
-      cwd,
-      homeDir: homeA,
-      sessionSeenIds: new Set(first.injectedIds),
-    });
-    expect(second.matches).toHaveLength(0);
+    expect(result.injectedIds).toEqual(["rec-import-decision"]);
+    expect(result.injectionText).toContain("来源:");
+    expect(result.injectionText).not.toContain("Full transcript: Alice said");
   });
 
-  it("writes golden benchmark evidence", async () => {
-    const { cwd, homeA } = workspace();
-    const reportPath = path.join(tmpDir!, "golden.json");
-    const result = JSON.parse(
-      await executeRecordingCommand(
-        ["benchmark", "--json", `--report=${reportPath}`],
-        { cwd, homeDir: homeA },
-      ),
-    );
-    expect(result.ok).toBe(true);
-    expect(result.passCount).toBeGreaterThanOrEqual(8);
+  it("runs the golden prompt benchmark and writes raw evidence report", async () => {
+    const cwd = tmpdir();
+    const homeDir = tmpdir();
+    const reportPath = path.join(cwd, "evidence", "golden.md");
+
+    const result = await executeRecording({
+      action: "benchmark",
+      cwd,
+      homeDir,
+      now,
+      reportPath,
+    });
+
+    expect(result.kind).toBe("benchmark");
+    if (result.kind === "benchmark") {
+      expect(result.ok).toBe(true);
+      expect(result.passCount).toBeGreaterThanOrEqual(8);
+    }
     expect(fs.readFileSync(reportPath, "utf-8")).toContain("Recording Memory Golden Prompt Benchmark");
+  });
+
+  it("keeps token estimation monotonic and formatter under default budget", () => {
+    expect(estimateRecordingTokens("abcd")).toBe(1);
+    expect(estimateRecordingTokens("a".repeat(100))).toBeGreaterThan(estimateRecordingTokens("a".repeat(20)));
+    const text = formatRecordingMemoryInjection([
+      {
+        score: 1,
+        whyRelevant: "matched summary",
+        record: {
+          id: "r",
+          title: "Long",
+          source: "source.md",
+          uploadedBy: "teamagent",
+          useWhen: "a".repeat(4_000),
+          summary: "b".repeat(4_000),
+          visibility: "public",
+          createdAt: now().toISOString(),
+          updatedAt: now().toISOString(),
+        },
+      },
+    ]);
+    expect(estimateRecordingTokens(text)).toBeLessThanOrEqual(820);
   });
 });

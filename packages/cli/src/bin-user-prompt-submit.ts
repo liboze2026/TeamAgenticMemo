@@ -25,10 +25,7 @@ import {
   retrieveRulesForPrompt,
   buildTerminalSummary,
 } from "./user-prompt-rule-retriever.js";
-import {
-  formatRecordingMemoryInjection,
-  retrieveRecordingMemoriesForPrompt,
-} from "./commands/recording.js";
+import { retrieveRecordingMemoriesForPrompt } from "./commands/recording.js";
 import {
   isFirstPrompt,
   appendSessionInjected,
@@ -155,7 +152,7 @@ async function main(): Promise<void> {
     // rule retrieval is best-effort — never block user input
   }
 
-  // Recording Memory retrieval: inject short, source-backed hints only.
+  // Recording Memory retrieval: source-cited, small-by-default context.
   try {
     const sessionId = input.session_id ?? "";
     if (sessionId && prompt) {
@@ -170,8 +167,10 @@ async function main(): Promise<void> {
         }),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), HOOK_TIMEOUT_MS)),
       ]);
-      if (recordingResult && recordingResult.matches.length > 0) {
-        blocks.push(formatRecordingMemoryInjection(recordingResult.matches));
+      if (recordingResult?.injectionText) {
+        blocks.push(recordingResult.injectionText);
+      }
+      if (recordingResult && recordingResult.injectedIds.length > 0) {
         appendSessionInjected(sessionsDir, sessionId, recordingResult.injectedIds);
       }
     }

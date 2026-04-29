@@ -52,7 +52,6 @@ import {
   renderDashboardLaunch,
 } from "./commands/dashboard.js";
 import { executeIngest, parseIngestArgs } from "./commands/ingest.js";
-import { executeRecordingCommand } from "./commands/recording.js";
 import {
   executeCompile,
   parseCompileArgs,
@@ -86,6 +85,11 @@ import {
   renderPairKnockResult,
   renderPairList,
 } from "./commands/pair.js";
+import {
+  executeRecording,
+  parseRecordingArgs,
+  renderRecordingResult,
+} from "./commands/recording.js";
 
 function findPackageVersion(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
@@ -366,15 +370,6 @@ async function main(): Promise<void> {
       process.stdout.write(output);
       return;
     }
-    case "recording": {
-      try {
-        process.stdout.write(await executeRecordingCommand(rest, { cwd: process.cwd() }));
-      } catch (err) {
-        process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-        process.exit(2);
-      }
-      return;
-    }
     case "dogfood-report": {
       const opts = parseDogfoodReportArgs(rest);
       const r = await executeDogfoodReport(opts);
@@ -397,6 +392,17 @@ async function main(): Promise<void> {
           process.exit(2);
         }
         throw err;
+      }
+      return;
+    }
+    case "recording": {
+      try {
+        const opts = parseRecordingArgs(rest);
+        const result = await executeRecording({ ...opts, cwd: process.cwd() });
+        process.stdout.write(renderRecordingResult(result));
+      } catch (err) {
+        process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+        process.exit(2);
       }
       return;
     }

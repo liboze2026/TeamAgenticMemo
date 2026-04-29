@@ -3,9 +3,28 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
-type Visibility = "private" | "public";
+export type RecordingVisibility = "private" | "public";
+export type RecordingAction = "help" | "import" | "search" | "show" | "inject" | "metrics" | "benchmark";
+export type RecordingMetricOperation = "import" | "search" | "inject" | "benchmark";
+export type RecordingMetricStatus = "ok" | "empty" | "failed";
 
-interface Recording {
+export interface RecordingCommandOptions {
+  action: RecordingAction;
+  filePath?: string;
+  query?: string;
+  id?: string;
+  visibility?: RecordingVisibility | "all";
+  limit?: number;
+  expandTranscript?: boolean;
+  json?: boolean;
+  reportPath?: string;
+  cwd?: string;
+  homeDir?: string;
+  now?: () => Date;
+  idGen?: () => string;
+}
+
+export interface RecordingMemory {
   id: string;
   title: string;
   source: string;
@@ -13,23 +32,182 @@ interface Recording {
   uploadedBy: string;
   useWhen: string;
   summary: string;
-  visibility: Visibility;
+  visibility: RecordingVisibility;
   createdAt: string;
   updatedAt: string;
 }
 
-type RecordingView = Omit<Recording, "transcript"> & { transcript?: string };
+export type RecordingMemoryView = Omit<RecordingMemory, "transcript"> & {
+  transcript?: string;
+};
 
-interface SearchHit {
-  record: RecordingView;
+export interface RecordingSearchResult {
+  record: RecordingMemoryView;
   score: number;
   whyRelevant: string;
 }
 
-export interface RecordingPromptRetrievalResult {
-  matches: SearchHit[];
-  injectedIds: string[];
+export interface RecordingMetric {
+  id: string;
+  operation: RecordingMetricOperation;
+  status: RecordingMetricStatus;
+  timestamp: string;
+  latencyMs: number;
+  query?: string;
+  recordingId?: string;
+  score?: number;
+  injectionTokens?: number;
+  sourceReference?: string;
+  slow: boolean;
+  empty: boolean;
+  failed: boolean;
+  oversized: boolean;
+  fullTranscriptIncluded: boolean;
+  error?: string;
 }
+
+export interface RecordingMetricsSummary {
+  total: number;
+  imports: number;
+  searches: number;
+  injections: number;
+  benchmarks: number;
+  slow: number;
+  empty: number;
+  failed: number;
+  oversized: number;
+  p50LatencyMs: number;
+  p95LatencyMs: number;
+  latest: RecordingMetric[];
+}
+
+export type RecordingCommandResult =
+  | {
+      kind: "help";
+      command: string;
+      subcommands: Array<{ name: string; usage: string; output: string }>;
+    }
+  | {
+      kind: "import";
+      status: "created" | "duplicate";
+      record: RecordingMemoryView;
+      storage: "private" | "public";
+    }
+  | {
+      kind: "search";
+      query: string;
+      results: RecordingSearchResult[];
+    }
+  | {
+      kind: "show";
+      record?: RecordingMemoryView;
+    }
+  | {
+      kind: "inject";
+      text: string;
+      match?: RecordingSearchResult;
+      tokenCount: number;
+      fullTranscriptIncluded: boolean;
+    }
+  | {
+      kind: "metrics";
+      summary: RecordingMetricsSummary;
+    }
+  | {
+      kind: "benchmark";
+      ok: boolean;
+      passCount: number;
+      total: number;
+      reportPath: string;
+      rows: Array<{
+        prompt: string;
+        expectedId: string;
+        actualId: string;
+        pass: boolean;
+        injectionTokens: number;
+      }>;
+    };
+
+export interface RecordingPromptRetrievalArgs {
+  userMessage: string;
+  cwd: string;
+  homeDir?: string;
+  sessionSeenIds: Set<string>;
+  limit?: number;
+}
+
+export interface RecordingPromptRetrievalResult {
+  matches: RecordingSearchResult[];
+  injectedIds: string[];
+  injectionText: string;
+  injectionTokens: number;
+}
+
+interface RecordingMaterialInput {
+  title?: unknown;
+  source?: unknown;
+  sourceUrl?: unknown;
+  sourcePath?: unknown;
+  transcript?: unknown;
+  uploadedBy?: unknown;
+  uploader?: unknown;
+  useWhen?: unknown;
+  usage?: unknown;
+  summary?: unknown;
+  visibility?: unknown;
+}
+
+const DEFAULT_MAX_INJECTION_TOKENS = 800;
+const SLOW_THRESHOLD_MS = 300;
+
+const GOLDEN_MATERIALS: RecordingMaterialInput[] = [
+  {
+    title: "Recording Memory import design review",
+    source: "docs/specs/2026-04-29-recording-memory-performance-verification.md",
+    transcript:
+      "Alice: Recording Memory should turn existing meeting transcripts and summaries into agent-loadable memory. Bob: Import must preserve source references. Chen: Do not inject the full transcript by default; cite the source and include a short summary unless explicitly expanded.",
+    uploadedBy: "teamagent",
+    useWhen: "Questions about recording-memory import, source references, concise prompt injection, and transcript expansion.",
+    summary:
+      "Recording Memory import stores transcripts, summaries, and source references. Default prompt injection cites the source and stays concise.",
+    visibility: "public",
+  },
+  {
+    title: "Recording Memory dashboard and latency review",
+    source: "docs/specs/2026-04-29-recording-memory-performance-verification.md#dashboard",
+    transcript:
+      "Alice: We need externally visible evidence, not SelfVerify. Bob: The dashboard has to show latency numbers and counts for slow or empty queries. Chen: It should update after recording-memory activity.",
+    uploadedBy: "teamagent",
+    useWhen: "Questions about dashboard metrics, latency, slow retrievals, empty retrievals, failures, and oversized injections.",
+    summary:
+      "The dashboard must surface latency, slow retrievals, empty retrievals, failed retrievals, oversized injections, and latest Recording Memory activity.",
+    visibility: "public",
+  },
+  {
+    title: "Recording Memory golden prompt benchmark",
+    source: "docs/specs/2026-04-29-recording-memory-performance-verification.md#golden-prompt-benchmark",
+    transcript:
+      "Alice: We should use three real examples. Bob: Ten fixed prompts are enough for the first gate. Chen: Each row needs expected recording, actual recording, pass/fail, and injection token count. Dana: Full transcript should only appear with explicit expansion.",
+    uploadedBy: "teamagent",
+    useWhen: "Questions about golden prompt benchmark acceptance, ten prompts, three examples, pass rate, and token budget.",
+    summary:
+      "Golden benchmark uses three recording examples and ten fixed prompts. It passes at 8/10 correct retrievals with default injection under 800 tokens.",
+    visibility: "public",
+  },
+];
+
+const GOLDEN_PROMPTS = [
+  { prompt: "What did we decide about importing recording transcripts?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md" },
+  { prompt: "Where should recording memory cite source references?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md" },
+  { prompt: "Should the full transcript be injected by default?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md" },
+  { prompt: "How do we monitor slow recording-memory retrievals?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md#dashboard" },
+  { prompt: "What dashboard counts are required for recording memory?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md#dashboard" },
+  { prompt: "What evidence should show latency and empty retrievals?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md#dashboard" },
+  { prompt: "How many golden prompts are used for acceptance?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md#golden-prompt-benchmark" },
+  { prompt: "What is the default recording memory token budget?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md#golden-prompt-benchmark" },
+  { prompt: "What pass rate does the golden benchmark require?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md#golden-prompt-benchmark" },
+  { prompt: "When is a full recording transcript allowed in context?", expectedSource: "docs/specs/2026-04-29-recording-memory-performance-verification.md#golden-prompt-benchmark" },
+];
 
 function projectKey(cwd: string): string {
   return createHash("sha256").update(path.resolve(cwd)).digest("hex").slice(0, 20);
@@ -40,50 +218,163 @@ function publicStorePath(cwd: string): string {
 }
 
 function privateStorePath(cwd: string, homeDir: string): string {
-  return path.join(homeDir, ".teamagent", "recordings", `${projectKey(cwd)}.json`);
+  return path.join(
+    homeDir,
+    ".teamagent",
+    "recordings",
+    `${projectKey(cwd)}.json`,
+  );
 }
 
 function metricsPath(cwd: string): string {
-  return path.join(cwd, ".teamagent", "recording-metrics.json");
+  return path.join(cwd, ".teamagent", "recording-memory", "metrics.jsonl");
 }
 
-function readJsonArray<T>(filePath: string): T[] {
+function readJsonl<T>(filePath: string): T[] {
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
+    return fs.readFileSync(filePath, "utf-8")
+      .split(/\r?\n/)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as T);
   } catch {
     return [];
   }
 }
 
-function writeJson(filePath: string, value: unknown): void {
+function appendJsonl<T>(filePath: string, item: T): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", "utf-8");
+  fs.appendFileSync(filePath, JSON.stringify(item) + "\n", "utf-8");
 }
 
-function requiredString(value: unknown, name: string): string {
+export function estimateRecordingTokens(text: string): number {
+  if (!text.trim()) return 0;
+  return Math.max(1, Math.ceil(text.length / 4));
+}
+
+function appendMetric(
+  cwd: string,
+  now: () => Date,
+  metric: Omit<RecordingMetric, "id" | "timestamp" | "slow" | "empty" | "failed" | "oversized">,
+): RecordingMetric {
+  const full: RecordingMetric = {
+    ...metric,
+    id: `rm-${now().getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: now().toISOString(),
+    slow: metric.latencyMs > SLOW_THRESHOLD_MS,
+    empty: metric.status === "empty",
+    failed: metric.status === "failed",
+    oversized: (metric.injectionTokens ?? 0) > DEFAULT_MAX_INJECTION_TOKENS,
+  };
+  appendJsonl(metricsPath(cwd), full);
+  return full;
+}
+
+export function loadRecordingMetrics(cwd: string): RecordingMetric[] {
+  return readJsonl<RecordingMetric>(metricsPath(cwd));
+}
+
+export function summarizeRecordingMetrics(metrics: RecordingMetric[]): RecordingMetricsSummary {
+  const latencies = metrics.map((m) => m.latencyMs).sort((a, b) => a - b);
+  const percentile = (p: number) => {
+    if (latencies.length === 0) return 0;
+    return latencies[Math.min(latencies.length - 1, Math.floor((latencies.length - 1) * p))] ?? 0;
+  };
+  return {
+    total: metrics.length,
+    imports: metrics.filter((m) => m.operation === "import").length,
+    searches: metrics.filter((m) => m.operation === "search").length,
+    injections: metrics.filter((m) => m.operation === "inject").length,
+    benchmarks: metrics.filter((m) => m.operation === "benchmark").length,
+    slow: metrics.filter((m) => m.slow).length,
+    empty: metrics.filter((m) => m.empty).length,
+    failed: metrics.filter((m) => m.failed).length,
+    oversized: metrics.filter((m) => m.oversized).length,
+    p50LatencyMs: percentile(0.5),
+    p95LatencyMs: percentile(0.95),
+    latest: metrics.slice(-5).reverse(),
+  };
+}
+
+function readStore(filePath: string): RecordingMemory[] {
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as RecordingMemory[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStore(filePath: string, records: RecordingMemory[]): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(records, null, 2) + "\n", "utf-8");
+}
+
+function stringField(value: unknown, name: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${name} must be a non-empty string`);
   }
   return value.trim();
 }
 
-function normalizeVisibility(value: unknown): Visibility {
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function normalizeVisibility(value: unknown): RecordingVisibility {
   if (value === "public") return "public";
   if (value === undefined || value === null || value === "private") return "private";
   throw new Error("visibility must be private or public");
 }
 
-function view(record: Recording, includeTranscript = false): RecordingView {
-  const { transcript, ...rest } = record;
-  return includeTranscript ? { ...rest, transcript } : rest;
+function materialToRecord(
+  input: RecordingMaterialInput,
+  opts: Required<Pick<RecordingCommandOptions, "now" | "idGen">>,
+): RecordingMemory {
+  const now = opts.now().toISOString();
+  const source = stringField(
+    input.source ?? input.sourceUrl ?? input.sourcePath,
+    "source",
+  );
+  return {
+    id: opts.idGen(),
+    title: stringField(input.title, "title"),
+    source,
+    transcript: stringField(input.transcript, "transcript"),
+    uploadedBy: stringField(input.uploadedBy ?? input.uploader, "uploadedBy"),
+    useWhen: stringField(input.useWhen ?? input.usage, "useWhen"),
+    summary:
+      optionalString(input.summary) ??
+      stringField(input.transcript, "transcript").slice(0, 240),
+    visibility: normalizeVisibility(input.visibility),
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
-function loadVisible(cwd: string, homeDir: string): Recording[] {
-  return [
-    ...readJsonArray<Recording>(publicStorePath(cwd)).filter((r) => r.visibility === "public"),
-    ...readJsonArray<Recording>(privateStorePath(cwd, homeDir)).filter((r) => r.visibility === "private"),
-  ];
+function sanitizeRecord(
+  record: RecordingMemory,
+  expandTranscript = false,
+): RecordingMemoryView {
+  const { transcript, ...rest } = record;
+  return expandTranscript ? { ...rest, transcript } : rest;
+}
+
+function loadVisibleRecords(
+  cwd: string,
+  homeDir: string,
+  visibility: RecordingVisibility | "all" = "all",
+): RecordingMemory[] {
+  const records: RecordingMemory[] = [];
+  if (visibility === "all" || visibility === "public") {
+    records.push(...readStore(publicStorePath(cwd)).filter((r) => r.visibility === "public"));
+  }
+  if (visibility === "all" || visibility === "private") {
+    records.push(...readStore(privateStorePath(cwd, homeDir)).filter((r) => r.visibility === "private"));
+  }
+  return records;
 }
 
 function tokenize(text: string): string[] {
@@ -92,208 +383,436 @@ function tokenize(text: string): string[] {
     .filter((t) => t.length > 1);
 }
 
-function score(query: string, record: Recording): { score: number; why: string } {
-  const fields: Array<[string, number, string]> = [
-    [record.title, 4, "title"],
-    [record.summary, 4, "summary"],
-    [record.useWhen, 3, "useWhen"],
-    [record.transcript, 1, "transcript"],
-    [record.source, 1, "source"],
+function scoreRecord(query: string, record: RecordingMemory): { score: number; why: string } {
+  const terms = [...new Set(tokenize(query))];
+  if (terms.length === 0) return { score: 0, why: "" };
+
+  const fields: Array<[keyof RecordingMemory, number, string]> = [
+    ["title", 4, "title"],
+    ["summary", 4, "summary"],
+    ["useWhen", 3, "useWhen"],
+    ["transcript", 1, "transcript"],
+    ["uploadedBy", 1, "uploadedBy"],
   ];
-  let total = 0;
-  const matched = new Set<string>();
-  for (const term of new Set(tokenize(query))) {
-    for (const [text, weight, label] of fields) {
-      if (text.toLowerCase().includes(term)) {
-        total += weight;
-        matched.add(label);
+  let score = 0;
+  const matchedFields = new Set<string>();
+  for (const term of terms) {
+    for (const [field, weight, label] of fields) {
+      const value = String(record[field] ?? "").toLowerCase();
+      if (value.includes(term)) {
+        score += weight;
+        matchedFields.add(label);
       }
     }
   }
+  const coverage = matchedFields.size > 0 ? terms.length / Math.max(terms.length, 1) : 0;
   return {
-    score: total,
-    why: matched.size > 0 ? `matched ${[...matched].join(", ")}` : "",
+    score: score + coverage,
+    why:
+      matchedFields.size > 0
+        ? `matched ${[...matchedFields].join(", ")}`
+        : "",
   };
 }
 
-function search(cwd: string, homeDir: string, query: string, limit = 5): SearchHit[] {
-  return loadVisible(cwd, homeDir)
+function searchRecords(
+  query: string,
+  records: RecordingMemory[],
+  limit: number,
+  expandTranscript = false,
+): RecordingSearchResult[] {
+  return records
     .map((record) => {
-      const s = score(query, record);
-      return { record: view(record), score: s.score, whyRelevant: s.why };
+      const scored = scoreRecord(query, record);
+      return {
+        record: sanitizeRecord(record, expandTranscript),
+        score: scored.score,
+        whyRelevant: scored.why,
+      };
     })
-    .filter((hit) => hit.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score || a.record.createdAt.localeCompare(b.record.createdAt))
     .slice(0, limit);
 }
 
-function tokenCount(text: string): number {
-  return Math.max(1, Math.ceil(text.length / 4));
+export function parseRecordingArgs(argv: string[]): RecordingCommandOptions {
+  if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
+    return { action: "help" };
+  }
+
+  const [actionRaw, ...rest] = argv;
+  if (
+    actionRaw !== "import" &&
+    actionRaw !== "search" &&
+    actionRaw !== "show" &&
+    actionRaw !== "inject" &&
+    actionRaw !== "metrics" &&
+    actionRaw !== "benchmark"
+  ) {
+    throw new Error("recording action must be import, search, show, inject, metrics, benchmark, or --help");
+  }
+
+  const opts: RecordingCommandOptions = { action: actionRaw };
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]!;
+    if (a === "--file" && rest[i + 1]) opts.filePath = rest[++i];
+    else if (a === "--query" && rest[i + 1]) opts.query = rest[++i];
+    else if (a === "--id" && rest[i + 1]) opts.id = rest[++i];
+    else if (a === "--transcript") opts.expandTranscript = true;
+    else if (a === "--full") opts.expandTranscript = true;
+    else if (a === "--json") opts.json = true;
+    else if (a.startsWith("--report=")) opts.reportPath = a.slice("--report=".length);
+    else if (a.startsWith("--visibility=")) {
+      const raw = a.slice("--visibility=".length);
+      if (raw !== "all" && raw !== "private" && raw !== "public") {
+        throw new Error("--visibility must be all, private, or public");
+      }
+      opts.visibility = raw;
+    } else if (a.startsWith("--limit=")) {
+      const n = Number(a.slice("--limit=".length));
+      if (!Number.isInteger(n) || n <= 0) throw new Error("--limit must be a positive integer");
+      opts.limit = n;
+    } else if ((opts.action === "show") && !opts.id && !a.startsWith("--")) {
+      opts.id = a;
+    } else if ((opts.action === "inject" || opts.action === "search") && !opts.query && !a.startsWith("--")) {
+      opts.query = a;
+    }
+  }
+  if (opts.action === "import" && !opts.filePath) {
+    throw new Error("recording import requires --file <path>");
+  }
+  if (opts.action === "search" && !opts.query) {
+    throw new Error("recording search requires --query <text>");
+  }
+  if (opts.action === "inject" && !opts.query) {
+    throw new Error("recording inject requires --query <text> or a query argument");
+  }
+  if (opts.action === "show" && !opts.id) {
+    throw new Error("recording show requires <id> or --id <id>");
+  }
+  return opts;
 }
 
-function helpJson(): string {
-  return JSON.stringify(
-    {
+export async function executeRecording(
+  opts: RecordingCommandOptions,
+): Promise<RecordingCommandResult> {
+  const cwd = opts.cwd ?? process.cwd();
+  const homeDir = opts.homeDir ?? os.homedir();
+  const now = opts.now ?? (() => new Date());
+  const idGen =
+    opts.idGen ??
+    (() => `rec-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+
+  if (opts.action === "help") {
+    return {
+      kind: "help",
       command: "teamagent recording",
       subcommands: [
-        { name: "import", usage: "teamagent recording import --file <material.json>" },
-        { name: "search", usage: "teamagent recording search --query <text>" },
-        { name: "show", usage: "teamagent recording show <id> [--transcript]" },
-        { name: "inject", usage: "teamagent recording inject --query <text>" },
-        { name: "metrics", usage: "teamagent recording metrics" },
-        { name: "benchmark", usage: "teamagent recording benchmark --json --report=<path>" },
+        {
+          name: "import",
+          usage: "teamagent recording import --file <material.json>",
+          output: "imports transcript-first recording material",
+        },
+        {
+          name: "search",
+          usage: "teamagent recording search --query <text> [--visibility=all|private|public]",
+          output: "returns source-backed recording memory hits without full transcript",
+        },
+        {
+          name: "show",
+          usage: "teamagent recording show <id> [--transcript]",
+          output: "shows metadata by default; --transcript expands full transcript",
+        },
+        {
+          name: "inject",
+          usage: "teamagent recording inject --query <text> [--full]",
+          output: "returns source-cited prompt context without full transcript by default",
+        },
+        {
+          name: "metrics",
+          usage: "teamagent recording metrics [--json]",
+          output: "summarizes import/search/injection latency and retrieval health",
+        },
+        {
+          name: "benchmark",
+          usage: "teamagent recording benchmark [--report=<path>] [--json]",
+          output: "runs 3-recording/10-prompt golden retrieval benchmark",
+        },
       ],
-    },
-    null,
-    2,
-  );
-}
-
-function optionValue(argv: string[], name: string): string {
-  const inline = argv.find((a) => a.startsWith(`${name}=`));
-  if (inline) return inline.slice(name.length + 1);
-  const i = argv.indexOf(name);
-  return i >= 0 ? (argv[i + 1] ?? "") : "";
-}
-
-function importMaterial(cwd: string, homeDir: string, filePath: string): { status: string; record: RecordingView } {
-  const raw = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
-  const now = new Date().toISOString();
-  const record: Recording = {
-    id: typeof raw["id"] === "string" ? raw["id"] : `rec-${Date.now().toString(36)}`,
-    title: requiredString(raw["title"], "title"),
-    source: requiredString(raw["source"] ?? raw["sourceUrl"] ?? raw["sourcePath"], "source"),
-    transcript: requiredString(raw["transcript"], "transcript"),
-    uploadedBy: requiredString(raw["uploadedBy"] ?? raw["uploader"], "uploadedBy"),
-    useWhen: requiredString(raw["useWhen"] ?? raw["usage"], "useWhen"),
-    summary: typeof raw["summary"] === "string" && raw["summary"].trim()
-      ? raw["summary"].trim()
-      : requiredString(raw["transcript"], "transcript").slice(0, 240),
-    visibility: normalizeVisibility(raw["visibility"]),
-    createdAt: now,
-    updatedAt: now,
-  };
-  const storePath = record.visibility === "public" ? publicStorePath(cwd) : privateStorePath(cwd, homeDir);
-  const records = readJsonArray<Recording>(storePath);
-  const duplicate = records.find((r) => r.source === record.source);
-  if (duplicate) return { status: "duplicate", record: view(duplicate) };
-  records.push(record);
-  writeJson(storePath, records);
-  return { status: "created", record: view(record) };
-}
-
-function show(cwd: string, homeDir: string, id: string, includeTranscript: boolean): RecordingView | undefined {
-  const record = loadVisible(cwd, homeDir).find((r) => r.id === id);
-  return record ? view(record, includeTranscript) : undefined;
-}
-
-function buildInjection(cwd: string, homeDir: string, query: string, full = false): { text: string; tokenCount: number; fullTranscriptIncluded: boolean } {
-  const hits = search(cwd, homeDir, query, 3);
-  const all = loadVisible(cwd, homeDir);
-  const lines = hits.length > 0 ? ["TeamAgent Recording Memory"] : [];
-  for (const hit of hits) {
-    const fullRecord = all.find((r) => r.id === hit.record.id);
-    lines.push(
-      `- ${hit.record.title}`,
-      `  Summary: ${hit.record.summary}`,
-      `  Source: ${hit.record.source}`,
-      `  Uploaded by: ${hit.record.uploadedBy}`,
-      `  Why relevant: ${hit.whyRelevant}`,
-      `  Expand: teamagent recording show ${hit.record.id} --transcript`,
-    );
-    if (full && fullRecord) lines.push(`  ${fullRecord.transcript}`);
+    };
   }
-  const text = lines.join("\n");
-  const metrics = readJsonArray<Record<string, unknown>>(metricsPath(cwd));
-  metrics.push({
-    timestamp: new Date().toISOString(),
-    query,
-    status: hits.length > 0 ? "ok" : "empty",
-    tokenCount: text ? tokenCount(text) : 0,
-  });
-  writeJson(metricsPath(cwd), metrics);
-  return { text, tokenCount: text ? tokenCount(text) : 0, fullTranscriptIncluded: full };
-}
 
-export function retrieveRecordingMemoriesForPrompt(args: {
-  userMessage: string;
-  cwd: string;
-  homeDir?: string;
-  sessionSeenIds: Set<string>;
-  limit?: number;
-}): RecordingPromptRetrievalResult {
-  const hits = search(
-    args.cwd,
-    args.homeDir ?? os.homedir(),
-    args.userMessage,
-    args.limit ?? 3,
-  ).filter((hit) => !args.sessionSeenIds.has(hit.record.id));
+  if (opts.action === "import") {
+    const started = Date.now();
+    const raw = fs.readFileSync(opts.filePath!, "utf-8");
+    const record = materialToRecord(JSON.parse(raw) as RecordingMaterialInput, {
+      now,
+      idGen,
+    });
+    const storePath =
+      record.visibility === "public"
+        ? publicStorePath(cwd)
+        : privateStorePath(cwd, homeDir);
+    const records = readStore(storePath);
+    const duplicate = records.find((r) => r.source === record.source);
+    if (duplicate) {
+      appendMetric(cwd, now, {
+        operation: "import",
+        status: "ok",
+        latencyMs: Date.now() - started,
+        recordingId: duplicate.id,
+        sourceReference: duplicate.source,
+        fullTranscriptIncluded: false,
+      });
+      return {
+        kind: "import",
+        status: "duplicate",
+        record: sanitizeRecord(duplicate),
+        storage: duplicate.visibility,
+      };
+    }
+    records.push(record);
+    writeStore(storePath, records);
+    appendMetric(cwd, now, {
+      operation: "import",
+      status: "ok",
+      latencyMs: Date.now() - started,
+      recordingId: record.id,
+      sourceReference: record.source,
+      fullTranscriptIncluded: false,
+    });
+    return {
+      kind: "import",
+      status: "created",
+      record: sanitizeRecord(record),
+      storage: record.visibility,
+    };
+  }
+
+  if (opts.action === "search") {
+    const started = Date.now();
+    const records = loadVisibleRecords(cwd, homeDir, opts.visibility ?? "all");
+    const results = searchRecords(opts.query!, records, opts.limit ?? 5);
+    appendMetric(cwd, now, {
+      operation: "search",
+      status: results.length > 0 ? "ok" : "empty",
+      latencyMs: Date.now() - started,
+      query: opts.query,
+      recordingId: results[0]?.record.id,
+      score: results[0]?.score,
+      sourceReference: results[0]?.record.source,
+      fullTranscriptIncluded: false,
+    });
+    return {
+      kind: "search",
+      query: opts.query!,
+      results,
+    };
+  }
+
+  if (opts.action === "inject") {
+    const started = Date.now();
+    const records = loadVisibleRecords(cwd, homeDir, opts.visibility ?? "all");
+    const results = searchRecords(opts.query!, records, opts.limit ?? 3, Boolean(opts.expandTranscript));
+    const text = formatRecordingMemoryInjection(results, opts.expandTranscript);
+    const tokenCount = estimateRecordingTokens(text);
+    appendMetric(cwd, now, {
+      operation: "inject",
+      status: results.length > 0 ? "ok" : "empty",
+      latencyMs: Date.now() - started,
+      query: opts.query,
+      recordingId: results[0]?.record.id,
+      score: results[0]?.score,
+      sourceReference: results[0]?.record.source,
+      injectionTokens: tokenCount,
+      fullTranscriptIncluded: Boolean(opts.expandTranscript),
+    });
+    return {
+      kind: "inject",
+      text,
+      match: results[0],
+      tokenCount,
+      fullTranscriptIncluded: Boolean(opts.expandTranscript),
+    };
+  }
+
+  if (opts.action === "metrics") {
+    return {
+      kind: "metrics",
+      summary: summarizeRecordingMetrics(loadRecordingMetrics(cwd)),
+    };
+  }
+
+  if (opts.action === "benchmark") {
+    return await runRecordingBenchmark({ cwd, homeDir, now, reportPath: opts.reportPath });
+  }
+
+  const records = loadVisibleRecords(cwd, homeDir, "all");
+  const record = records.find((r) => r.id === opts.id);
   return {
-    matches: hits,
-    injectedIds: hits.map((hit) => hit.record.id),
+    kind: "show",
+    record: record ? sanitizeRecord(record, opts.expandTranscript) : undefined,
   };
 }
 
-export function formatRecordingMemoryInjection(matches: SearchHit[]): string {
+export async function retrieveRecordingMemoriesForPrompt(
+  args: RecordingPromptRetrievalArgs,
+): Promise<RecordingPromptRetrievalResult> {
+  const result = await executeRecording({
+    action: "inject",
+    query: args.userMessage,
+    cwd: args.cwd,
+    homeDir: args.homeDir,
+    limit: args.limit ?? 3,
+  });
+  const matches =
+    result.kind === "inject" && result.match
+      ? [result.match].filter((r) => !args.sessionSeenIds.has(r.record.id))
+      : [];
+  return {
+    matches,
+    injectedIds: matches.map((m) => m.record.id),
+    injectionText: matches.length > 0 ? formatRecordingMemoryInjection(matches) : "",
+    injectionTokens: result.kind === "inject" ? result.tokenCount : 0,
+  };
+}
+
+export function formatRecordingMemoryInjection(
+  matches: RecordingSearchResult[],
+  includeTranscript = false,
+): string {
   if (matches.length === 0) return "";
   const lines = ["◈ TeamAgent Recording Memory 相关录音"];
-  for (const hit of matches) {
+  for (const match of matches) {
+    const r = match.record;
     lines.push(
-      `- ${hit.record.title} (${hit.record.visibility})`,
-      `  摘要: ${hit.record.summary}`,
-      `  来源: ${hit.record.source}`,
-      `  上传人: ${hit.record.uploadedBy}`,
-      `  适用场景: ${hit.record.useWhen}`,
-      `  为什么相关: ${hit.whyRelevant}`,
-      `  展开: teamagent recording show ${hit.record.id} --transcript`,
+      `- ${r.title} (${r.visibility})`,
+      `  摘要: ${r.summary.slice(0, 220)}`,
+      `  来源: ${r.source}`,
+      `  上传人: ${r.uploadedBy}`,
+      `  适用场景: ${r.useWhen.slice(0, 180)}`,
+      `  为什么相关: ${match.whyRelevant}`,
+      includeTranscript && r.transcript
+        ? `  Transcript: ${r.transcript}`
+        : `  展开: teamagent recording show ${r.id} --transcript`,
     );
   }
-  return lines.join("\n");
+  const text = lines.join("\n");
+  if (includeTranscript || estimateRecordingTokens(text) <= DEFAULT_MAX_INJECTION_TOKENS) {
+    return text;
+  }
+  return `${text.slice(0, DEFAULT_MAX_INJECTION_TOKENS * 4 - 64).trimEnd()}\n[trimmed to ${DEFAULT_MAX_INJECTION_TOKENS} token budget]`;
 }
 
-function benchmark(reportPath: string): { ok: boolean; passCount: number; total: number; reportPath: string } {
-  const rows = [
-    ["why transcript first", "rec-import-decision", "rec-import-decision", 72],
-    ["source references", "rec-import-decision", "rec-import-decision", 70],
-    ["small default context", "rec-import-decision", "rec-import-decision", 68],
-    ["private public permissions", "rec-permission-decision", "rec-permission-decision", 75],
-    ["private should not leak", "rec-permission-decision", "rec-permission-decision", 74],
-    ["public team visible", "rec-permission-decision", "rec-permission-decision", 72],
-    ["scan Feishu Drive", "rec-auto-scan-decision", "rec-auto-scan-decision", 78],
-    ["automatic folder discovery", "rec-auto-scan-decision", "rec-auto-scan-decision", 76],
-    ["team folders auto discovery", "rec-auto-scan-decision", "rec-auto-scan-decision", 77],
-    ["manual upload before scanning", "rec-auto-scan-decision", "rec-auto-scan-decision", 79],
-  ];
-  const report = [
-    "# Recording Memory Golden Prompt Benchmark",
-    "",
-    "| prompt | expected | actual | result | token_count |",
-    "| --- | --- | --- | --- | ---: |",
-    ...rows.map(([prompt, expected, actual, token]) =>
-      `| ${prompt} | ${expected} | ${actual} | ${expected === actual ? "pass" : "fail"} | ${token} |`,
-    ),
-    "",
-  ].join("\n");
-  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-  fs.writeFileSync(reportPath, report, "utf-8");
-  return { ok: true, passCount: 10, total: 10, reportPath };
+export function renderRecordingResult(result: RecordingCommandResult): string {
+  return JSON.stringify(result, null, 2) + "\n";
 }
 
 export async function executeRecordingCommand(
   argv: string[],
   env: { cwd: string; now?: () => Date; homeDir?: string },
 ): Promise<string> {
-  const homeDir = env.homeDir ?? os.homedir();
-  const [subcommand] = argv;
-  if (!subcommand || subcommand === "--help" || subcommand === "-h") return helpJson() + "\n";
-  if (subcommand === "import") return JSON.stringify(importMaterial(env.cwd, homeDir, optionValue(argv, "--file")), null, 2) + "\n";
-  if (subcommand === "search") return JSON.stringify({ query: optionValue(argv, "--query"), results: search(env.cwd, homeDir, optionValue(argv, "--query")) }, null, 2) + "\n";
-  if (subcommand === "show") return JSON.stringify({ record: show(env.cwd, homeDir, argv[1] ?? "", argv.includes("--transcript")) }, null, 2) + "\n";
-  if (subcommand === "inject") return JSON.stringify(buildInjection(env.cwd, homeDir, optionValue(argv, "--query"), argv.includes("--transcript")), null, 2) + "\n";
-  if (subcommand === "metrics") {
-    const metrics = readJsonArray<Record<string, unknown>>(metricsPath(env.cwd));
-    return JSON.stringify({ injections: metrics.length }, null, 2) + "\n";
+  const result = await executeRecording({
+    ...parseRecordingArgs(argv),
+    cwd: env.cwd,
+    homeDir: env.homeDir,
+    now: env.now,
+  });
+  return renderRecordingResult(result);
+}
+
+function renderBenchmarkReport(result: Extract<RecordingCommandResult, { kind: "benchmark" }>): string {
+  const lines = [
+    "# Recording Memory Golden Prompt Benchmark",
+    "",
+    "## Recording Examples",
+    "",
+    ...GOLDEN_MATERIALS.map((m) => `- ${String(m.title)} (${String(m.source)})`),
+    "",
+    "## Results",
+    "",
+    "| # | Prompt | Expected Recording | Actual Recording | Pass | Injection Tokens |",
+    "|---|---|---|---|---|---|",
+    ...result.rows.map((row, i) =>
+      `| ${i + 1} | ${row.prompt.replace(/\|/g, "\\|")} | ${row.expectedId} | ${row.actualId || "(empty)"} | ${row.pass ? "PASS" : "FAIL"} | ${row.injectionTokens} |`,
+    ),
+    "",
+    `Pass rate: ${result.passCount}/${result.total}`,
+    `Acceptance: ${result.ok ? "PASS" : "FAIL"}`,
+    `Default injection budget: ${DEFAULT_MAX_INJECTION_TOKENS} tokens`,
+    "Full transcript appears only after explicit expansion with `teamagent recording show <id> --transcript` or `teamagent recording inject --full`.",
+    "",
+  ];
+  return lines.join("\n");
+}
+
+async function runRecordingBenchmark(args: {
+  cwd: string;
+  homeDir: string;
+  now: () => Date;
+  reportPath?: string;
+}): Promise<Extract<RecordingCommandResult, { kind: "benchmark" }>> {
+  const started = Date.now();
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "teamagent-recording-bench-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "teamagent-recording-home-"));
+  const idsBySource = new Map<string, string>();
+  for (const [index, material] of GOLDEN_MATERIALS.entries()) {
+    const filePath = path.join(tmpRoot, `recording-${index}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(material, null, 2), "utf-8");
+    const imported = await executeRecording({
+      action: "import",
+      filePath,
+      cwd: tmpRoot,
+      homeDir: tmpHome,
+      now: args.now,
+      idGen: () => `golden-${index + 1}`,
+    });
+    if (imported.kind === "import") idsBySource.set(imported.record.source, imported.record.id);
   }
-  if (subcommand === "benchmark") return JSON.stringify(benchmark(optionValue(argv, "--report") || path.join(env.cwd, ".teamagent", "recording-golden-benchmark.md")), null, 2) + "\n";
-  throw new Error("recording action must be import, search, show, inject, metrics, benchmark, or --help");
+  const evaluatedRows: Array<{
+    prompt: string;
+    expectedId: string;
+    actualId: string;
+    pass: boolean;
+    injectionTokens: number;
+  }> = [];
+  for (const item of GOLDEN_PROMPTS) {
+    const expectedId = idsBySource.get(item.expectedSource) ?? "";
+    const injected = await executeRecording({
+      action: "inject",
+      query: item.prompt,
+      cwd: tmpRoot,
+      homeDir: tmpHome,
+      now: args.now,
+    });
+    const actualId = injected.kind === "inject" ? injected.match?.record.id ?? "" : "";
+    const injectionTokens = injected.kind === "inject" ? injected.tokenCount : 0;
+    evaluatedRows.push({
+      prompt: item.prompt,
+      expectedId,
+      actualId,
+      pass: actualId === expectedId && injectionTokens <= DEFAULT_MAX_INJECTION_TOKENS,
+      injectionTokens,
+    });
+  }
+  const passCount = evaluatedRows.filter((r) => r.pass).length;
+  const result: Extract<RecordingCommandResult, { kind: "benchmark" }> = {
+    kind: "benchmark",
+    ok: passCount >= 8,
+    passCount,
+    total: evaluatedRows.length,
+    reportPath: args.reportPath ?? path.join(args.cwd, "docs", "verification", "recording-memory-golden-benchmark.md"),
+    rows: evaluatedRows,
+  };
+  fs.mkdirSync(path.dirname(result.reportPath), { recursive: true });
+  fs.writeFileSync(result.reportPath, renderBenchmarkReport(result), "utf-8");
+  appendMetric(args.cwd, args.now, {
+    operation: "benchmark",
+    status: result.ok ? "ok" : "failed",
+    latencyMs: Date.now() - started,
+    injectionTokens: Math.max(...evaluatedRows.map((r) => r.injectionTokens)),
+    fullTranscriptIncluded: false,
+    error: result.ok ? undefined : `passCount=${passCount}`,
+  });
+  return result;
 }
