@@ -37,6 +37,10 @@ function countFiles(root: string): number {
   return count;
 }
 
+function relativePosix(from: string, to: string): string {
+  return path.relative(from, to).split(path.sep).join("/");
+}
+
 function makeCapsuleFile(): string {
   const out = path.join(tmp, "macmini.capsule.json");
   executePairCapsule({
@@ -93,7 +97,7 @@ describe("teamagent pair accept", () => {
     });
     const after = countFiles(home);
 
-    expect(result.changed.map((p) => path.relative(home, p)).sort()).toEqual([
+    expect(result.changed.map((p) => relativePosix(home, p)).sort()).toEqual([
       ".ssh/config",
       ".teamagent/pairing/peers.json",
       ".teamagent/pairing/receipts/macmini.json",
