@@ -132,6 +132,13 @@ export type { FilterOptions } from "./error-collector/signal-filter.js";
 export { buildErrorBatches } from "./error-collector/error-batch-builder.js";
 export type { ErrorBatch } from "./error-collector/error-batch-builder.js";
 export {
+  defaultUpdateState,
+  parseUpdateState,
+  serializeUpdateState,
+  type UpdateState,
+  type PendingBanner,
+} from "./update/update-state.js";
+export {
   scanNarrative,
   formatPendingRecord,
   mergePending,
