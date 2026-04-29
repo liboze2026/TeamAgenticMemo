@@ -1,6 +1,6 @@
  ▐▛███▜▌   Claude Code v2.1.122
 ▝▜█████▛▘  MiniMax-M2.7-highspeed · API Usage Billing
-  ▘▘ ▝▝    ~/projects/TeamBrain/.claude/worktrees/add-hooks
+  ▘▘ ▝▝    ~/projects/TeamBrain/.codex/worktrees/add-hooks
 
 ❯ Reply with exactly one word: OK                                               
 

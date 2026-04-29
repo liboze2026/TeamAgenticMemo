@@ -1,6 +1,6 @@
  ▐▛███▜▌   Claude Code v2.1.122
 ▝▜█████▛▘  MiniMax-M2.7-highspeed · API Usage Billing
-  ▘▘ ▝▝    ~/projects/TeamBrain/.claude/worktrees/design-skills
+  ▘▘ ▝▝    ~/projects/TeamBrain/.codex/worktrees/design-skills
 
 ❯ Read file .claude/skills/design-html/SKILL.md then reply with exactly one     
   line: VERIFY_DESIGN_HTML_OK                                                   
