@@ -39,6 +39,10 @@ export type CompileCommandResult = CompilePipelineResult & {
 function resolvePaths(opts: CompileOptions) {
   const home = opts.homeDir ?? os.homedir();
   const cwd = opts.cwd ?? process.cwd();
+  const teamagentSkillsDir =
+    opts.skillsDir ??
+    process.env["TEAMAGENT_SKILLS_DIR"] ??
+    path.join(home, ".claude", "skills", "teamagent");
   return {
     projectDbPath:
       opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db"),
@@ -47,7 +51,7 @@ function resolvePaths(opts: CompileOptions) {
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
     agentsMdPath: opts.agentsMdPath ?? path.join(cwd, "AGENTS.md"),
     skillsDir: opts.skillsDir,
-    claudeProjectSkillsDir: path.join(cwd, ".claude", "skills"),
+    teamagentSkillsDir,
     codexSkillsDir: path.join(cwd, ".codex", "skills"),
   };
 }
@@ -108,9 +112,10 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
         opts.presetOnly ? { compileOptions: { presetOnly: true } } : undefined,
       );
 
-  const shouldWriteSkills = !opts.markdownOnly && targetIncludesClaude(target);
+  const shouldWriteSkills =
+    !opts.markdownOnly && (targetIncludesClaude(target) || targetIncludesCodex(target));
   const skillCompiler = shouldWriteSkills
-    ? makeSkillCompiler({ skillsDir: paths.skillsDir })
+    ? makeSkillCompiler({ skillsDir: paths.teamagentSkillsDir })
     : makeNoopSkillCompiler();
 
   try {
@@ -124,9 +129,9 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
       if (opts.dryRun) {
         result.agentsMarkdown = { path: "(dry-run)", blockLineCount: 0 };
       } else {
-        fs.mkdirSync(paths.claudeProjectSkillsDir, { recursive: true });
+        fs.mkdirSync(paths.teamagentSkillsDir, { recursive: true });
         ensureSymlink(paths.agentsMdPath, paths.claudeMdPath, "file", () => new Date());
-        ensureSymlink(paths.codexSkillsDir, paths.claudeProjectSkillsDir, "dir", () => new Date());
+        ensureSymlink(paths.codexSkillsDir, paths.teamagentSkillsDir, "dir", () => new Date());
         result.agentsMarkdown = {
           path: paths.agentsMdPath,
           blockLineCount: result.markdown.blockLineCount,

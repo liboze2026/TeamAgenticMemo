@@ -122,6 +122,7 @@ describe("executeInit", () => {
     const claudePath = path.join(tmp.cwd, "CLAUDE.md");
     const agentsPath = path.join(tmp.cwd, "AGENTS.md");
     const codexSkillsPath = path.join(tmp.cwd, ".codex", "skills");
+    const teamagentSkillsPath = path.join(tmp.home, ".claude", "skills", "teamagent");
     const agents = nodeFs.readFileSync(agentsPath, "utf-8");
     expect(agents).toContain("TEAMAGENT:START");
     expect(agents).toContain("TEAMAGENT:END");
@@ -129,8 +130,28 @@ describe("executeInit", () => {
     expect(path.resolve(tmp.cwd, nodeFs.readlinkSync(agentsPath))).toBe(claudePath);
     expect(nodeFs.lstatSync(codexSkillsPath).isSymbolicLink()).toBe(true);
     expect(path.resolve(tmp.cwd, ".codex", nodeFs.readlinkSync(codexSkillsPath))).toBe(
-      path.join(tmp.cwd, ".claude", "skills"),
+      teamagentSkillsPath,
     );
+    expect(r.steps.find((s) => s.step === "compile-codex-skills")?.status).toBe("ok");
+  });
+
+  it("target=codex pre-check validates CLAUDE.md because codex still compiles it", async () => {
+    const claudePath = path.join(tmp.cwd, "CLAUDE.md");
+    nodeFs.writeFileSync(claudePath, "# locked\n");
+    nodeFs.chmodSync(claudePath, 0o444);
+
+    const r = await executeInit({
+      ...commonOpts(),
+      target: "codex",
+      llmClient: stubLLM(OK_LLM_RESPONSE),
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.steps[0]).toMatchObject({
+      step: "pre-check",
+      status: "failed",
+      detail: "CLAUDE.md 文件无写入权限，请运行: chmod 644 CLAUDE.md",
+    });
   });
 
   it("target=both writes CLAUDE.md and links AGENTS.md", async () => {

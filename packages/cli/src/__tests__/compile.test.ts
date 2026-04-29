@@ -165,7 +165,7 @@ describe("executeCompile", () => {
     expect(result.skills.written).toContain("rule-1");
   });
 
-  it("--target=codex writes CLAUDE.md, links AGENTS.md, and skips Claude skills", async () => {
+  it("--target=codex writes CLAUDE.md, links AGENTS.md, and exposes compiled skills to Codex", async () => {
     seedEntry(tmp.projectDbPath, entry({ current_tier: "canonical" }));
     const result = await executeCompile({ ...opts, target: "codex" });
     expect(result.markdown.path).toBe(tmp.claudeMdPath);
@@ -176,10 +176,10 @@ describe("executeCompile", () => {
     const codexSkillsPath = path.join(tmp.cwd, ".codex", "skills");
     expect(nodeFs.lstatSync(codexSkillsPath).isSymbolicLink()).toBe(true);
     expect(path.resolve(tmp.cwd, ".codex", nodeFs.readlinkSync(codexSkillsPath))).toBe(
-      path.join(tmp.cwd, ".claude", "skills"),
+      tmp.skillsDir,
     );
-    expect(result.skills.written).toHaveLength(0);
-    expect(nodeFs.existsSync(path.join(tmp.skillsDir, "rule-1", "SKILL.md"))).toBe(false);
+    expect(result.skills.written).toContain("rule-1");
+    expect(nodeFs.existsSync(path.join(tmp.skillsDir, "rule-1", "SKILL.md"))).toBe(true);
   });
 
   it("--target=both writes CLAUDE.md, links AGENTS.md, and writes Claude skills", async () => {

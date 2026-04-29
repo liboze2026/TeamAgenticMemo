@@ -9,6 +9,7 @@ import {
   ClaudeCodeLLMClient,
   openDb,
   ClaudePluginInstaller,
+  makeSkillCompiler,
 } from "@teamagent/adapters";
 import {
   executeInstallPlugins,
@@ -43,6 +44,8 @@ export interface InitOptions {
   skipHook?: boolean;
   /** 跳过打包 seed 注入（测试环境隔离 dev 产物；正常安装应保持 false）。 */
   skipSeed?: boolean;
+  /** 跳过向量模型预热（测试 / 离线环境；正常安装应保持 false）。 */
+  skipWarmup?: boolean;
   /** 显式指定 seed 文件路径（测试用）。 */
   seedPath?: string;
   /**
@@ -57,6 +60,7 @@ export interface InitOptions {
   userGlobalDbPath?: string;
   claudeMdPath?: string;
   agentsMdPath?: string;
+  skillsDir?: string;
   hookEntry?: string;
   now?: () => Date;
   idGen?: () => string;
@@ -93,6 +97,10 @@ function resolvePaths(opts: InitOptions) {
       opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
     agentsMdPath: opts.agentsMdPath ?? path.join(cwd, "AGENTS.md"),
+    teamagentSkillsDir:
+      opts.skillsDir ??
+      process.env["TEAMAGENT_SKILLS_DIR"] ??
+      path.join(home, ".claude", "skills", "teamagent"),
     installLogPath: path.join(home, ".teamagent", ".install-log"),
   };
 }
@@ -195,7 +203,34 @@ export async function executeInit(opts: InitOptions = {}): Promise<InitResult> {
         ),
       );
     }
+    steps.push(await doCompileCodexSkills(paths, dryRun));
     steps.push(doLinkCodexFiles(paths, dryRun));
+  }
+
+  // 末尾预热向量模型（首装首次触发；测试/离线/已 cached 时跳过）
+  const skipWarmup =
+    opts.skipWarmup === true ||
+    dryRun ||
+    process.env["NODE_ENV"] === "test" ||
+    process.env["TEAMAGENT_SKIP_WARMUP"] === "1";
+  if (!skipWarmup) {
+    try {
+      const { runWarmup } = await import("./warmup.js");
+      const w = await runWarmup();
+      steps.push({
+        step: "warmup",
+        status: w.ok ? "ok" : "failed",
+        detail: w.ok ? `模型预热 ${w.durationMs}ms` : `预热失败：${w.error ?? "unknown"}`,
+      });
+    } catch (err) {
+      steps.push({
+        step: "warmup",
+        status: "failed",
+        detail: `预热异常：${String(err).slice(0, 120)}`,
+      });
+    }
+  } else {
+    steps.push({ step: "warmup", status: "skipped", detail: "skipWarmup / dryRun / test env" });
   }
 
   if (!dryRun) {
@@ -254,7 +289,7 @@ function runPreChecks(
     return failStep("pre-check", "无法创建 ~/.teamagent 目录，请检查磁盘权限");
   }
   const mdPaths: Array<{ path: string; label: string }> = [];
-  if (targetIncludesClaude(target)) {
+  if (targetIncludesClaude(target) || targetIncludesCodex(target)) {
     mdPaths.push({ path: paths.claudeMdPath, label: "CLAUDE.md" });
   }
   if (targetIncludesCodex(target)) {
@@ -626,6 +661,37 @@ function doCompileMarkdownDoc(
   }
 }
 
+async function doCompileCodexSkills(
+  paths: ReturnType<typeof resolvePaths>,
+  dryRun: boolean,
+): Promise<InitStepResult> {
+  if (dryRun) {
+    return okStep(
+      "compile-codex-skills",
+      `(dry-run) 会把 stable+ 规则编译到 ${paths.teamagentSkillsDir}`,
+    );
+  }
+  try {
+    fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
+    fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
+    const store = new DualLayerStore({
+      projectDbPath: paths.projectDbPath,
+      userGlobalDbPath: paths.userGlobalDbPath,
+    });
+    const entries = store.getAll();
+    store.close();
+    const compiler = makeSkillCompiler({ skillsDir: paths.teamagentSkillsDir });
+    const artifacts = compiler.compile(entries);
+    const written = await compiler.write(artifacts);
+    return okStep(
+      "compile-codex-skills",
+      `已编译 ${written.written.length} 条 skill → ${paths.teamagentSkillsDir}`,
+    );
+  } catch (err) {
+    return failStep("compile-codex-skills", String(err).slice(0, 200));
+  }
+}
+
 function doLinkCodexFiles(
   paths: ReturnType<typeof resolvePaths>,
   dryRun: boolean,
@@ -639,8 +705,8 @@ function doLinkCodexFiles(
     },
     {
       linkPath: path.join(paths.cwd, ".codex", "skills"),
-      targetPath: path.join(paths.cwd, ".claude", "skills"),
-      label: ".codex/skills -> .claude/skills",
+      targetPath: paths.teamagentSkillsDir,
+      label: ".codex/skills -> TeamAgent skills",
       targetType: "dir" as const,
     },
   ];
@@ -789,6 +855,7 @@ export function parseInitArgs(argv: string[]): InitOptions {
     if (a === "--dry-run") opts.dryRun = true;
     else if (a === "--skip-import") opts.skipImport = true;
     else if (a === "--skip-hook") opts.skipHook = true;
+    else if (a === "--skip-warmup") opts.skipWarmup = true;
     else if (a === "--install-plugins") opts.installPlugins = true;
     else if (a === "--codex") opts.target = "codex";
     else if (a === "--claude") opts.target = "claude";
