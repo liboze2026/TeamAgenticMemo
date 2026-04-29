@@ -1,21 +1,19 @@
 zsh -ic 'claudefast'
 
-TeamBrain on  claude/wip [!] via  v22.21.1
+TeamBrain on  claude/wip [!?] via  v22.21.1
 ❯ zsh -ic 'claudefast'
  ▐▛███▜▌   Claude Code v2.1.122
 ▝▜█████▛▘  MiniMax-M2.7-highspeed · API Usage Billing
   ▘▘ ▝▝    ~/projects/TeamBrain
 
-❯ Read the YAML frontmatter at .claude/skills/canary/SKILL.md and print only the values of name, version, and the first three trigger phrases. No prose.
+❯ Without reading any file from disk, confirm whether you have a registered skill named exactly canary. Use only your in-memory skill registry. Output JSON only with keys registered, name, and status. status must be
+  found when registered is true, otherwise missing.
 
-  Read 1 file (ctrl+o to expand)
-
-⏺ name: canary
-  version: 1.0.0
-  triggers:
-    - monitor after deploy
-    - canary check
-    - watch for errors post-deploy
+⏺ {
+    "registered": true,
+    "name": "canary",
+    "status": "found"
+  }
   ⎿  Stop says: [laziness-guard] BLOCKED: missing or malformed self-report (no <laziness-self-report> block found)
 
 ⏺ Ran 7 stop hooks (ctrl+o to expand)
@@ -33,14 +31,21 @@ TeamBrain on  claude/wip [!] via  v22.21.1
   For each of the 6 categories, honestly evaluate whether your last work exhibited that pattern. Re-emit your message with the report appended. If any bool is true, you must continue the work in the same turn
   instead of stopping.
 
-⏺ name: canary
-  version: 1.0.0
-  triggers:
-    - monitor after deploy
-    - canary check
-    - watch for errors post-deploy
+⏺ {
+    "registered": true,
+    "name": "canary",
+    "status": "found"
+  }
+  <laziness-self-report>
+  premature_stopping: false
+  permission_seeking: false
+  ownership_dodging: false
+  simplest_fix: false
+  reasoning_loop: false
+  known_limitation: false
+  </laziness-self-report>
 
-✻ Cogitated for 23s
+✻ Baked for 12s
 
 ❯ /export /Users/m1/projects/TeamBrain/docs/canary-verify/exports/canary-session.txt
   ⎿  Conversation exported to: /Users/m1/projects/TeamBrain/docs/canary-verify/exports/canary-session.txt
@@ -48,12 +53,7 @@ TeamBrain on  claude/wip [!] via  v22.21.1
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ❯ 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ? for shortcuts                                                                                                                                                                          18 MCP servers need auth · /mcp
-
-
-
-
-
+  ? for shortcuts                                                                                                                                                                 Stop hook error occurred · ctrl+o to see
 
 
 

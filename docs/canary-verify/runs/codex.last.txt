@@ -1,1 +1,1 @@
-{"name":"canary","version":"1.0.0","preamble_tier":2,"allowed_tools":["AskUserQuestion","Bash","Glob","Read","Write"],"triggers":["canary check","monitor after deploy","watch for errors post-deploy"]}
+{"registered":true,"name":"canary","status":"found"}

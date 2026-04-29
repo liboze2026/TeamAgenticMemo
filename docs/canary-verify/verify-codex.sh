@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-# Verifier 2/3: codex exec reads .codex/skills/canary/SKILL.md frontmatter
-# and emits a normalized JSON matching docs/canary-verify/schema.json.
+# Verifier 2/3: codex exec queries its own in-memory skill registry for a
+# skill named "canary" and emits a normalized JSON matching
+# docs/canary-verify/schema.json.
+#
+# Codex CLI does not expose a per-tool deny-list, so we rely on the prompt's
+# explicit "do not read any file" instruction plus a read-only sandbox. The
+# JSON schema deliberately omits any field that lives only in SKILL.md
+# (version, allowed-tools, triggers): that way, even if a model cheats and
+# opens the file, the answer it constructs is no stronger than what the
+# registry already exposes — the structure cannot mask a discovery failure.
 #
 # Pre-step (per spec): MODULE --help first.
 # Output: docs/canary-verify/runs/codex.json (extracted JSON only)
@@ -29,7 +37,7 @@ echo "[1/3] MODULE --help (codex)"
 codex --help >"$OUT_DIR/codex.help.txt" 2>&1
 echo "       wrote $OUT_DIR/codex.help.txt ($(wc -l <"$OUT_DIR/codex.help.txt") lines)"
 
-PROMPT="$(sed "s#__SKILL_PATH__#$SKILL_PATH#" "$PROMPT_TMPL")"
+PROMPT="$(cat "$PROMPT_TMPL")"
 
 echo "[2/3] codex exec --json --output-schema <schema> -o <last>"
 LAST="$OUT_DIR/codex.last.txt"

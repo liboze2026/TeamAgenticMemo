@@ -1,7 +1,12 @@
 #!/usr/bin/env zsh
-# Verifier 1/3: claudefast (claude code, MiniMax fast profile) reads
-# .claude/skills/canary/SKILL.md frontmatter and emits a normalized JSON
-# matching docs/canary-verify/schema.json.
+# Verifier 1/3: claudefast (claude code, MiniMax fast profile) queries its own
+# in-memory skill registry for a skill named "canary" and emits a normalized
+# JSON matching docs/canary-verify/schema.json.
+#
+# Crucial: this script DENIES Read/Bash/Glob/Grep/Edit/Write/NotebookEdit so
+# the model literally cannot open the SKILL.md file. The answer must come from
+# the runtime's registered skill list — the only thing this verifier is
+# supposed to be checking.
 #
 # Pre-step (per spec): MODULE --help first.
 # Output: docs/canary-verify/runs/claudefast.json (extracted JSON only)
@@ -34,16 +39,30 @@ echo "[1/3] MODULE --help (claude)"
 claude --help >"$OUT_DIR/claudefast.help.txt" 2>&1
 echo "       wrote $OUT_DIR/claudefast.help.txt ($(wc -l <"$OUT_DIR/claudefast.help.txt") lines)"
 
-PROMPT="$(sed "s#__SKILL_PATH__#$SKILL_PATH#" "$PROMPT_TMPL")"
+PROMPT="$(cat "$PROMPT_TMPL")"
 SCHEMA_JSON="$(cat "$SCHEMA_PATH")"
 
-echo "[2/3] claudefast -p --output-format json --json-schema <schema>"
+echo "[2/3] claudefast -p with file/exec tools DENIED, --json-schema enforced"
 RAW="$OUT_DIR/claudefast.raw.json"
+DEBUG="$OUT_DIR/claudefast.debug.log"
 claudefast -p \
+  --debug-file "$DEBUG" \
   --output-format json \
   --json-schema "$SCHEMA_JSON" \
   --permission-mode acceptEdits \
-  "$PROMPT" >"$RAW" 2>"$OUT_DIR/claudefast.stderr.log"
+  --disallowedTools "Read,Bash,Glob,Grep,Edit,Write,NotebookEdit,Task" \
+  -- "$PROMPT" >"$RAW" 2>"$OUT_DIR/claudefast.stderr.log"
+
+grep -F "Loading skills from:" "$DEBUG" | grep -F "$REPO_ROOT/.claude/skills" >/dev/null || {
+  echo "FATAL: Claude Code did not load project skill dir $REPO_ROOT/.claude/skills" >&2
+  echo "       see $DEBUG" >&2
+  exit 1
+}
+grep -F "skill 'canary' from projectSettings" "$DEBUG" >/dev/null || {
+  echo "FATAL: Claude Code did not register projectSettings skill 'canary'" >&2
+  echo "       see $DEBUG" >&2
+  exit 1
+}
 
 echo "[3/3] extract .result, take first JSON object only, normalize"
 EXTRACTED="$OUT_DIR/claudefast.json"

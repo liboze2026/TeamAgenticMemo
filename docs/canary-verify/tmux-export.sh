@@ -66,19 +66,23 @@ fi
 # Avoid -l (literal/paste) — Claude Code TUI treats bracketed paste as a
 # multi-line block and Enter inside paste does not submit. Send keys one
 # at a time, then Enter on its own to trigger submit.
-PROMPT='Read the YAML frontmatter at .claude/skills/canary/SKILL.md and print only the values of name, version, and the first three trigger phrases. No prose.'
+#
+# The prompt asks the model to confirm canary is in its registered skill
+# list by emitting a small JSON object with a stable status field,
+# WITHOUT reading the SKILL.md file. This mirrors the headless verifiers
+# and proves the interactive runtime also discovers the skill.
+PROMPT='Without reading any file from disk, confirm whether you have a registered skill named exactly canary. Use only your in-memory skill registry. Output JSON only with keys registered, name, and status. status must be found when registered is true, otherwise missing.'
 tmux send-keys -t "$SESSION" "$PROMPT"
 sleep 1
 tmux send-keys -t "$SESSION" Enter
 
 # Step D: wait for the assistant's actual answer in the pane.
-# IMPORTANT: do NOT grep on plain 'canary' — that substring is also in
-# the user prompt ("/canary/SKILL.md"), and tmux echoes the prompt into
-# the pane immediately, so it would match before the model has produced
-# anything. Match only on tokens that appear in the answer body and not
-# in the prompt: 'name: canary' (key:value form, prompt has only "name,")
-# and the literal '1.0.0' version (the prompt does not mention any version).
-if ! wait_for_grep '(name: canary|version: 1\.0\.0)' 240; then
+# IMPORTANT: do NOT grep on plain 'canary' — that substring also appears in
+# the user prompt and tmux echoes the prompt into the pane immediately, so
+# it would match before the model has produced anything.
+# The exact JSON fragment below does not appear in the prompt, so it only
+# appears once the model has produced an answer.
+if ! wait_for_grep '"status"[[:space:]]*:[[:space:]]*"found"' 240; then
   dump_pane
   echo "FAIL: model did not produce assistant answer within 240s" >&2
   echo "      pane dump: $PANE_DUMP" >&2

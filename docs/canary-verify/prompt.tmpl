@@ -1,16 +1,29 @@
-You are a JSON extractor. Read the YAML frontmatter (between the first two `---` markers) of this file:
+You are a JSON extractor inspecting your own runtime's in-memory skill registry.
 
-  __SKILL_PATH__
+DO NOT read any file from disk. DO NOT use Read, Bash, Glob, Grep, Edit, or
+Write. Use ONLY the list of skills currently available to you (the skill
+registry exposed by your runtime's system prompt / preamble).
 
-Output ONLY a single JSON object on stdout, with no prose, no markdown fence, no leading/trailing text.
+Find the skill whose name is exactly "canary". Output ONLY one JSON object on
+stdout, no prose, no markdown fence, matching this exact shape:
 
-The JSON object MUST have exactly these keys, with these types and rules:
+  {
+    "registered": <true|false>,
+    "name": <string|null>,
+    "status": "found" | "missing"
+  }
 
-  - "name"          : string, the `name:` field verbatim.
-  - "version"       : string, the `version:` field verbatim.
-  - "preamble_tier" : integer, the `preamble-tier:` field as an integer.
-  - "allowed_tools" : array of strings, the `allowed-tools:` list, sorted ascending (case-sensitive).
-  - "triggers"      : array of strings, the `triggers:` list, sorted ascending (case-sensitive).
+Rules:
+  - "registered" is true iff a skill named exactly "canary" appears in your
+    runtime's registered skill list.
+  - "name" is the registered skill name verbatim (case-sensitive), or null when
+    not registered.
+  - "status" is "found" when registered is true, otherwise "missing".
+  - Do NOT include any description text. Some runtimes summarize descriptions,
+    so description strings are intentionally outside this contract.
 
-Do NOT include the `description:` field, do NOT include any extra keys, do NOT add comments.
-Do NOT wrap in ```json fences. Output the raw JSON object only.
+If you do not have a skill named "canary" registered, output exactly:
+
+  {"registered": false, "name": null, "status": "missing"}
+
+Output the JSON object only.

@@ -1,17 +1,5 @@
 {
-  "allowed_tools": [
-    "AskUserQuestion",
-    "Bash",
-    "Glob",
-    "Read",
-    "Write"
-  ],
   "name": "canary",
-  "preamble_tier": 2,
-  "triggers": [
-    "canary check",
-    "monitor after deploy",
-    "watch for errors post-deploy"
-  ],
-  "version": "1.0.0"
+  "registered": true,
+  "status": "found"
 }

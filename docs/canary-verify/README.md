@@ -32,7 +32,7 @@ installed and discoverable by both project-level skill loaders.
 | File | Purpose |
 | ---- | ------- |
 | `schema.json` | JSON Schema both verifiers must produce. |
-| `prompt.tmpl` | Same prompt sent to both runtimes (`__SKILL_PATH__` placeholder). |
+| `prompt.tmpl` | Same registry-only prompt sent to both runtimes. |
 | `verify-claudefast.sh` | Verifier 1: `claude --help`, then `claudefast -p --output-format json --json-schema ...`. |
 | `verify-codex.sh` | Verifier 2: `codex --help`, then `codex exec --json --output-schema ...`. |
 | `hardmatch.sh` | Verifier 3a: `diff <(jq -S claudefast.json) <(jq -S codex.json)`. |
@@ -59,26 +59,30 @@ proves the binary is reachable before any model call.
 2. `runs/codex.json` validates against `schema.json`.
 3. `hardmatch.sh` exits 0 (canonical jq-sorted JSON is byte-equal).
 4. `tmux-export.sh` produces `exports/canary-session.txt` containing
-   the canary frontmatter values quoted by `claudefast` interactively.
+   registry-only JSON from `claudefast` interactively.
 
 ## Current canonical JSON (last run)
 
 ```json
 {
-  "allowed_tools": ["AskUserQuestion", "Bash", "Glob", "Read", "Write"],
   "name": "canary",
-  "preamble_tier": 2,
-  "triggers": [
-    "canary check",
-    "monitor after deploy",
-    "watch for errors post-deploy"
-  ],
-  "version": "1.0.0"
+  "registered": true,
+  "status": "found"
 }
 ```
 
 ## Notes
 
+- The model prompt deliberately forbids reading files and asks only about the
+  in-memory registered skill list. The JSON contract avoids description text,
+  because Claude Code and Codex may summarize registered descriptions
+  differently even when the skill is loaded.
+- `verify-claudefast.sh` also writes `runs/claudefast.debug.log` and asserts
+  the debug line `Loading skills from:` contains this repo's
+  `.claude/skills` directory. That proves Claude Code's project skill loader
+  looked at the project-level skill directory before the model answered. It
+  also asserts the debug log mentions projectSettings skill `canary`, proving
+  the specific project-level skill was registered.
 - `claudefast` is a zsh function (defined in `~/.zshrc`) wrapping `claude`
   with a MiniMax-Anthropic-compatible profile. Verifier 1 uses
   `zsh -ic 'claudefast ...'` to load it. The wrapper's API token must

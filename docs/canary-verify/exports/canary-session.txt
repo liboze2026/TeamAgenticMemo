@@ -2,17 +2,16 @@
 ▝▜█████▛▘  MiniMax-M2.7-highspeed · API Usage Billing
   ▘▘ ▝▝    ~/projects/TeamBrain
 
-❯ Read the YAML frontmatter at .claude/skills/canary/SKILL.md and print only    
-  the values of name, version, and the first three trigger phrases. No prose.   
+❯ Without reading any file from disk, confirm whether you have a registered
+  skill named exactly canary. Use only your in-memory skill registry. Output
+  JSON only with keys registered, name, and status. status must be found when
+  registered is true, otherwise missing.
 
-  Read 1 file (ctrl+o to expand)
-
-⏺ name: canary
-  version: 1.0.0
-  triggers:
-    - monitor after deploy
-    - canary check
-    - watch for errors post-deploy
+⏺ {
+    "registered": true,
+    "name": "canary",
+    "status": "found"
+  }
   ⎿  Stop says: [laziness-guard] BLOCKED: missing or malformed self-report (no <laziness-self-report> block found)
 
 ⏺ Ran 7 stop hooks (ctrl+o to expand)
@@ -34,11 +33,18 @@
   appended. If any bool is true, you must continue the work in the same
   turn instead of stopping.
 
-⏺ name: canary
-  version: 1.0.0
-  triggers:
-    - monitor after deploy
-    - canary check
-    - watch for errors post-deploy
+⏺ {
+    "registered": true,
+    "name": "canary",
+    "status": "found"
+  }
+  <laziness-self-report>
+  premature_stopping: false
+  permission_seeking: false
+  ownership_dodging: false
+  simplest_fix: false
+  reasoning_loop: false
+  known_limitation: false
+  </laziness-self-report>
 
-✻ Churned for 23s
+✻ Worked for 12s
