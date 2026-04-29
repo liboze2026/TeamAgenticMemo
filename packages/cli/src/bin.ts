@@ -461,6 +461,12 @@ async function main(): Promise<void> {
       const result = await runWarmup();
       process.exit(result.ok ? 0 : 1);
     }
+    case "migrate-auto": {
+      const { runMigrateAuto } = await import("./commands/migrate-auto.js");
+      const r = await runMigrateAuto();
+      process.stderr.write(JSON.stringify(r, null, 2) + "\n");
+      process.exit(r.ok ? 0 : 1);
+    }
     case "pair": {
       const parsed = parsePairArgs(rest);
       if (parsed.subcommand === "capsule") {
