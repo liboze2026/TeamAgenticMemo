@@ -1,6 +1,6 @@
 zsh -ic 'claudefast'
 
-TeamBrain on  claude/wip [?] via  v22.21.1
+TeamBrain on  claude/wip [!] via  v22.21.1
 ❯ zsh -ic 'claudefast'
  ▐▛███▜▌   Claude Code v2.1.122
 ▝▜█████▛▘  MiniMax-M2.7-highspeed · API Usage Billing
@@ -13,9 +13,9 @@ TeamBrain on  claude/wip [?] via  v22.21.1
 ⏺ name: canary
   version: 1.0.0
   triggers:
-  - monitor after deploy
-  - canary check
-  - watch for errors post-deploy
+    - monitor after deploy
+    - canary check
+    - watch for errors post-deploy
   ⎿  Stop says: [laziness-guard] BLOCKED: missing or malformed self-report (no <laziness-self-report> block found)
 
 ⏺ Ran 7 stop hooks (ctrl+o to expand)
@@ -36,11 +36,11 @@ TeamBrain on  claude/wip [?] via  v22.21.1
 ⏺ name: canary
   version: 1.0.0
   triggers:
-  - monitor after deploy
-  - canary check
-  - watch for errors post-deploy
+    - monitor after deploy
+    - canary check
+    - watch for errors post-deploy
 
-✻ Crunched for 41s
+✻ Cogitated for 23s
 
 ❯ /export /Users/m1/projects/TeamBrain/docs/canary-verify/exports/canary-session.txt
   ⎿  Conversation exported to: /Users/m1/projects/TeamBrain/docs/canary-verify/exports/canary-session.txt

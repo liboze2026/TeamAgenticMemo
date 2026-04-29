@@ -71,10 +71,16 @@ tmux send-keys -t "$SESSION" "$PROMPT"
 sleep 1
 tmux send-keys -t "$SESSION" Enter
 
-# Step D: wait for canary content in the pane.
-if ! wait_for_grep '(canary|version: 1\.0\.0|name: canary|monitor after deploy)' 240; then
+# Step D: wait for the assistant's actual answer in the pane.
+# IMPORTANT: do NOT grep on plain 'canary' — that substring is also in
+# the user prompt ("/canary/SKILL.md"), and tmux echoes the prompt into
+# the pane immediately, so it would match before the model has produced
+# anything. Match only on tokens that appear in the answer body and not
+# in the prompt: 'name: canary' (key:value form, prompt has only "name,")
+# and the literal '1.0.0' version (the prompt does not mention any version).
+if ! wait_for_grep '(name: canary|version: 1\.0\.0)' 240; then
   dump_pane
-  echo "FAIL: model did not produce expected canary content within 240s" >&2
+  echo "FAIL: model did not produce assistant answer within 240s" >&2
   echo "      pane dump: $PANE_DUMP" >&2
   exit 3
 fi

@@ -10,9 +10,9 @@
 ⏺ name: canary
   version: 1.0.0
   triggers:
-  - monitor after deploy
-  - canary check
-  - watch for errors post-deploy
+    - monitor after deploy
+    - canary check
+    - watch for errors post-deploy
   ⎿  Stop says: [laziness-guard] BLOCKED: missing or malformed self-report (no <laziness-self-report> block found)
 
 ⏺ Ran 7 stop hooks (ctrl+o to expand)
@@ -37,8 +37,8 @@
 ⏺ name: canary
   version: 1.0.0
   triggers:
-  - monitor after deploy
-  - canary check
-  - watch for errors post-deploy
+    - monitor after deploy
+    - canary check
+    - watch for errors post-deploy
 
-✻ Worked for 41s
+✻ Churned for 23s
