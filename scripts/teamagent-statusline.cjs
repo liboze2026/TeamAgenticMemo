@@ -113,7 +113,7 @@ function getLastLearnedDate(db) {
 }
 
 const HELPED_EVENT_KINDS = [
-  "hook-pre.matched",
+  "hook-pre.passive_matched", // 静默命中（passive 规则）—— PreToolUse 实际发出的"matched"事件
   "hook-pre.warned",
   "hook-pre.blocked",
   "hook-post.result",
@@ -136,7 +136,7 @@ const RISK_EVENT_KINDS = [
 ];
 
 const CONTRIBUTION_HINTS = {
-  "hook-pre.matched": "刚命中规则",
+  "hook-pre.passive_matched": "刚静默命中规则",
   "hook-pre.warned": "刚提醒风险",
   "hook-pre.blocked": "刚拦截风险",
   "hook-post.result": "刚记录执行结果",
