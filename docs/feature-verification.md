@@ -105,3 +105,24 @@ jq -S . claudefast.json > claudefast.sorted.json
 jq -S . codex.json > codex.sorted.json
 diff -u claudefast.sorted.json codex.sorted.json
 ```
+
+
+## Claude stream-json + tmux 固定脚本（haiku / MiniMax）
+
+当需求明确要求 `claude -p --bypass --model haiku`、`stream-json`、硬匹配产品特性、以及 tmux 交互 `/export` 时，直接使用：
+
+```bash
+bash docs/feature-verify-kit/run-all.sh
+```
+
+脚本会执行：
+
+1. `verify-claude-stream-json.sh`：`claude -p --bypass --model haiku --output-format stream-json` + JSON schema。
+2. `hardmatch-features.sh`：对 `fixtures/expected-product-features.json` 做 `jq -S` 后 `diff -u` 硬匹配。
+3. `verify-tmux-interactive.sh`：tmux 启动 `claudefast` 交互模式并执行 `/export`。
+
+固定验收问句：
+
+```text
+EXPLAIN ONLY: how do we use claude stream json and tmux + interactive claude to verify if our features work ?
+```
