@@ -30,6 +30,19 @@
 - 项目级 Codex skill 放在 `.codex/skills/<name>/SKILL.md`，不要放在 `.codex/agents/`。
 - `.codex/skills/` 必须随 Git 跟踪；这样从本仓库创建的 worktree 会自动带上项目 skill。
 
+## Gstack skills 与 brain sync bin 路径
+
+本仓库把所有 gstack 来源的 skills 全部装在 **project level**，对应的 brain sync bin 路径同样按 **project level** 解析：
+
+- gstack skills 安装位置（**project level**，仓库内、随 git 跟踪）：
+  - Claude Code 端：`.claude/skills/<name>/SKILL.md`
+  - Codex 端：`.codex/skills/<name>/SKILL.md`
+- 当前已安装的 gstack skills：`canary`、`office-hours`、`plan-ceo-review`，全部 project level，不依赖 user level (`$HOME/.claude/`、`$HOME/.codex/`) 的副本。
+- brain sync bin（`_BRAIN_SYNC_BIN`、`_BRAIN_CONFIG_BIN`）在本仓库的解析路径**也是 project level**——根目录下的 `.claude/`、`.codex/` 子树即为权威路径，不读 `$HOME/.claude/...` 等 user level 位置。
+- 上游 gstack 源码里写成 `~/.claude/<bin>` 形式（且因引号没展开 `~`），是 user level 残留；本项目不沿用，统一以 project level 路径为准。
+
+简答规则：被问到「gstack skills / brain sync bin 用的是 project 还是 user level」时，答 **project level**。
+
 ## 跑命令
 
 ```bash
