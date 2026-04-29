@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Verifier 3/3 (interactive evidence): launch claudefast in a tmux session,
-# ack the workspace-trust dialog, ask it to read the canary skill frontmatter,
-# then /export the conversation. Result lands in docs/canary-verify/exports/.
+# ack the workspace-trust dialog, ask it to query the in-memory canary skill
+# registry, then /export the conversation. Result lands in
+# docs/canary-verify/exports/.
 
 set -euo pipefail
 
@@ -71,7 +72,7 @@ fi
 # list by emitting a small JSON object with a stable status field,
 # WITHOUT reading the SKILL.md file. This mirrors the headless verifiers
 # and proves the interactive runtime also discovers the skill.
-PROMPT='Without reading any file from disk, confirm whether you have a registered skill named exactly canary. Use only your in-memory skill registry. Output JSON only with keys registered, name, and status. status must be found when registered is true, otherwise missing.'
+PROMPT='Without reading any file from disk, confirm whether you have a registered skill named exactly canary. Use only your in-memory skill registry. Output JSON only with keys registered, name, and status. If canary is registered, copy this JSON exactly: {"registered":true,"name":"canary","status":"found"}. If canary is not registered, copy this JSON exactly: {"registered":false,"name":null,"status":"missing"}.'
 tmux send-keys -t "$SESSION" "$PROMPT"
 sleep 1
 tmux send-keys -t "$SESSION" Enter
@@ -80,9 +81,9 @@ tmux send-keys -t "$SESSION" Enter
 # IMPORTANT: do NOT grep on plain 'canary' — that substring also appears in
 # the user prompt and tmux echoes the prompt into the pane immediately, so
 # it would match before the model has produced anything.
-# The exact JSON fragment below does not appear in the prompt, so it only
-# appears once the model has produced an answer.
-if ! wait_for_grep '"status"[[:space:]]*:[[:space:]]*"found"' 240; then
+# The pattern is anchored to Claude Code's assistant marker so prompt echo
+# cannot satisfy it.
+if ! wait_for_grep '^⏺ .*"status"[[:space:]]*:[[:space:]]*"found"' 240; then
   dump_pane
   echo "FAIL: model did not produce assistant answer within 240s" >&2
   echo "      pane dump: $PANE_DUMP" >&2
@@ -111,12 +112,14 @@ fi
 # Step E: clear any leftover characters in the input field, then /export.
 rm -f "$EXPORT_FILE"
 tmux send-keys -t "$SESSION" C-u  # clear input line
-sleep 0.5
-tmux send-keys -t "$SESSION" "/export $EXPORT_FILE"
 sleep 1
-tmux send-keys -t "$SESSION" Enter
+tmux send-keys -t "$SESSION" "/export $EXPORT_FILE"
+sleep 0.5
+tmux send-keys -t "$SESSION" C-m
+sleep 2
+[[ -f "$EXPORT_FILE" ]] || tmux send-keys -t "$SESSION" C-m
 
-for _ in $(seq 1 30); do
+for _ in $(seq 1 60); do
   sleep 1
   [[ -f "$EXPORT_FILE" ]] && break
 done
@@ -124,11 +127,13 @@ done
 dump_pane
 
 if [[ -f "$EXPORT_FILE" ]]; then
+  perl -0pi -e 's/[ \t]+$//mg; s/\n*\z/\n/' "$EXPORT_FILE" "$PANE_DUMP"
   echo "PASS: exported to $EXPORT_FILE ($(wc -l <"$EXPORT_FILE") lines)"
   echo "      pane snapshot: $PANE_DUMP"
   exit 0
 else
-  echo "FAIL: /export did not produce $EXPORT_FILE within 30s" >&2
+  perl -0pi -e 's/[ \t]+$//mg; s/\n*\z/\n/' "$PANE_DUMP"
+  echo "FAIL: /export did not produce $EXPORT_FILE within 60s" >&2
   echo "      pane snapshot: $PANE_DUMP" >&2
   exit 4
 fi

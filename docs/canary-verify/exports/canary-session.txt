@@ -4,14 +4,12 @@
 
 ❯ Without reading any file from disk, confirm whether you have a registered
   skill named exactly canary. Use only your in-memory skill registry. Output
-  JSON only with keys registered, name, and status. status must be found when
-  registered is true, otherwise missing.
+  JSON only with keys registered, name, and status. If canary is registered,
+  copy this JSON exactly: {"registered":true,"name":"canary","status":"found"}.
+   If canary is not registered, copy this JSON exactly:
+  {"registered":false,"name":null,"status":"missing"}.
 
-⏺ {
-    "registered": true,
-    "name": "canary",
-    "status": "found"
-  }
+⏺ {"registered":true,"name":"canary","status":"found"}
   ⎿  Stop says: [laziness-guard] BLOCKED: missing or malformed self-report (no <laziness-self-report> block found)
 
 ⏺ Ran 7 stop hooks (ctrl+o to expand)
@@ -33,18 +31,13 @@
   appended. If any bool is true, you must continue the work in the same
   turn instead of stopping.
 
-⏺ {
-    "registered": true,
-    "name": "canary",
-    "status": "found"
-  }
-  <laziness-self-report>
+⏺ {"registered":true,"name":"canary","status":"found"}
+
   premature_stopping: false
   permission_seeking: false
   ownership_dodging: false
   simplest_fix: false
   reasoning_loop: false
   known_limitation: false
-  </laziness-self-report>
 
-✻ Worked for 12s
+✻ Churned for 13s

@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-# Verifier 2/3: codex exec queries its own in-memory skill registry for a
-# skill named "canary" and emits a normalized JSON matching
-# docs/canary-verify/schema.json.
-#
-# Codex CLI does not expose a per-tool deny-list, so we rely on the prompt's
-# explicit "do not read any file" instruction plus a read-only sandbox. The
-# JSON schema deliberately omits any field that lives only in SKILL.md
-# (version, allowed-tools, triggers): that way, even if a model cheats and
-# opens the file, the answer it constructs is no stronger than what the
-# registry already exposes — the structure cannot mask a discovery failure.
+# Verifier 2/3: render Codex's model-visible prompt input and assert that the
+# in-memory skill registry contains this project's "canary" skill. This avoids
+# model/tool execution entirely, so the verifier cannot pass by reading
+# .codex/skills/canary/SKILL.md directly.
 #
 # Pre-step (per spec): MODULE --help first.
-# Output: docs/canary-verify/runs/codex.json (extracted JSON only)
+# Output: docs/canary-verify/runs/codex.json (normalized JSON only)
 #
 # This script MUST be run from the repo root.
 
@@ -39,24 +33,32 @@ echo "       wrote $OUT_DIR/codex.help.txt ($(wc -l <"$OUT_DIR/codex.help.txt") 
 
 PROMPT="$(cat "$PROMPT_TMPL")"
 
-echo "[2/3] codex exec --json --output-schema <schema> -o <last>"
-LAST="$OUT_DIR/codex.last.txt"
-EVENTS="$OUT_DIR/codex.events.jsonl"
+echo "[2/3] codex debug prompt-input (no model tools)"
+PROMPT_INPUT="$(mktemp)"
+trap 'rm -f "$PROMPT_INPUT"' EXIT
+codex debug prompt-input "$PROMPT" >"$PROMPT_INPUT" 2>"$OUT_DIR/codex.stderr.log"
 
-# `codex exec` reads stdin if attached; redirect from /dev/null to avoid hang.
-codex exec \
-  --json \
-  --skip-git-repo-check \
-  --sandbox read-only \
-  --output-schema "$SCHEMA_PATH" \
-  -o "$LAST" \
-  "$PROMPT" \
-  </dev/null \
-  >"$EVENTS" 2>"$OUT_DIR/codex.stderr.log"
-
-echo "[3/3] parse last message and normalize"
+echo "[3/3] assert registry entry and normalize"
 EXTRACTED="$OUT_DIR/codex.json"
-jq -S '.' "$LAST" >"$EXTRACTED"
+if jq -e --arg path "$SKILL_PATH" '
+  any(
+    .. | objects;
+    .type? == "input_text"
+    and (.text? | type == "string")
+    and (.text | contains("### Available skills"))
+    and (.text | contains("- canary:"))
+    and (.text | contains($path))
+  )
+' "$PROMPT_INPUT" >/dev/null; then
+  jq -n -S '{registered: true, name: "canary", status: "found"}' >"$EXTRACTED"
+else
+  jq -n -S '{registered: false, name: null, status: "missing"}' >"$EXTRACTED"
+fi
+
+jq -e '
+  (.registered == true and .name == "canary" and .status == "found")
+  or (.registered == false and .name == null and .status == "missing")
+' "$EXTRACTED" >/dev/null
 
 echo "OK -> $EXTRACTED"
 echo

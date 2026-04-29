@@ -1,4 +1,0 @@
-{"type":"thread.started","thread_id":"019dd73d-0257-7581-b408-4ece0d0f5fac"}
-{"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"registered\":true,\"name\":\"canary\",\"status\":\"found\"}"}}
-{"type":"turn.completed","usage":{"input_tokens":34640,"cached_input_tokens":2432,"output_tokens":69,"reasoning_output_tokens":43}}

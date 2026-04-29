@@ -34,10 +34,10 @@ installed and discoverable by both project-level skill loaders.
 | `schema.json` | JSON Schema both verifiers must produce. |
 | `prompt.tmpl` | Same registry-only prompt sent to both runtimes. |
 | `verify-claudefast.sh` | Verifier 1: `claude --help`, then `claudefast -p --output-format json --json-schema ...`. |
-| `verify-codex.sh` | Verifier 2: `codex --help`, then `codex exec --json --output-schema ...`. |
+| `verify-codex.sh` | Verifier 2: `codex --help`, then `codex debug prompt-input` registry assertion. |
 | `hardmatch.sh` | Verifier 3a: `diff <(jq -S claudefast.json) <(jq -S codex.json)`. |
 | `tmux-export.sh` | Verifier 3b: launches `claudefast` in tmux, asks about canary, runs `/export`. |
-| `runs/` | Help dumps + raw + extracted JSON from each runtime. |
+| `runs/` | Help dumps, verifier JSON outputs, and selected raw logs. |
 | `exports/` | `/export` transcript + tmux pane snapshot. |
 
 ## How to re-run
@@ -56,7 +56,7 @@ proves the binary is reachable before any model call.
 ## Pass criteria (all four MUST pass)
 
 1. `runs/claudefast.json` validates against `schema.json`.
-2. `runs/codex.json` validates against `schema.json`.
+2. `runs/codex.json` satisfies the same `registered/name/status` contract.
 3. `hardmatch.sh` exits 0 (canonical jq-sorted JSON is byte-equal).
 4. `tmux-export.sh` produces `exports/canary-session.txt` containing
    registry-only JSON from `claudefast` interactively.
@@ -77,6 +77,9 @@ proves the binary is reachable before any model call.
   in-memory registered skill list. The JSON contract avoids description text,
   because Claude Code and Codex may summarize registered descriptions
   differently even when the skill is loaded.
+- `verify-codex.sh` does not invoke a model. It inspects Codex's generated
+  prompt input for the project-level registry entry, so file reads by an agent
+  cannot create a false pass.
 - `verify-claudefast.sh` also writes `runs/claudefast.debug.log` and asserts
   the debug line `Loading skills from:` contains this repo's
   `.claude/skills` directory. That proves Claude Code's project skill loader

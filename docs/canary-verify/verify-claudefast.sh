@@ -52,6 +52,7 @@ claudefast -p \
   --permission-mode acceptEdits \
   --disallowedTools "Read,Bash,Glob,Grep,Edit,Write,NotebookEdit,Task" \
   -- "$PROMPT" >"$RAW" 2>"$OUT_DIR/claudefast.stderr.log"
+rm -f "$OUT_DIR/latest"
 
 grep -F "Loading skills from:" "$DEBUG" | grep -F "$REPO_ROOT/.claude/skills" >/dev/null || {
   echo "FATAL: Claude Code did not load project skill dir $REPO_ROOT/.claude/skills" >&2

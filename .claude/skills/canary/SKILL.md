@@ -325,8 +325,8 @@ Before calling AskUserQuestion, verify:
 ```bash
 _GSTACK_HOME="${GSTACK_HOME:-$HOME/.gstack}"
 _BRAIN_REMOTE_FILE="$HOME/.gstack-brain-remote.txt"
-_BRAIN_SYNC_BIN="~/.claude/skills/gstack/bin/gstack-brain-sync"
-_BRAIN_CONFIG_BIN="~/.claude/skills/gstack/bin/gstack-config"
+_BRAIN_SYNC_BIN="$HOME/.claude/skills/gstack/bin/gstack-brain-sync"
+_BRAIN_CONFIG_BIN="$HOME/.claude/skills/gstack/bin/gstack-config"
 
 _BRAIN_SYNC_MODE=$("$_BRAIN_CONFIG_BIN" get gbrain_sync_mode 2>/dev/null || echo off)
 

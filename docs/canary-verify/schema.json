@@ -23,5 +23,31 @@
       "enum": ["found", "missing"],
       "description": "found when registered is true, otherwise missing."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "registered": { "const": true } },
+        "required": ["registered"]
+      },
+      "then": {
+        "properties": {
+          "name": { "const": "canary" },
+          "status": { "const": "found" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "registered": { "const": false } },
+        "required": ["registered"]
+      },
+      "then": {
+        "properties": {
+          "name": { "type": "null" },
+          "status": { "const": "missing" }
+        }
+      }
+    }
+  ]
 }
