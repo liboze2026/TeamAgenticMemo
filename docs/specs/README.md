@@ -23,6 +23,6 @@ for newer milestone work.
 
 | Topic | Newer Location |
 | --- | --- |
-| Product roadmap | [../superpowers/specs/2026-04-22-product-roadmap-v3.md](../superpowers/specs/2026-04-22-product-roadmap-v3.md) |
+| Product roadmap | [../superpowers/specs/2026-04-30-roadmap-goal-verification.md](../superpowers/specs/2026-04-30-roadmap-goal-verification.md) |
 | Phase 3 design | [../superpowers/specs/2026-04-20-phase3-design.md](../superpowers/specs/2026-04-20-phase3-design.md) |
 | Semantic matcher | [../superpowers/specs/2026-04-24-m4b-semantic-matcher-design.md](../superpowers/specs/2026-04-24-m4b-semantic-matcher-design.md) |

@@ -10,7 +10,8 @@ roadmaps over older roadmaps when they disagree.
 | [2026-04-15-product-roadmap-v2.md](2026-04-15-product-roadmap-v2.md) | Earlier roadmap; useful for v2 assumptions. |
 | [2026-04-15-phase2-design-v2.md](2026-04-15-phase2-design-v2.md) | Phase 2 local single-user improvement design. |
 | [2026-04-20-phase3-design.md](2026-04-20-phase3-design.md) | Phase 3 readiness, doctor command, init UX, npm packaging. |
-| [2026-04-22-product-roadmap-v3.md](2026-04-22-product-roadmap-v3.md) | Latest roadmap in this folder. Start here for roadmap questions. |
+| [2026-04-30-roadmap-goal-verification.md](2026-04-30-roadmap-goal-verification.md) | Current roadmap: only final goal + verification criteria. |
+| [2026-04-22-product-roadmap-v3.md](2026-04-22-product-roadmap-v3.md) | Archived roadmap (historical context only). |
 
 ## Office-Hours Designs
 
