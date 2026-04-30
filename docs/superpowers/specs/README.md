@@ -11,6 +11,8 @@ roadmaps over older roadmaps when they disagree.
 | [2026-04-15-phase2-design-v2.md](2026-04-15-phase2-design-v2.md) | Phase 2 local single-user improvement design. |
 | [2026-04-20-phase3-design.md](2026-04-20-phase3-design.md) | Phase 3 readiness, doctor command, init UX, npm packaging. |
 | [2026-04-30-roadmap-goal-verification.md](2026-04-30-roadmap-goal-verification.md) | Current roadmap: only final goal + verification criteria. |
+| [2026-04-30-roadmap-goal-small-tasks.md](2026-04-30-roadmap-goal-small-tasks.md) | Split-out goal + small task checklist (extracted doc). |
+| [2026-04-30-roadmap-3rd-harness-verification.md](2026-04-30-roadmap-3rd-harness-verification.md) | Split-out third-party harness verification checklist (extracted doc). |
 | [2026-04-22-product-roadmap-v3.md](2026-04-22-product-roadmap-v3.md) | Archived roadmap (historical context only). |
 
 ## Office-Hours Designs
