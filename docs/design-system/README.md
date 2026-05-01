@@ -27,6 +27,13 @@ mistake -> capture -> compile rule -> enforce at runtime -> verify -> no repeat
 | B. Terminal Native | Product video, CLI demo, hook replay, dark execution scenes | [terminal-native.md](terminal-native.md) |
 | C. Knowledge Archive | Docs, trust, case studies, rule lineage, team handoff | [knowledge-archive.md](knowledge-archive.md) |
 
+## Implementation Guides
+
+| Guide | Use | File |
+|---|---|---|
+| Design tokens | Shared type, color, spacing, radius, and motion rules | [tokens.md](tokens.md) |
+| Video storyboard | 90-second launch video structure and shot language | [video-storyboard.md](video-storyboard.md) |
+
 ## Shared Rules
 
 - Use real engineering evidence: terminal, diff, hook event, `AGENTS.md`,
@@ -55,4 +62,3 @@ Files:
 - `design-board.html`
 
 These are user design artifacts, not project source files.
-
