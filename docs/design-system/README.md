@@ -33,6 +33,9 @@ mistake -> capture -> compile rule -> enforce at runtime -> verify -> no repeat
 |---|---|---|
 | Design tokens | Shared type, color, spacing, radius, and motion rules | [tokens.md](tokens.md) |
 | Video storyboard | 90-second launch video structure and shot language | [video-storyboard.md](video-storyboard.md) |
+| Homepage plan | Case A homepage sections and page copy | [homepage.md](homepage.md) |
+| Product video | Case B 90-second script and shot plan | [product-video.md](product-video.md) |
+| Trust docs page | Case C docs/trust sections and copy | [trust-docs-page.md](trust-docs-page.md) |
 
 ## Shared Rules
 
