@@ -5,6 +5,8 @@ Branch: main
 Repo: https://github.com/libz-renlab-ai/TeamBrain
 Status: APPROVED
 Mode: Startup
+Tags: gstack, office-hours, teambrain, claude-code-cli, onboarding
+Migrated-from: /Users/m1/.gstack/projects/libz-renlab-ai-TeamBrain/m1-main-design-20260501-092748.md
 
 ## Problem Statement
 
