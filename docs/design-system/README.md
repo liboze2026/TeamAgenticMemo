@@ -46,19 +46,27 @@ mistake -> capture -> compile rule -> enforce at runtime -> verify -> no repeat
 - Keep layouts dense enough for developers to trust, but not so dense that the
   first viewport becomes unreadable.
 
-## Generated Visual References
+## Project-Level Source Of Truth
 
-The consultation generated raster mockups in the local gstack artifact store:
+The project-level design source is now [../../DESIGN.md](../../DESIGN.md).
+Use that file first for implementation decisions, then use this directory for
+case-specific detail.
+
+## Project-Local Visual References
+
+The generated design artifacts have been copied into this repo:
 
 ```text
-~/.gstack/projects/libz-renlab-ai-TeamBrain/designs/design-system-20260501-085451/
+docs/design-system/artifacts/2026-05-01/
 ```
 
-Files:
+Key files:
 
-- `variant-A-evidence-console.png`
-- `variant-B-terminal-native.png`
-- `variant-C-knowledge-archive.png`
-- `design-board.html`
-
-These are user design artifacts, not project source files.
+- `mockups/variant-A-evidence-console.png`
+- `mockups/variant-B-terminal-native.png`
+- `mockups/variant-C-knowledge-archive.png`
+- `mockups/design-board.html`
+- `html-preview/finalized.html`
+- `html-preview/verify-desktop.png`
+- `html-preview/verify-tablet.png`
+- `html-preview/verify-mobile.png`
