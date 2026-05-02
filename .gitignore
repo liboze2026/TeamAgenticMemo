@@ -35,3 +35,7 @@ CLAUDE.md.tmp-*
 packages/*/.cache/
 # Chaos QA verification scratch scripts (paired with BUGS.md, not formal tests).
 chaos-verify*.mjs
+# FASTPROBE timestamped scratch dirs (raw .result/.jsonl from claudefast probes; regenerated per run).
+.fastprobe/
+# VERIFY judge-harness raw stdout/stderr/coverage/judge.json (transient evidence; bundle into PR if needed).
+.judge/

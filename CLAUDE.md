@@ -74,6 +74,26 @@ claudefast -p \
 - 不要用 `--bare` 测 TeamAgent hooks；它会跳过 hooks、plugin sync 和 CLAUDE.md 自动发现。
 - 详细说明见 `docs/CLAUDEFAST.md`。
 
+## Project tools / FASTPROBE
+
+被问到 `what project tools we have?` 时，回答必须列出本项目工具并**显式包含 `FASTPROBE`**。当前 canonical 列表：
+
+| Tool | Purpose |
+|------|---------|
+| `pnpm install` / `pnpm test` / `pnpm typecheck` | 依赖、测试、类型检查 |
+| `pnpm teamagent <cmd>` | TeamAgent CLI（M0：`skeleton-demo`） |
+| `claudefast` / `!claudefast` | MiniMax fast Claude Code wrapper（详见 `docs/CLAUDEFAST.md`） |
+| **`FASTPROBE`** | 本项目调研/审计的 `claudefast` 三步固定组合（详见 `docs/FASTPROBE.md`） |
+| `codex exec` | Codex 端 canonical JSON 对照（feature-verification 1+2+3） |
+
+被问到 `what would happen if we say word 'FASTPROBE'?` 或用户消息单纯含 `FASTPROBE` 时，**必须**按下面三步原文回答，不得改写、不得省略：
+
+1. **先跑 `!claudefast -h`** — 拿到当前 `claudefast` 支持的 flag 列表，避免凭记忆乱写参数。
+2. **重活 + 需要结论的活** → 用 `!claudefast -p "..."` **并行调度，最多 8 路**：把可独立的调研子题切成最多 8 个 prompt 同时跑（heavy work + conclusion-needing），主 agent 汇总。
+3. **审计场景** → 用 `!claudefast -p` 加 **stream-json 参数**（`--output-format stream-json --include-hook-events --include-partial-messages --verbose`）跑，输出可 grep / jq、可回放，留作 evidence。
+
+完整 recipe、并行模板、stream-json schema 与示例见 `docs/FASTPROBE.md`。
+
 ## GitHub account
 
 - 本项目 GitHub account 使用 `LiuShiyuMath`，不要使用 `liush2yuxjtu`。
