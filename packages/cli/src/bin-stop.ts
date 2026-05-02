@@ -241,10 +241,10 @@ export async function runStopPipeline(
 
   // Step 3: compile
   try {
-    process.stderr.write("TeamAgent: 编译 CLAUDE.md 中...\n");
+    process.stderr.write("TeamAgent: 编译规则中...\n");
     const r = await executeCompile({ cwd });
     process.stderr.write(
-      `TeamAgent: CLAUDE.md 已更新，Skills 导出 ${r.skills.written.length} 条\n`,
+      `TeamAgent: 规则已更新（${r.markdown.path}），Skills 导出 ${r.skills.written.length} 条\n`,
     );
     try {
       const { getRecentEntries } = await import("./commands/recent-entries.js");

@@ -5,7 +5,7 @@ import { execSync } from "node:child_process";
 import {
   ClaudeCodeLLMClient,
   DualLayerStore,
-  MarkdownCompiler,
+  createRuleCompiler,
 } from "@teamagent/adapters";
 import { parseInsightsReport } from "@teamagent/adapters/ingest/insights";
 import {
@@ -89,6 +89,7 @@ function resolvePaths(opts: IngestOptions) {
     userGlobalDbPath:
       opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
+    userRulesDir: path.join(home, ".claude", "teamagent", "rules"),
     candidatesDir: path.join(cwd, ".teamagent", "candidates"),
   };
 }
@@ -247,8 +248,11 @@ export async function executeIngest(opts: IngestOptions): Promise<string> {
   if (!dryRun && result.accepted.length > 0) {
     try {
       const all = dualStore.findActive();
-      new MarkdownCompiler(paths.claudeMdPath, () => now().toISOString())
-        .writeToFile(all);
+      createRuleCompiler({
+        claudeMdPath: paths.claudeMdPath,
+        rulesDir: paths.userRulesDir,
+        now: () => now().toISOString(),
+      }).writeToFile(all);
     } catch {
       // 重编译失败不算 fatal
     }

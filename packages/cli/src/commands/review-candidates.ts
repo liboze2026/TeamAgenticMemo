@@ -7,7 +7,7 @@ import {
   SqliteCandidateQueue,
   SqliteEventLog,
   openDb,
-  MarkdownCompiler,
+  createRuleCompiler,
   makeSkillCompiler,
 } from "@teamagent/adapters";
 import { runCalibrationPipeline, defaultCalibrator, runCompile } from "@teamagent/core";
@@ -39,6 +39,7 @@ export async function executeReviewCandidates(
   const eventsDbPath =
     opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db");
   const claudeMdPath = opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md");
+  const userRulesDir = path.join(home, ".claude", "teamagent", "rules");
   const now = opts.now ?? (() => new Date());
 
   const emitEvent = (evt: Omit<PersistedEvent, "schema_version">): void => {
@@ -152,7 +153,11 @@ export async function executeReviewCandidates(
         events: [],
         now,
       });
-      const mdCompiler = new MarkdownCompiler(claudeMdPath, () => now().toISOString());
+      const mdCompiler = createRuleCompiler({
+        claudeMdPath,
+        rulesDir: userRulesDir,
+        now: () => now().toISOString(),
+      });
       await runCompile({
         store,
         markdownCompiler: mdCompiler,

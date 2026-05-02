@@ -13,7 +13,7 @@ import {
   DualLayerStore,
   SqliteCandidateQueue,
   openDb,
-  MarkdownCompiler,
+  createRuleCompiler,
   makeSkillCompiler,
 } from "@teamagent/adapters";
 import { runCalibrationPipeline, defaultCalibrator, runCompile } from "@teamagent/core";
@@ -89,13 +89,16 @@ async function main(): Promise<void> {
         events: [],
         now,
       });
-      const mdCompiler = new MarkdownCompiler(claudeMdPath, () => now().toISOString());
+      const mdCompiler = createRuleCompiler({
+        claudeMdPath,
+        now: () => now().toISOString(),
+      });
       await runCompile({
         store,
         markdownCompiler: mdCompiler,
         skillCompiler: makeSkillCompiler(),
       });
-      process.stdout.write("✓ CLAUDE.md refreshed\n");
+      process.stdout.write("✓ rules refreshed\n");
     } catch (err) {
       process.stdout.write(`⚠ calibrate/compile failed: ${String(err).slice(0, 200)}\n`);
     }

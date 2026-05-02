@@ -380,15 +380,39 @@ export async function executeE2EEvaluate(
     const generalizations = probes.filter((p) => p.kind === "generalization");
     const negatives = probes.filter((p) => p.kind === "negative");
     const triggeredHelpful = probes.filter((p) => p.expectedTrigger && p.triggered);
-    const compiledClaudeMd = fs.existsSync(claudeMdPath);
-    const claudeMd = compiledClaudeMd ? fs.readFileSync(claudeMdPath, "utf-8") : "";
-    const claudeMdLower = claudeMd.toLowerCase();
-    const claudeMdHasRules = CASES.every((c) => claudeMdLower.includes(c.expectedCorrect.toLowerCase()));
+    // Issue #42: 默认走用户级 nested rule store；fallback 检查 CLAUDE.md（legacy 模式）
+    const userRulesDir = path.join(homeDir, ".claude", "teamagent", "rules");
+    const userRulesIndex = path.join(userRulesDir, "INDEX.md");
+    const nestedExists = fs.existsSync(userRulesIndex);
+    const claudeMdExists = fs.existsSync(claudeMdPath);
+    const compiledClaudeMd = nestedExists || claudeMdExists;
+    let combinedLower = "";
+    if (claudeMdExists) {
+      combinedLower += fs.readFileSync(claudeMdPath, "utf-8").toLowerCase();
+    }
+    if (nestedExists) {
+      // 把 nested rules 目录所有 .md 拼起来做包含性检查
+      const stack: string[] = [userRulesDir];
+      while (stack.length > 0) {
+        const dir = stack.pop()!;
+        for (const name of fs.readdirSync(dir)) {
+          const full = path.join(dir, name);
+          const stat = fs.statSync(full);
+          if (stat.isDirectory()) stack.push(full);
+          else if (full.endsWith(".md")) {
+            combinedLower += "\n" + fs.readFileSync(full, "utf-8").toLowerCase();
+          }
+        }
+      }
+    }
+    const claudeMdHasRules = CASES.every((c) =>
+      combinedLower.includes(c.expectedCorrect.toLowerCase()),
+    );
     const onboardingCoverage = CASES.length === 0
       ? 1
       : CASES.filter((c) =>
-          claudeMdLower.includes(c.expectedWrong.toLowerCase()) &&
-          claudeMdLower.includes(c.expectedCorrect.toLowerCase()),
+          combinedLower.includes(c.expectedWrong.toLowerCase()) &&
+          combinedLower.includes(c.expectedCorrect.toLowerCase()),
         ).length / CASES.length;
 
     const metrics = {
@@ -406,8 +430,8 @@ export async function executeE2EEvaluate(
     if (metrics.generalizationRate < 1) failures.push(`Generalization rate ${fmtPct(metrics.generalizationRate)} is below 100%.`);
     if (metrics.falsePositiveRate > 0) failures.push(`False positive rate ${fmtPct(metrics.falsePositiveRate)} is above 0%.`);
     if (metrics.helpfulRate < 1) failures.push(`Helpful message rate ${fmtPct(metrics.helpfulRate)} is below 100%.`);
-    if (!compiledClaudeMd) failures.push("CLAUDE.md was not compiled.");
-    if (!claudeMdHasRules) failures.push("CLAUDE.md does not contain every learned correction.");
+    if (!compiledClaudeMd) failures.push("Rules were not compiled (no CLAUDE.md and no nested rules INDEX).");
+    if (!claudeMdHasRules) failures.push("Compiled rules do not contain every learned correction.");
     if (metrics.onboardingCoverage < 1) failures.push(`Onboarding coverage ${fmtPct(metrics.onboardingCoverage)} is below 100%.`);
 
     const shouldClean = !opts.keepTemp && !opts.cwd && !opts.homeDir;

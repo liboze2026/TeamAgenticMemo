@@ -4,7 +4,7 @@ import fs from "node:fs";
 import {
   DualLayerStore,
   InMemoryAttributionBus,
-  MarkdownCompiler,
+  createRuleCompiler,
   StdoutRenderer,
   makeSkillCompiler,
   openDb,
@@ -62,6 +62,7 @@ function resolvePaths(opts: PitfallOptions) {
     userGlobalDbPath:
       opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
+    userRulesDir: path.join(home, ".claude", "teamagent", "rules"),
   };
 }
 
@@ -147,7 +148,11 @@ export async function executePitfall(
   // 重新编译 CLAUDE.md + skills —— 合并所有 scope 的活跃条目
   const compileResult = await runCompile({
     store,
-    markdownCompiler: new MarkdownCompiler(paths.claudeMdPath, () => now),
+    markdownCompiler: createRuleCompiler({
+      claudeMdPath: paths.claudeMdPath,
+      rulesDir: paths.userRulesDir,
+      now: () => now,
+    }),
     skillCompiler: makeSkillCompiler(),
   });
 

@@ -75,7 +75,7 @@ describe("executeInit", () => {
     expect(md).not.toContain("TEAMAGENT:START");
   });
 
-  it("happy path: preset + import + compile all succeed", async () => {
+  it("happy path: preset + import + compile all succeed (issue #42 nested rules)", async () => {
     nodeFs.writeFileSync(
       path.join(tmp.cwd, "CLAUDE.md"),
       "# Team rules\n- Prefer fetch over axios\n- Use pnpm\n",
@@ -99,17 +99,20 @@ describe("executeInit", () => {
     projectStore.close();
     expect(personalCount).toBe(2);
 
-    // CLAUDE.md has TEAMAGENT block
+    // 默认走用户级 nested rule store——CLAUDE.md 保留用户内容，无 TEAMAGENT block
     const md = nodeFs.readFileSync(path.join(tmp.cwd, "CLAUDE.md"), "utf-8");
-    expect(md).toContain("TEAMAGENT:START");
-    expect(md).toContain("TEAMAGENT:END");
+    expect(md).not.toContain("TEAMAGENT:START");
+    expect(md).toContain("# Team rules");
+    // Nested rule store at user home
+    const indexPath = path.join(tmp.home, ".claude", "teamagent", "rules", "INDEX.md");
+    expect(nodeFs.existsSync(indexPath)).toBe(true);
 
     expect(r.summary.presetAdded).toBe(8);
     expect(r.summary.importedRules).toBe(2);
     expect(r.summary.totalActiveEntries).toBeGreaterThanOrEqual(10);
   });
 
-  it("target=codex writes CLAUDE.md and links AGENTS.md + .codex/skills", async () => {
+  it("target=codex writes nested rules and links AGENTS.md to rules/INDEX.md (issue #42)", async () => {
     const r = await executeInit({
       ...commonOpts(),
       target: "codex",
@@ -119,15 +122,18 @@ describe("executeInit", () => {
     expect(r.ok).toBe(true);
     expect(r.steps.find((s) => s.step === "compile-claude-md")?.status).toBe("ok");
     expect(r.steps.find((s) => s.step === "link-codex-files")?.status).toBe("ok");
-    const claudePath = path.join(tmp.cwd, "CLAUDE.md");
+    const indexPath = path.join(tmp.home, ".claude", "teamagent", "rules", "INDEX.md");
     const agentsPath = path.join(tmp.cwd, "AGENTS.md");
     const codexSkillsPath = path.join(tmp.cwd, ".codex", "skills");
     const teamagentSkillsPath = path.join(tmp.home, ".claude", "skills", "teamagent");
-    const agents = nodeFs.readFileSync(agentsPath, "utf-8");
-    expect(agents).toContain("TEAMAGENT:START");
-    expect(agents).toContain("TEAMAGENT:END");
+    expect(nodeFs.existsSync(indexPath)).toBe(true);
+    // Codex AGENTS.md 现在是指向 nested INDEX.md 的软链
     expect(nodeFs.lstatSync(agentsPath).isSymbolicLink()).toBe(true);
-    expect(path.resolve(tmp.cwd, nodeFs.readlinkSync(agentsPath))).toBe(claudePath);
+    expect(path.resolve(path.dirname(agentsPath), nodeFs.readlinkSync(agentsPath))).toBe(indexPath);
+    const agents = nodeFs.readFileSync(agentsPath, "utf-8");
+    expect(agents).toContain("# TeamAgent Rules");
+    // CLAUDE.md 不再被写入
+    expect(nodeFs.existsSync(path.join(tmp.cwd, "CLAUDE.md"))).toBe(false);
     expect(nodeFs.lstatSync(codexSkillsPath).isSymbolicLink()).toBe(true);
     expect(path.resolve(tmp.cwd, ".codex", nodeFs.readlinkSync(codexSkillsPath))).toBe(
       teamagentSkillsPath,
@@ -161,7 +167,7 @@ describe("executeInit", () => {
     });
   });
 
-  it("target=both writes CLAUDE.md and links AGENTS.md", async () => {
+  it("target=both writes nested rules and links AGENTS.md to rules/INDEX.md (issue #42)", async () => {
     const r = await executeInit({
       ...commonOpts(),
       target: "both",
@@ -170,10 +176,12 @@ describe("executeInit", () => {
     });
 
     expect(r.ok).toBe(true);
-    expect(nodeFs.readFileSync(path.join(tmp.cwd, "CLAUDE.md"), "utf-8")).toContain("TEAMAGENT:START");
+    expect(nodeFs.existsSync(path.join(tmp.cwd, "CLAUDE.md"))).toBe(false);
+    const indexPath = path.join(tmp.home, ".claude", "teamagent", "rules", "INDEX.md");
+    expect(nodeFs.existsSync(indexPath)).toBe(true);
     const agentsPath = path.join(tmp.cwd, "AGENTS.md");
-    expect(nodeFs.readFileSync(agentsPath, "utf-8")).toContain("TEAMAGENT:START");
     expect(nodeFs.lstatSync(agentsPath).isSymbolicLink()).toBe(true);
+    expect(nodeFs.readFileSync(agentsPath, "utf-8")).toContain("# TeamAgent Rules");
   });
 
   it("idempotent: running init twice doesn't duplicate presets", async () => {

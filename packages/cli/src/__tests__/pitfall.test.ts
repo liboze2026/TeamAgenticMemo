@@ -68,7 +68,7 @@ describe("executePitfall", () => {
     expect(entry.scope.level).toBe("personal");
   });
 
-  it("creates CLAUDE.md with TEAMAGENT block", async () => {
+  it("creates nested rule store at user level (issue #42 default)", async () => {
     await executePitfall(
       {
         trigger: "t",
@@ -79,14 +79,15 @@ describe("executePitfall", () => {
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {}, embedder: stubEmbedder },
     );
 
-    const mdPath = path.join(tmp.cwd, "CLAUDE.md");
-    expect(fs.existsSync(mdPath)).toBe(true);
-    const content = fs.readFileSync(mdPath, "utf-8");
-    expect(content).toContain("TEAMAGENT:START");
-    expect(content).toContain("使用 c 而非 w");
+    // CLAUDE.md must NOT be touched by default
+    expect(fs.existsSync(path.join(tmp.cwd, "CLAUDE.md"))).toBe(false);
+    // Nested rules dir is populated under user home
+    const indexPath = path.join(tmp.home, ".claude", "teamagent", "rules", "INDEX.md");
+    expect(fs.existsSync(indexPath)).toBe(true);
+    expect(fs.readFileSync(indexPath, "utf-8")).toContain("# TeamAgent Rules");
   });
 
-  it("preserves existing CLAUDE.md content when updating", async () => {
+  it("preserves existing CLAUDE.md content (nested mode doesn't touch it)", async () => {
     const mdPath = path.join(tmp.cwd, "CLAUDE.md");
     fs.writeFileSync(mdPath, "# My Project\n\nRule: always X\n", "utf-8");
 
@@ -96,9 +97,7 @@ describe("executePitfall", () => {
     );
 
     const content = fs.readFileSync(mdPath, "utf-8");
-    expect(content).toContain("# My Project");
-    expect(content).toContain("Rule: always X");
-    expect(content).toContain("TEAMAGENT:START");
+    expect(content).toBe("# My Project\n\nRule: always X\n");
   });
 
   it("returns attribution block in smart mode by default", async () => {
@@ -115,14 +114,15 @@ describe("executePitfall", () => {
     expect(out).toContain("添加知识条目");
     expect(out).toContain("知识库变化: 0 → 1 条");
     expect(out).toContain("传播到:");
-    expect(out).toContain("CLAUDE.md");
+    // Default propagation now points to nested rules store, not CLAUDE.md
+    expect(out).toMatch(/传播到:.*rules.*INDEX\.md/);
     expect(out).toContain("dayjs");
   });
 
-  // B-065: avoidance pitfall 实际写入 CLAUDE.md 知识块；归因消息以前
-  // 硬编码 count: 0 → 显示 "第 0 行"，让用户怀疑规则没生效。修复后
-  // count 应反映实际写入的块行数 ≥ 1。
-  it("avoidance pitfall: 传播到 显示真实的 CLAUDE.md 行数 (>0, 不再是 '第 0 行')", async () => {
+  // B-065: avoidance pitfall 实际写入规则文件，归因消息以前硬编码
+  // count: 0 → 显示 "第 0 行"，让用户怀疑规则没生效。修复后 count 应
+  // 反映实际写入的文件数 ≥ 1。
+  it("avoidance pitfall: 传播到 显示真实的 rule store 计数 (>0, 不再是 '第 0 行')", async () => {
     const out = await executePitfall(
       {
         trigger: "moment 用法",
@@ -132,12 +132,12 @@ describe("executePitfall", () => {
       },
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {}, embedder: stubEmbedder },
     );
-    // 显示到 CLAUDE.md
-    expect(out).toMatch(/传播到:.*CLAUDE\.md/);
+    // Default 出口是 nested rules 的 INDEX.md
+    expect(out).toMatch(/传播到:.*INDEX\.md/);
     // 不再显示 "第 0 行"
-    expect(out).not.toMatch(/CLAUDE\.md\s*第\s*0\s*行/);
-    // 真实写入的块至少 1 行
-    expect(out).toMatch(/CLAUDE\.md\s*第\s*[1-9]\d*\s*行/);
+    expect(out).not.toMatch(/INDEX\.md\s*第\s*0\s*行/);
+    // 真实写入的 artifact 数至少 1
+    expect(out).toMatch(/INDEX\.md\s*第\s*[1-9]\d*\s*行/);
   });
 
   // B-065: practice pitfall (无 wrong_pattern) 不进 CLAUDE.md，只

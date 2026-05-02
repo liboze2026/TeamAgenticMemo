@@ -28,6 +28,15 @@ export {
   type CompileWriteInfo,
 } from "./compiler/markdown-compiler.js";
 export {
+  NestedRuleStoreCompiler,
+  type NestedRuleStoreCompilerOptions,
+  type NestedRuleStoreWriteInfo,
+} from "./compiler/nested-rule-store.js";
+export {
+  createRuleCompiler,
+  type CreateRuleCompilerOptions,
+} from "./compiler/rule-compiler-factory.js";
+export {
   ClaudeSessionSource,
   parseSessionFile,
 } from "./session-source/claude-session-source.js";

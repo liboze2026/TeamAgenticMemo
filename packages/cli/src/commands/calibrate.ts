@@ -5,7 +5,7 @@ import {
   SqliteEventLog,
   SqliteKnowledgeStore,
   DualLayerStore,
-  MarkdownCompiler,
+  createRuleCompiler,
   openDb,
   makeSkillCompiler,
 } from "@teamagent/adapters";
@@ -63,6 +63,7 @@ function resolvePaths(opts: CalibrateOptions) {
     eventsDbPath:
       opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db"),
     claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
+    userRulesDir: path.join(home, ".claude", "teamagent", "rules"),
   };
 }
 
@@ -288,7 +289,11 @@ export async function executeCalibrate(
     try {
       await runCompile({
         store: dualStore,
-        markdownCompiler: new MarkdownCompiler(paths.claudeMdPath, () => nowDate.toISOString()),
+        markdownCompiler: createRuleCompiler({
+          claudeMdPath: paths.claudeMdPath,
+          rulesDir: paths.userRulesDir,
+          now: () => nowDate.toISOString(),
+        }),
         skillCompiler: makeSkillCompiler(),
       });
     } catch {

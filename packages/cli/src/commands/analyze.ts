@@ -6,7 +6,7 @@ import {
   ClaudeCodeLLMClient,
   DualLayerStore,
   SqliteEventLog,
-  MarkdownCompiler,
+  createRuleCompiler,
   openDb,
   makeSkillCompiler,
   syncRuleVectors,
@@ -209,6 +209,7 @@ async function runCommit(
   const eventsDbPath =
     opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db");
   const claudeMdPath = opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md");
+  const userRulesDir = path.join(home, ".claude", "teamagent", "rules");
 
   fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
   fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
@@ -231,7 +232,11 @@ async function runCommit(
   const recompile = async (_activeFromProject: KnowledgeEntry[]): Promise<void> => {
     await runCompile({
       store: dualStore,
-      markdownCompiler: new MarkdownCompiler(claudeMdPath, () => now().toISOString()),
+      markdownCompiler: createRuleCompiler({
+        claudeMdPath,
+        rulesDir: userRulesDir,
+        now: () => now().toISOString(),
+      }),
       skillCompiler: makeSkillCompiler(),
     });
   };

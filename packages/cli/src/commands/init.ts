@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   DualLayerStore,
   SqliteKnowledgeStore,
-  MarkdownCompiler,
+  createRuleCompiler,
   ClaudeCodeLLMClient,
   openDb,
   ClaudePluginInstaller,
@@ -101,6 +101,7 @@ function resolvePaths(opts: InitOptions) {
       opts.skillsDir ??
       process.env["TEAMAGENT_SKILLS_DIR"] ??
       path.join(home, ".claude", "skills", "teamagent"),
+    userRulesDir: path.join(home, ".claude", "teamagent", "rules"),
     installLogPath: path.join(home, ".teamagent", ".install-log"),
   };
 }
@@ -650,7 +651,11 @@ function doCompileMarkdownDoc(
     });
     const all = store.findActive();
     store.close();
-    const compiler = new MarkdownCompiler(mdPath, () => now().toISOString());
+    const compiler = createRuleCompiler({
+      claudeMdPath: mdPath,
+      rulesDir: paths.userRulesDir,
+      now: () => now().toISOString(),
+    });
     const info = compiler.writeToFile(all);
     return okStep(
       stepName,
@@ -696,11 +701,21 @@ function doLinkCodexFiles(
   paths: ReturnType<typeof resolvePaths>,
   dryRun: boolean,
 ): InitStepResult {
+  // Issue #42: 默认 nested 模式下 CLAUDE.md 不再被写入；让 AGENTS.md 指向用户级
+  // nested rule store 的 INDEX.md，Codex 仍可顺着这个入口找到全部规则。
+  // Legacy 模式（TEAMAGENT_LEGACY_CLAUDE_MD=1）继续把 AGENTS.md 链到 CLAUDE.md。
+  const legacyEnv = process.env["TEAMAGENT_LEGACY_CLAUDE_MD"];
+  const legacy =
+    legacyEnv === "1" || legacyEnv?.toLowerCase() === "true" || legacyEnv?.toLowerCase() === "yes";
+  const agentsTarget = legacy
+    ? paths.claudeMdPath
+    : path.join(paths.userRulesDir, "INDEX.md");
+  const agentsLabel = legacy ? "AGENTS.md -> CLAUDE.md" : "AGENTS.md -> rules/INDEX.md";
   const links = [
     {
       linkPath: paths.agentsMdPath,
-      targetPath: paths.claudeMdPath,
-      label: "AGENTS.md -> CLAUDE.md",
+      targetPath: agentsTarget,
+      label: agentsLabel,
       targetType: "file" as const,
     },
     {
