@@ -2,7 +2,7 @@
 
 这套脚本是 TeamAgent 的固定 1+2+3 验证模板，满足：
 
-1. `claude -p --bypass --model haiku`（通过本机 `claudefast` wrapper 走 MiniMax API）
+1. `claude -p --model haiku`（通过本机 `claudefast` wrapper 走 MiniMax API）
 2. `--output-format stream-json` 产出原始事件流
 3. 对「产品特性清单」做硬编码 JSON schema + hard-match
 4. 用 `tmux + claudefast` 交互模式执行同一验证并 `/export`

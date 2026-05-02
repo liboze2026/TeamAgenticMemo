@@ -43,6 +43,8 @@ docs/dogfood/.last-verify.out
 .dogfood/
 # VERIFY judge-harness raw stdout/stderr/coverage/judge.json (transient evidence; bundle into PR if needed).
 .judge/
+# feature-verify-kit LLM output (regenerated per run by verify-claude-stream-json.sh).
+docs/feature-verify-kit/runs/
 .gstack/
 .sandbox/
 docs/bugreport/.last-verify.out
