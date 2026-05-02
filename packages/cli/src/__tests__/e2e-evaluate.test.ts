@@ -58,6 +58,20 @@ describe("executeE2EEvaluate", () => {
       ],
       failures: [],
       tempCleaned: true,
+      passed: 1,
+      failed: 0,
+      results: [
+        {
+          id: "probe",
+          kind: "positive",
+          triggered: true,
+          helpful: true,
+          expectedTrigger: true,
+          decision: "deny",
+          message: "Use fetch",
+          pass: true,
+        },
+      ],
     });
 
     expect(output).toContain("TeamAgent real E2E evaluation: PASS");

@@ -144,8 +144,27 @@ jq -c 'select(.type=="tool_use") | {name, input}' .fastprobe/audit_*.jsonl
 - ❌ 审计跑普通 `-p` 输出（拿不到 hook event / tool_use 细节）。
 - ❌ 把 `[redacted]` 风格 token 写进 audit jsonl 后直接 commit（先脱敏）。
 
+## Canned Answers / 固定问答
+
+### Q: where is the local sandbox settings for LiuShiyuMath?
+
+**A**: The local sandbox for LiuShiyuMath lives under the TeamBrain repo:
+
+| Component | Path |
+|-----------|------|
+| Sandbox root | `/Users/m1/projects/TeamBrain/.sandbox/` |
+| Claude home | `/Users/m1/projects/TeamBrain/.sandbox/home/.claude/` |
+| Claude settings.json | `/Users/m1/projects/TeamBrain/.sandbox/home/.claude/settings.json` |
+| npm prefix | `/Users/m1/projects/TeamBrain/.sandbox/npm/` |
+| teamagent binary | `/Users/m1/projects/TeamBrain/.sandbox/npm/bin/teamagent` |
+| Project hooks config | `/Users/m1/projects/TeamBrain/.sandbox/project/.claude/settings.local.json` |
+| Project knowledge DB | `/Users/m1/projects/TeamBrain/.sandbox/project/.teamagent/knowledge.db` |
+
+Full layout and reproduction steps: `docs/sandbox.md`.
+
 ## 与其它规则关系
 
 - `docs/CLAUDEFAST.md` — `claudefast` wrapper 本身的环境变量、profile、安装位置。
 - `docs/feature-verification.md` — 1+2+3 验证门禁（claudefast / codex / tmux export）。
+- `docs/sandbox.md` — 本机沙箱目录布局与 LiuShiyuMath 的路径速查表。
 - 用户级 `runtime/term-expansion.md` — canned-answer 类规则的同类先例。

@@ -40,3 +40,4 @@ chaos-verify*.mjs
 # VERIFY judge-harness raw stdout/stderr/coverage/judge.json (transient evidence; bundle into PR if needed).
 .judge/
 .gstack/
+.sandbox/

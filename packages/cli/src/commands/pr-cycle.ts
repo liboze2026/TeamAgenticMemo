@@ -131,8 +131,8 @@ export async function executePrCycle(opts: PrCycleOptions = {}): Promise<PrCycle
   }
 }
 
-export function parsePrCycleArgs(argv: string[]): PrCycleOptions {
-  const opts: PrCycleOptions = {};
+export function parsePrCycleArgs(argv: string[]): PrCycleOptions & { dryRun: boolean; pr?: number } {
+  const opts: PrCycleOptions = { dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--pr" && argv[i + 1]) {
@@ -187,7 +187,7 @@ export function parsePrCycleArgs(argv: string[]): PrCycleOptions {
       opts.codexfastgBin = a.slice("--codexfastg-bin=".length);
     }
   }
-  return opts;
+  return { ...opts, dryRun: opts.dryRun ?? false, pr: opts.prNumber };
 }
 
 function buildCreateCommand(opts: PrCycleOptions): string {

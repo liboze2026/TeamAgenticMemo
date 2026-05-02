@@ -210,7 +210,7 @@ async function main(): Promise<void> {
           );
           process.exit(1);
         }
-        process.stdout.write(executeDemoHook(opts));
+        process.stdout.write(executeDemoHook(opts).output);
         return;
       }
       process.stderr.write(`未知 demo 子命令: ${sub}\n`);

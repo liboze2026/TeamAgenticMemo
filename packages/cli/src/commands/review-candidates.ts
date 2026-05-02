@@ -171,7 +171,10 @@ export async function executeReviewCandidates(
 }
 
 export function parseReviewCandidatesArgs(argv: string[]): ReviewCandidatesOptions {
-  const opts: ReviewCandidatesOptions = {};
+  // Default to Infinity so CLI semantics ("no flag = process all pending") are
+  // preserved; the value is still a number (sandbox-style callers expect that),
+  // and Array.prototype.slice(0, Infinity) returns the full array unchanged.
+  const opts: ReviewCandidatesOptions = { limit: Number.POSITIVE_INFINITY };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--limit" && argv[i + 1]) {

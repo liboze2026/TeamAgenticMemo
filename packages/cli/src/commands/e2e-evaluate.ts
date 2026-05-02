@@ -57,6 +57,30 @@ export interface E2EEvaluateResult {
   }>;
   failures: string[];
   tempCleaned: boolean;
+  /** Derived sandbox-style summary fields (alias view of probes). */
+  passed: number;
+  failed: number;
+  results: Array<{
+    id: string;
+    kind: ProbeKind;
+    triggered: boolean;
+    helpful: boolean;
+    expectedTrigger: boolean;
+    decision: string;
+    message: string;
+    pass: boolean;
+  }>;
+}
+
+function deriveSummary(
+  probes: E2EEvaluateResult["probes"],
+): Pick<E2EEvaluateResult, "passed" | "failed" | "results"> {
+  const results = probes.map((p) => ({
+    ...p,
+    pass: p.triggered === p.expectedTrigger,
+  }));
+  const passed = results.filter((r) => r.pass).length;
+  return { passed, failed: results.length - passed, results };
 }
 
 interface EvalCase {
@@ -402,6 +426,7 @@ export async function executeE2EEvaluate(
       probes,
       failures,
       tempCleaned: shouldClean,
+      ...deriveSummary(probes),
     };
   } catch (err) {
     failures.push(err instanceof Error ? err.message : String(err));
@@ -426,6 +451,7 @@ export async function executeE2EEvaluate(
       probes: [],
       failures,
       tempCleaned: !opts.keepTemp && !opts.cwd && !opts.homeDir,
+      ...deriveSummary([]),
     };
   }
 }
