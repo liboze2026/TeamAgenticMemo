@@ -44,8 +44,5 @@ docs/dogfood/.last-verify.out
 # VERIFY judge-harness raw stdout/stderr/coverage/judge.json (transient evidence; bundle into PR if needed).
 .judge/
 .gstack/
-<<<<<<< HEAD
 .sandbox/
-=======
 docs/bugreport/.last-verify.out
->>>>>>> 6977921 (feat(dogfood): live-preview agent dev loop + tiered isolation + bugreport flow)
