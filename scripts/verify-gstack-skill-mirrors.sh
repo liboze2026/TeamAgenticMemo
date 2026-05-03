@@ -19,6 +19,103 @@ fail() {
   exit 1
 }
 
+expected_gstack_root_block() {
+  local platform="$1"
+
+  case "$platform" in
+    claude)
+      cat <<'EOF'
+if [ -x "$_GSTACK_PROJECT_DIR/.claude/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.claude/skills/gstack"
+elif [ -x "$_GSTACK_PROJECT_DIR/.codex/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
+elif [ -x "$HOME/.claude/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$HOME/.claude/skills/gstack"
+elif [ -x "$HOME/.codex/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$HOME/.codex/skills/gstack"
+else
+  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.claude/skills/gstack"
+fi
+EOF
+      ;;
+    codex)
+      cat <<'EOF'
+if [ -x "$_GSTACK_PROJECT_DIR/.codex/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
+elif [ -x "$_GSTACK_PROJECT_DIR/.claude/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.claude/skills/gstack"
+elif [ -x "$HOME/.codex/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$HOME/.codex/skills/gstack"
+elif [ -x "$HOME/.claude/skills/gstack/bin/gstack-config" ]; then
+  GSTACK_SKILLS_ROOT="$HOME/.claude/skills/gstack"
+else
+  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
+fi
+EOF
+      ;;
+    *)
+      fail "unknown gstack root block platform: $platform"
+      ;;
+  esac
+}
+
+extract_gstack_root_block() {
+  local file="$1"
+
+  awk '
+    /^if \[ -x "\$_GSTACK_PROJECT_DIR\/\.(claude|codex)\/skills\/gstack\/bin\/gstack-config" \]; then$/ {
+      in_block=1
+    }
+    in_block {
+      print
+      if ($0 == "fi") {
+        exit
+      }
+    }
+  ' "$file"
+}
+
+assert_gstack_root_block() {
+  local platform="$1"
+  local file="$2"
+  local skill="$3"
+
+  expected_gstack_root_block "$platform" > "$tmp/$platform-$skill.expected-block"
+  extract_gstack_root_block "$file" > "$tmp/$platform-$skill.actual-block"
+
+  diff -u "$tmp/$platform-$skill.expected-block" "$tmp/$platform-$skill.actual-block" \
+    > "$tmp/$platform-$skill.block.diff" \
+    || fail "$platform gstack root fallback block is wrong for $skill:
+$(cat "$tmp/$platform-$skill.block.diff")"
+}
+
+normalize_gstack_root_block() {
+  local file="$1"
+
+  awk '
+    /^if \[ -x "\$_GSTACK_PROJECT_DIR\/\.(claude|codex)\/skills\/gstack\/bin\/gstack-config" \]; then$/ {
+      print "if [ -x \"$_GSTACK_PROJECT_DIR/.__PRIMARY__/skills/gstack/bin/gstack-config\" ]; then"
+      print "  GSTACK_SKILLS_ROOT=\"$_GSTACK_PROJECT_DIR/.__PRIMARY__/skills/gstack\""
+      print "elif [ -x \"$_GSTACK_PROJECT_DIR/.__SECONDARY__/skills/gstack/bin/gstack-config\" ]; then"
+      print "  GSTACK_SKILLS_ROOT=\"$_GSTACK_PROJECT_DIR/.__SECONDARY__/skills/gstack\""
+      print "elif [ -x \"$HOME/.__PRIMARY__/skills/gstack/bin/gstack-config\" ]; then"
+      print "  GSTACK_SKILLS_ROOT=\"$HOME/.__PRIMARY__/skills/gstack\""
+      print "elif [ -x \"$HOME/.__SECONDARY__/skills/gstack/bin/gstack-config\" ]; then"
+      print "  GSTACK_SKILLS_ROOT=\"$HOME/.__SECONDARY__/skills/gstack\""
+      print "else"
+      print "  GSTACK_SKILLS_ROOT=\"$_GSTACK_PROJECT_DIR/.__PRIMARY__/skills/gstack\""
+      print "fi"
+      in_block=1
+      next
+    }
+    in_block && /^fi$/ {
+      in_block=0
+      next
+    }
+    !in_block { print }
+  ' "$file"
+}
+
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/gstack-skill-mirrors.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -50,8 +147,16 @@ while IFS= read -r bin; do
 done < "$tmp/claude-bin.txt"
 
 for skill in $(cat "$tmp/claude-skills.txt"); do
-  cmp -s ".claude/skills/$skill/SKILL.md" ".codex/skills/$skill/SKILL.md" \
-    || fail "SKILL.md content differs between mirrors: $skill"
+  assert_gstack_root_block claude ".claude/skills/$skill/SKILL.md" "$skill"
+  assert_gstack_root_block codex ".codex/skills/$skill/SKILL.md" "$skill"
+
+  normalize_gstack_root_block ".claude/skills/$skill/SKILL.md" > "$tmp/$skill.claude-normalized"
+  normalize_gstack_root_block ".codex/skills/$skill/SKILL.md" > "$tmp/$skill.codex-normalized"
+
+  diff -u "$tmp/$skill.claude-normalized" "$tmp/$skill.codex-normalized" \
+    > "$tmp/$skill.normalized.diff" \
+    || fail "SKILL.md content differs between mirrors outside gstack root fallback block: $skill
+$(cat "$tmp/$skill.normalized.diff")"
 done
 
 bad_codex_refs="$(

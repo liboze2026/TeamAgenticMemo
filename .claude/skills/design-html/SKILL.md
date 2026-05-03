@@ -33,9 +33,7 @@ allowed-tools:
 
 ```bash
 _GSTACK_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-if [ -n "${CODEX_HOME:-}" ] && [ -x "$_GSTACK_PROJECT_DIR/.codex/skills/gstack/bin/gstack-config" ]; then
-  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
-elif [ -x "$_GSTACK_PROJECT_DIR/.claude/skills/gstack/bin/gstack-config" ]; then
+if [ -x "$_GSTACK_PROJECT_DIR/.claude/skills/gstack/bin/gstack-config" ]; then
   GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.claude/skills/gstack"
 elif [ -x "$_GSTACK_PROJECT_DIR/.codex/skills/gstack/bin/gstack-config" ]; then
   GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
