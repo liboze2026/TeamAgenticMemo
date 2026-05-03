@@ -326,14 +326,23 @@ function printHelp(): void {
 }
 
 function claudefastEnv(preferLocalBin = false): NodeJS.ProcessEnv {
+  const useLocalClaudefast = preferLocalBin && localClaudefastBin() !== null;
   return {
     ...process.env,
-    PATH: claudefastPath(process.env.PATH ?? "", osHome(), preferLocalBin),
+    PATH: claudefastPath(process.env.PATH ?? "", osHome(), preferLocalBin, useLocalClaudefast),
   };
 }
 
-function claudefastPath(originalPath: string, home: string, preferLocalBin = false): string {
-  const entries = originalPath.split(path.delimiter).filter(Boolean);
+function claudefastPath(
+  originalPath: string,
+  home: string,
+  preferLocalBin = false,
+  omitBrokenClaudePnpmStubs = false,
+): string {
+  let entries = originalPath.split(path.delimiter).filter(Boolean);
+  if (omitBrokenClaudePnpmStubs) {
+    entries = entries.filter((entry) => !isClaudeCodePnpmStubEntry(entry));
+  }
   const localBin = home ? path.join(home, ".local", "bin") : "";
   if (localBin && preferLocalBin) {
     return [localBin, ...entries.filter((entry) => entry !== localBin)].join(path.delimiter);
@@ -346,6 +355,24 @@ function claudefastPath(originalPath: string, home: string, preferLocalBin = fal
 
 function osHome(): string {
   return process.env.HOME || process.env.USERPROFILE || "";
+}
+
+function localClaudefastBin(): string | null {
+  const home = osHome();
+  if (!home) return null;
+  const candidate = path.join(home, ".local", "bin", "claudefast");
+  return existsSync(candidate) ? candidate : null;
+}
+
+function isClaudeCodePnpmStubEntry(entry: string): boolean {
+  const candidate = path.join(entry, "claude");
+  if (!existsSync(candidate)) return false;
+  try {
+    const content = readFileSync(candidate, "utf-8");
+    return content.includes("@anthropic-ai/claude-code") && content.includes("bin/claude.exe");
+  } catch {
+    return false;
+  }
 }
 
 function runEnvSelfTest(): void {
@@ -749,7 +776,8 @@ function spawnCollect(
   opts: { preferLocalBin?: boolean } = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, {
+    const effectiveBin = opts.preferLocalBin && bin === "claudefast" ? (localClaudefastBin() ?? bin) : bin;
+    const child = spawn(effectiveBin, args, {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
