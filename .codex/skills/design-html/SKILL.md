@@ -35,12 +35,8 @@ allowed-tools:
 _GSTACK_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 if [ -x "$_GSTACK_PROJECT_DIR/.codex/skills/gstack/bin/gstack-config" ]; then
   GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
-elif [ -x "$_GSTACK_PROJECT_DIR/.claude/skills/gstack/bin/gstack-config" ]; then
-  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.claude/skills/gstack"
 elif [ -x "$HOME/.codex/skills/gstack/bin/gstack-config" ]; then
   GSTACK_SKILLS_ROOT="$HOME/.codex/skills/gstack"
-elif [ -x "$HOME/.claude/skills/gstack/bin/gstack-config" ]; then
-  GSTACK_SKILLS_ROOT="$HOME/.claude/skills/gstack"
 else
   GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
 fi
@@ -132,9 +128,9 @@ If the user invokes a skill in plan mode, the skill takes precedence over generi
 
 If `PROACTIVE` is `"false"`, do not auto-invoke or proactively suggest skills. If a skill seems useful, ask: "I think /skillname might help here — want me to run it?"
 
-If `SKILL_PREFIX` is `"true"`, suggest/invoke `/gstack-*` names. Disk paths stay under `$GSTACK_SKILLS_ROOT/[skill-name]/SKILL.md`.
+If `SKILL_PREFIX` is `"true"`, suggest/invoke `/gstack-*` names. Codex skill file paths stay under `$_GSTACK_PROJECT_DIR/.codex/skills/[skill-name]/SKILL.md`; `$GSTACK_SKILLS_ROOT` is only the gstack runtime/bin root.
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: read `$GSTACK_SKILLS_ROOT/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined).
+If output shows `UPGRADE_AVAILABLE <old> <new>`: use the installed gstack upgrade mechanism only if it is available; otherwise tell the user gstack `<new>` is available and AskUserQuestion with upgrade/snooze/skip/disable options. Write snooze state if declined. Do not treat the gstack runtime root as a skill directory.
 
 If output shows `JUST_UPGRADED <from> <to>`: print "Running gstack v{to} (just updated!)". If `SPAWNED_SESSION` is true, skip feature discovery.
 
@@ -260,7 +256,7 @@ This only happens once per project. Skip if `HAS_ROUTING` is `yes` or `ROUTING_D
 
 If `VENDORED_GSTACK` is `yes`, warn once via AskUserQuestion unless `~/.gstack/.vendoring-warned-$SLUG` exists:
 
-> This project has gstack vendored in `.claude/skills/gstack/`. Vendoring is deprecated.
+> This project has gstack vendored in `.codex/skills/gstack/`. Vendoring is deprecated.
 > Migrate to team mode?
 
 Options:
@@ -269,10 +265,10 @@ Options:
 
 If A:
 1. Run `$GSTACK_BIN/gstack-team-init required` (or `optional`)
-2. Run `git rm -r .claude/skills/gstack/`
-3. Run `echo '.claude/skills/gstack/' >> .gitignore`
-4. Run `git add .claude/ .gitignore CLAUDE.md && git commit -m "chore: migrate gstack from vendored to team mode"`
-5. Tell the user: "Done. Each developer now runs: `cd ~/.claude/skills/gstack && ./setup --team`"
+2. Run `git rm -r .codex/skills/gstack/`
+3. Run `echo '.codex/skills/gstack/' >> .gitignore`
+4. Run `git add .codex/ .gitignore CLAUDE.md && git commit -m "chore: migrate gstack from vendored to team mode"`
+5. Tell the user: "Done. Each developer now runs: `cd ~/.codex/skills/gstack && ./setup --team`"
 
 If B: say "OK, you're on your own to keep the vendored copy up to date."
 
@@ -693,16 +689,14 @@ around obstacles.
 ```bash
 _ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 D=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/design/dist/design" ] && D="$_ROOT/.claude/skills/gstack/design/dist/design"
-[ -z "$D" ] && D="$HOME/.claude/skills/gstack/design/dist/design"
+[ -x "$GSTACK_SKILLS_ROOT/design/dist/design" ] && D="$GSTACK_SKILLS_ROOT/design/dist/design"
 if [ -x "$D" ]; then
   echo "DESIGN_READY: $D"
 else
   echo "DESIGN_NOT_AVAILABLE"
 fi
 B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B="$HOME/.claude/skills/gstack/browse/dist/browse"
+[ -x "$GSTACK_SKILLS_ROOT/browse/dist/browse" ] && B="$GSTACK_SKILLS_ROOT/browse/dist/browse"
 if [ -x "$B" ]; then
   echo "BROWSE_READY: $B"
 else
@@ -821,8 +815,7 @@ else a few taps away with an obvious path to get there.
 ```bash
 _ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B="$HOME/.claude/skills/gstack/browse/dist/browse"
+[ -x "$GSTACK_SKILLS_ROOT/browse/dist/browse" ] && B="$GSTACK_SKILLS_ROOT/browse/dist/browse"
 if [ -x "$B" ]; then
   echo "READY: $B"
 else
@@ -1033,8 +1026,7 @@ For **vanilla HTML output**, check for the vendored Pretext bundle:
 ```bash
 _PRETEXT_VENDOR=""
 _ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-[ -n "$_ROOT" ] && [ -f "$_ROOT/.claude/skills/design-html/vendor/pretext.js" ] && _PRETEXT_VENDOR="$_ROOT/.claude/skills/design-html/vendor/pretext.js"
-[ -z "$_PRETEXT_VENDOR" ] && [ -f .claude/skills/design-html/vendor/pretext.js ] && _PRETEXT_VENDOR=.claude/skills/design-html/vendor/pretext.js
+[ -n "$_ROOT" ] && [ -f "$_ROOT/.codex/skills/design-html/vendor/pretext.js" ] && _PRETEXT_VENDOR="$_ROOT/.codex/skills/design-html/vendor/pretext.js"
 [ -n "$_PRETEXT_VENDOR" ] && echo "VENDOR: $_PRETEXT_VENDOR" || echo "VENDOR_MISSING"
 ```
 

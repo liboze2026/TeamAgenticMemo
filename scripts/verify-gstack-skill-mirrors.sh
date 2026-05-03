@@ -42,12 +42,8 @@ EOF
       cat <<'EOF'
 if [ -x "$_GSTACK_PROJECT_DIR/.codex/skills/gstack/bin/gstack-config" ]; then
   GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
-elif [ -x "$_GSTACK_PROJECT_DIR/.claude/skills/gstack/bin/gstack-config" ]; then
-  GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.claude/skills/gstack"
 elif [ -x "$HOME/.codex/skills/gstack/bin/gstack-config" ]; then
   GSTACK_SKILLS_ROOT="$HOME/.codex/skills/gstack"
-elif [ -x "$HOME/.claude/skills/gstack/bin/gstack-config" ]; then
-  GSTACK_SKILLS_ROOT="$HOME/.claude/skills/gstack"
 else
   GSTACK_SKILLS_ROOT="$_GSTACK_PROJECT_DIR/.codex/skills/gstack"
 fi
@@ -89,31 +85,42 @@ assert_gstack_root_block() {
 $(cat "$tmp/$platform-$skill.block.diff")"
 }
 
-normalize_gstack_root_block() {
+assert_codex_resource_reference() {
   local file="$1"
+  local resource_path="$2"
+  local expected_ref="$3"
+  local description="$4"
 
-  awk '
-    /^if \[ -x "\$_GSTACK_PROJECT_DIR\/\.(claude|codex)\/skills\/gstack\/bin\/gstack-config" \]; then$/ {
-      print "if [ -x \"$_GSTACK_PROJECT_DIR/.__PRIMARY__/skills/gstack/bin/gstack-config\" ]; then"
-      print "  GSTACK_SKILLS_ROOT=\"$_GSTACK_PROJECT_DIR/.__PRIMARY__/skills/gstack\""
-      print "elif [ -x \"$_GSTACK_PROJECT_DIR/.__SECONDARY__/skills/gstack/bin/gstack-config\" ]; then"
-      print "  GSTACK_SKILLS_ROOT=\"$_GSTACK_PROJECT_DIR/.__SECONDARY__/skills/gstack\""
-      print "elif [ -x \"$HOME/.__PRIMARY__/skills/gstack/bin/gstack-config\" ]; then"
-      print "  GSTACK_SKILLS_ROOT=\"$HOME/.__PRIMARY__/skills/gstack\""
-      print "elif [ -x \"$HOME/.__SECONDARY__/skills/gstack/bin/gstack-config\" ]; then"
-      print "  GSTACK_SKILLS_ROOT=\"$HOME/.__SECONDARY__/skills/gstack\""
-      print "else"
-      print "  GSTACK_SKILLS_ROOT=\"$_GSTACK_PROJECT_DIR/.__PRIMARY__/skills/gstack\""
-      print "fi"
-      in_block=1
-      next
-    }
-    in_block && /^fi$/ {
-      in_block=0
-      next
-    }
-    !in_block { print }
-  ' "$file"
+  if [ -e "$resource_path" ]; then
+    rg -q -F "$expected_ref" "$file" \
+      || fail "Codex skill does not reference existing repo-local resource for $description:
+file=$file
+resource=$resource_path
+expected=$expected_ref"
+  else
+    if rg -q -F "$expected_ref" "$file"; then
+      fail "Codex skill references missing repo-local resource for $description:
+file=$file
+missing=$resource_path
+reference=$expected_ref"
+    fi
+  fi
+}
+
+assert_codex_resource_absent() {
+  local resource_path="$1"
+  local bad_ref_regex="$2"
+  local description="$3"
+
+  if [ ! -e "$resource_path" ]; then
+    local refs
+    refs="$(rg -n "$bad_ref_regex" .codex/skills --glob 'SKILL.md' --glob 'SKILL.md.tmpl' || true)"
+    if [ -n "$refs" ]; then
+      fail "Codex skills generate references to missing resource for $description:
+missing=$resource_path
+$refs"
+    fi
+  fi
 }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/gstack-skill-mirrors.XXXXXX")"
@@ -150,17 +157,11 @@ for skill in $(cat "$tmp/claude-skills.txt"); do
   assert_gstack_root_block claude ".claude/skills/$skill/SKILL.md" "$skill"
   assert_gstack_root_block codex ".codex/skills/$skill/SKILL.md" "$skill"
 
-  normalize_gstack_root_block ".claude/skills/$skill/SKILL.md" > "$tmp/$skill.claude-normalized"
-  normalize_gstack_root_block ".codex/skills/$skill/SKILL.md" > "$tmp/$skill.codex-normalized"
-
-  diff -u "$tmp/$skill.claude-normalized" "$tmp/$skill.codex-normalized" \
-    > "$tmp/$skill.normalized.diff" \
-    || fail "SKILL.md content differs between mirrors outside gstack root fallback block: $skill
-$(cat "$tmp/$skill.normalized.diff")"
-
   if [ -f ".claude/skills/$skill/SKILL.md.tmpl" ] || [ -f ".codex/skills/$skill/SKILL.md.tmpl" ]; then
-    cmp -s ".claude/skills/$skill/SKILL.md.tmpl" ".codex/skills/$skill/SKILL.md.tmpl" \
-      || fail "SKILL.md.tmpl content differs between mirrors: $skill"
+    [ -f ".claude/skills/$skill/SKILL.md.tmpl" ] \
+      || fail "SKILL.md.tmpl missing from Claude mirror: $skill"
+    [ -f ".codex/skills/$skill/SKILL.md.tmpl" ] \
+      || fail "SKILL.md.tmpl missing from Codex mirror: $skill"
   fi
 done
 
@@ -172,13 +173,88 @@ if [ -n "$codex_home_gate_refs" ]; then
 $codex_home_gate_refs"
 fi
 
-bad_codex_refs="$(
-  rg -n '(\$\(|<\()((~|\$HOME)/\.claude|\.claude)/skills/gstack/bin/gstack-|^"?((~|\$HOME)/\.claude|\.claude)/skills/gstack/bin/gstack-' .codex/skills --glob 'SKILL.md' || true
+bad_codex_hardcoded_gstack_refs="$(
+  rg -n "\\.claude/skills/gstack|~/.claude/skills/gstack|\\\$HOME/.claude/skills/gstack" .codex/skills -g 'SKILL.md*' || true
 )"
-if [ -n "$bad_codex_refs" ]; then
-  fail "Codex-visible skills still execute Claude-side gstack bins:
-$bad_codex_refs"
+if [ -n "$bad_codex_hardcoded_gstack_refs" ]; then
+  fail "Codex-visible SKILL.md files still hardcode Claude-side gstack paths:
+$bad_codex_hardcoded_gstack_refs"
 fi
+
+bad_codex_body_refs="$(
+  rg -n '(^|[^[:alnum:]_])(~|\$HOME|\$_GSTACK_PROJECT_DIR|\$_ROOT)?/?.claude/skills/gstack' \
+    .codex/skills --glob 'SKILL.md' --glob 'SKILL.md.tmpl' || true
+)"
+if [ -n "$bad_codex_body_refs" ]; then
+  fail "Codex-visible skill bodies still directly reference Claude-side gstack paths:
+$bad_codex_body_refs"
+fi
+
+bad_codex_exec_refs="$(
+  rg -n '(\$\(|<\()((~|\$HOME)/\.claude|\.claude)/skills/gstack/bin/gstack-|^"?((~|\$HOME)/\.claude|\.claude)/skills/gstack/bin/gstack-' .codex/skills --glob 'SKILL.md' --glob 'SKILL.md.tmpl' || true
+)"
+if [ -n "$bad_codex_exec_refs" ]; then
+  fail "Codex-visible skills still execute Claude-side gstack bins:
+$bad_codex_exec_refs"
+fi
+
+bad_codex_sibling_under_gstack_refs="$(
+  rg -n '(\$GSTACK_SKILLS_ROOT|\.codex/skills/gstack)/(office-hours|plan-ceo-review|design-html|design-shotgun|canary)(/|`|"| |$)|\$GSTACK_SKILLS_ROOT/ETHOS\.md|\.codex/skills/gstack/ETHOS\.md' \
+    .codex/skills --glob 'SKILL.md' --glob 'SKILL.md.tmpl' || true
+)"
+if [ -n "$bad_codex_sibling_under_gstack_refs" ]; then
+  fail "Codex-visible skills still point same-level skill resources at the gstack root:
+$bad_codex_sibling_under_gstack_refs"
+fi
+
+bad_codex_skill_file_under_gstack_root_refs="$(
+  rg -n '(\$GSTACK_SKILLS_ROOT|\.codex/skills/gstack)/[^[:space:]`"'\''()]+/SKILL\.md' \
+    .codex/skills --glob 'SKILL.md' --glob 'SKILL.md.tmpl' || true
+)"
+if [ -n "$bad_codex_skill_file_under_gstack_root_refs" ]; then
+  fail "Codex-visible skills still treat the gstack runtime root as a skill directory:
+$bad_codex_skill_file_under_gstack_root_refs"
+fi
+
+assert_codex_resource_reference \
+  ".codex/skills/plan-ceo-review/SKILL.md" \
+  ".codex/skills/office-hours/SKILL.md" \
+  '$_GSTACK_PROJECT_DIR/.codex/skills/office-hours/SKILL.md' \
+  "plan-ceo-review inline /office-hours handoff"
+
+assert_codex_resource_reference \
+  ".codex/skills/design-html/SKILL.md" \
+  ".codex/skills/design-html/vendor/pretext.js" \
+  '$_ROOT/.codex/skills/design-html/vendor/pretext.js' \
+  "design-html vendored Pretext probe"
+
+assert_codex_resource_reference \
+  ".codex/skills/design-html/SKILL.md.tmpl" \
+  ".codex/skills/design-html/vendor/pretext.js" \
+  '$_ROOT/.codex/skills/design-html/vendor/pretext.js' \
+  "design-html template vendored Pretext probe"
+
+assert_codex_resource_reference \
+  ".codex/skills/plan-ceo-review/SKILL.md" \
+  ".codex/skills/plan-ceo-review/ETHOS.md" \
+  '$_GSTACK_PROJECT_DIR/.codex/skills/plan-ceo-review/ETHOS.md' \
+  "plan-ceo-review ETHOS"
+
+assert_codex_resource_reference \
+  ".codex/skills/office-hours/SKILL.md" \
+  ".codex/skills/office-hours/ETHOS.md" \
+  '$_GSTACK_PROJECT_DIR/.codex/skills/office-hours/ETHOS.md' \
+  "office-hours ETHOS"
+
+assert_codex_resource_absent \
+  ".codex/skills/plan-ceo-review/ETHOS.md" \
+  '(\.codex/skills/plan-ceo-review/ETHOS\.md|\$GSTACK_SKILLS_ROOT/ETHOS\.md)' \
+  "plan-ceo-review ETHOS"
+
+assert_codex_resource_absent \
+  ".codex/skills/office-hours/ETHOS.md" \
+  '(\.codex/skills/office-hours/ETHOS\.md|\$GSTACK_SKILLS_ROOT/ETHOS\.md)' \
+  "office-hours ETHOS"
 
 echo "GSTACK-SKILL-MIRRORS: PASS"
 echo "skills=$(wc -l < "$tmp/claude-skills.txt" | tr -d ' ') bins=$(wc -l < "$tmp/claude-bin.txt" | tr -d ' ')"
