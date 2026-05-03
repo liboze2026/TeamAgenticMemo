@@ -29,6 +29,7 @@ export interface DoctorOptions {
   postinstall?: boolean;
   cwd?: string;
   homeDir?: string;
+  claudeProbe?: ClaudeProbe;
 }
 
 export function parseDoctorArgs(argv: string[]): DoctorOptions {
@@ -68,7 +69,7 @@ export async function executeDoctor(opts: DoctorOptions = {}): Promise<DoctorRes
   }
 
   // Check 2: Claude Code installed
-  const claudeCheck = checkClaudeCode();
+  const claudeCheck = checkClaudeCode(opts.claudeProbe);
   checks.push(claudeCheck);
   if (claudeCheck.status === "fail") {
     return finalize(checks, true);
@@ -120,6 +121,12 @@ export async function executeDoctor(opts: DoctorOptions = {}): Promise<DoctorRes
 }
 
 function finalize(checks: DoctorCheckResult[], earlyExit: boolean): DoctorResult {
+  // Always report the team-sharing product boundary, including early-return
+  // paths such as missing knowledge.db or unregistered hooks. It is independent
+  // of local environment health and must stay visible in --json output.
+  if (!checks.some((check) => check.name === "team-sharing")) {
+    checks.push(checkTeamSharingStatus());
+  }
   const passed = checks.filter((c) => c.status === "pass").length;
   const failed = checks.filter((c) => c.status === "fail").length;
   const skipped = checks.filter((c) => c.status === "skip").length;
@@ -405,6 +412,15 @@ export function checkClaudeMd(claudeMdPath: string): DoctorCheckResult {
   };
 }
 
+export function checkTeamSharingStatus(): DoctorCheckResult {
+  return {
+    name: "team-sharing",
+    status: "skip",
+    detail: "PARTIAL: Phase 4 team sharing is not complete; git transport, privacy redaction, and review gates are required before scope=team is supported",
+    fix: "Track docs/系统展示/13-delivered-vs-planned.md and docs/superpowers/plans/2026-05-01-phase4-team-memory-plan.md",
+  };
+}
+
 export function renderDoctorResult(result: DoctorResult): string {
   const lines: string[] = [];
   lines.push("环境诊断 / Environment Check");
@@ -424,8 +440,10 @@ export function renderDoctorResult(result: DoctorResult): string {
   }
 
   lines.push("");
-  if (result.allPassed) {
+  if (result.allPassed && result.skipped === 0) {
     lines.push("✅ 全部检查通过！TeamAgent 运行正常。");
+  } else if (result.allPassed) {
+    lines.push("✅ 可运行检查通过；跳过项见上方（可能代表未完成产品范围）。");
   } else {
     const parts: string[] = [];
     if (result.failed > 0) parts.push(`${result.failed} 项失败`);

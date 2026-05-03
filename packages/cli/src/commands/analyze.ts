@@ -26,6 +26,11 @@ import type { LLMClient } from "@teamagent/ports";
 import type { KnowledgeEntry, ParsedSession } from "@teamagent/types";
 import { scheduleDocsPropagation } from "./docs-propagate.js";
 
+type AnalyzeEmbedder = {
+  embed(texts: string[]): Promise<number[][]>;
+  readonly modelId?: string;
+};
+
 export interface AnalyzeOptions {
   /** 具体 session 文件路径或 sessionId；未指定则分析最近的 session */
   session?: string;
@@ -66,7 +71,7 @@ export interface AnalyzeOptions {
    */
   onMeta?: (meta: AnalyzeMeta) => void;
   /** 向量 embedder（测试用）；缺省用 XenovaRuleEmbedder */
-  embedder?: { embed(texts: string[]): Promise<number[][]> };
+  embedder?: AnalyzeEmbedder;
   /** 测试可注入；生产默认后台调度 docs-propagate。 */
   docsPropagationScheduler?: (ruleIds: string[]) => void | Promise<void>;
 }
@@ -452,10 +457,11 @@ function renderReport(
 async function vectorizeExtractedEntries(
   entries: KnowledgeEntry[],
   projectDbPath: string,
-  embedder?: { embed(texts: string[]): Promise<number[][]> },
+  embedder?: AnalyzeEmbedder,
 ): Promise<void> {
   const { buildSemanticDescriptions } = await import("@teamagent/core");
   const actualEmbedder = embedder ?? new XenovaRuleEmbedder();
+  const embedderModelId = actualEmbedder.modelId ?? "Xenova/multilingual-e5-small";
   const vdb = openDb(projectDbPath);
   try {
     for (const entry of entries) {
@@ -472,7 +478,7 @@ async function vectorizeExtractedEntries(
       if (tv && pv) {
         vdb.prepare(
           "UPDATE knowledge SET trigger_description=?, pattern_description=?, embedder_model_id=? WHERE id=?",
-        ).run(desc.trigger_description, desc.pattern_description, "Xenova/multilingual-e5-small", entry.id);
+        ).run(desc.trigger_description, desc.pattern_description, embedderModelId, entry.id);
         syncRuleVectors(vdb, entry.id, new Float32Array(tv), new Float32Array(pv));
       }
     }

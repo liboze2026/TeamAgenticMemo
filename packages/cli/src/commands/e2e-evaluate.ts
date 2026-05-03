@@ -8,7 +8,7 @@ import {
   SqliteEventLog,
 } from "@teamagent/adapters";
 import { matchRulesAsync } from "@teamagent/core";
-import type { LLMClient } from "@teamagent/ports";
+import type { LLMClient, RuleEmbedder } from "@teamagent/ports";
 import { executeAnalyze, type AnalyzeMeta } from "./analyze.js";
 
 type ProbeKind = "positive" | "generalization" | "negative";
@@ -26,6 +26,7 @@ export interface E2EEvaluateOptions {
   keepTemp?: boolean;
   json?: boolean;
   llmClient?: LLMClient;
+  embedder?: RuleEmbedder;
   now?: () => Date;
 }
 
@@ -319,6 +320,7 @@ export async function executeE2EEvaluate(
         idGen: () => `e2e-${++idSeq}`,
         now,
         skipCalibrate: true,
+        embedder: opts.embedder,
         docsPropagationScheduler: (ids) => {
           scheduledDocsRuleIds.push(...ids);
         },

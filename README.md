@@ -98,6 +98,10 @@ teamagent bug-report                    # 生成系统信息 + hook 配置 + 原
 - `TEAMAGENT_AUTO_UPDATE=0`：会话级禁用（不写文件）
 - `~/.teamagent/update-state.json` 的 `interval_hours` 可改 1/6/24（默认 1）
 
+**验证边界**：`teamagent update --status` 是 sandbox-safe，只读状态并显示
+`updater_binary` 是否存在；它不会运行 `npm install -g`。如果显示 missing，先在本仓库构建
+`pnpm --filter @teamagent/cli build:hook`，再用 `teamagent update --now` 触发真实更新。
+
 ---
 
 
@@ -209,7 +213,7 @@ claudefast -p "hi"
 # 安装与诊断
 teamagent init               # 初始化项目（注册 hook + 创建 .teamagent/ + 预热向量模型）
 teamagent warmup             # 单独预热向量模型 (~120MB，init 已自动跑)
-teamagent doctor             # 8 项环境诊断
+teamagent doctor             # 环境诊断 + 产品边界状态
 teamagent install-plugins    # 装 superpowers / caveman / sales / playground 等团队标配 skill
 teamagent uninstall          # 卸载（保留数据，加 --delete-data 清空）
 
@@ -284,6 +288,10 @@ npm uninstall -g teamagent
 **Codex 没读到规则？** 用 `teamagent init --target=codex` 或 `teamagent compile --target=codex` 重新生成 `AGENTS.md -> CLAUDE.md`，并把 `.codex/skills` 指向 TeamAgent 实际编译出的 skill 目录。开启新的 Codex 会话后生效；Codex 不注册 Claude Code hooks，也不提供实时拦截。
 
 **自动更新太频繁？** `teamagent update --disable` 完全关掉。或编辑 `~/.teamagent/update-state.json` 把 `interval_hours` 改大（6 / 24）。
+
+**团队共享完成了吗？** 还没有。`teamagent doctor --json` 会把 `team-sharing`
+标为 `skip/PARTIAL`：Phase 4 需要 git transport、privacy redaction、review gates 都落地后，
+`scope=team` 才能算真正支持。
 
 **模型下载失败？** 设置 `HF_ENDPOINT=https://hf-mirror.com` 重跑 `teamagent warmup`。
 
