@@ -5,7 +5,6 @@ import {
   SqliteEventLog,
   SqliteKnowledgeStore,
   DualLayerStore,
-  createRuleCompiler,
   openDb,
   makeSkillCompiler,
 } from "@teamagent/adapters";
@@ -27,6 +26,7 @@ export interface CalibrateOptions {
   projectDbPath?: string;
   userGlobalDbPath?: string;
   eventsDbPath?: string;
+  skillsDir?: string;
   claudeMdPath?: string;
   /** 只看会做什么，不写盘 */
   dryRun?: boolean;
@@ -62,8 +62,7 @@ function resolvePaths(opts: CalibrateOptions) {
       opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db"),
     eventsDbPath:
       opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db"),
-    claudeMdPath: opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md"),
-    userRulesDir: path.join(home, ".claude", "teamagent", "rules"),
+    skillsDir: opts.skillsDir ?? path.join(home, ".claude", "skills", "teamagent"),
   };
 }
 
@@ -284,20 +283,15 @@ export async function executeCalibrate(
     }
   }
 
-  // 若有调整且非 dry-run，重编译 CLAUDE.md + skills
+  // 若有调整且非 dry-run，更新 Skills；CLAUDE.md 规则块输出已禁用。
   if (!dryRun && totalAdjusted > 0) {
     try {
       await runCompile({
         store: dualStore,
-        markdownCompiler: createRuleCompiler({
-          claudeMdPath: paths.claudeMdPath,
-          rulesDir: paths.userRulesDir,
-          now: () => nowDate.toISOString(),
-        }),
-        skillCompiler: makeSkillCompiler(),
+        skillCompiler: makeSkillCompiler({ skillsDir: paths.skillsDir }),
       });
     } catch {
-      // 重编译失败不算 fatal
+      // Skill 导出失败不算 fatal
     }
   }
 

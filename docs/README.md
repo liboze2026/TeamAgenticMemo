@@ -16,6 +16,7 @@ the indexes below to choose what to read first.
 | Live-preview / dogfood agent edits in two tmux panes | [DOGFOOD.md](DOGFOOD.md) |
 | Report a bug — system info + repro + raw logs to GitHub | [BUGREPORT.md](BUGREPORT.md) |
 | Check PR #14 status | [pr-14-status.md](pr-14-status.md) |
+| Understand project knowledge propagation | [knowledge/INDEX.md](knowledge/INDEX.md) |
 | Find foundational specs | [specs/README.md](specs/README.md) |
 | Find later milestone specs and plans | [superpowers/README.md](superpowers/README.md) |
 | Review historical Phase 1 and superseded docs | [backup/README.md](backup/README.md) |
@@ -59,6 +60,7 @@ the indexes below to choose what to read first.
 | `gstack/` | Approved `/office-hours` design docs that downstream gstack review skills can discover automatically. |
 | `notes/` | Small decision records. |
 | `feature-verification.md` | Feature/fix verification gate and evidence requirements. |
+| `knowledge/` | Project knowledge index and docs propagation notes. |
 | `pr-14-status.md` | PR #14 local status index for restricted verification sessions. |
 | `research/` | Research notes that informed roadmap decisions. |
 | `dogfood/` | Current dogfood reports. |

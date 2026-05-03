@@ -132,10 +132,10 @@ claudefast -p "hi"
    ① analyze    扫描会话，找"被纠正时刻"和"成功信号"
    ② extract    LLM 把每个时刻抽成结构化规则（trigger / wrong / correct / why）
    ③ calibrate  用真实使用数据校准每条规则的置信度（Wilson 置信区间）
-   ④ compile    高置信规则编译进 CLAUDE.md（3000 token 预算 + Jaccard 多样性过滤）
+   ④ compile    高置信规则传播到 Skills / docs 知识索引（按预算和多样性筛选）
         │
         ▼  下次会话开启
-   CLAUDE.md 自动挂入 Claude 上下文 → 它读到"教训"
+   Skills / docs 知识索引进入上下文 → 它读到"教训"
         │
         ▼  当它要犯同样错误时
    PreToolUse hook 在工具调用之前拦截 → block / warn / suggest
@@ -164,7 +164,7 @@ claudefast -p "hi"
 | **UserPromptSubmit** | 用户发问时把相关规则**主动注入**进上下文 |
 | **PreToolUse** | AI 想动工具前按规则**拦截 / 警告 / 放行**（block / warn / suggest / passive 四档） |
 | **PostToolUse** | 记录工具调用结果（成功/失败/exit code）到事件库，供下次校准 |
-| **Stop** | 会话结束，跑完整学习闭环（analyze → calibrate → compile） |
+| **Stop** | 会话结束，跑完整学习闭环（analyze → calibrate → docs/Skills propagation） |
 | **SessionEnd / PreCompact** | 全量重扫，确保 token 压缩 / 退出时不漏 turn |
 
 每次操作都通过 **AttributionBus** 给你一段归因输出 —— 你能看见"系统刚刚做了什么 / 传播到哪个文件 / 下次体验会怎样"。不黑盒。
@@ -182,7 +182,7 @@ claudefast -p "hi"
 每条规则不是死规则，有完整的**生命周期**：
 
 - 新生 → `experimental` tier，confidence ≈ 0.5
-- 多次成功命中 → 升 `canonical` → `canonical+` → 进入 CLAUDE.md token 预算优先级
+- 多次成功命中 → 升 `canonical` → `canonical+` → 优先传播到 Skills / docs 知识索引
 - 被用户 override / 工具失败 → demerit 累积 → 掉 tier → 归档
 
 校准用 **Wilson 置信区间** + **指数衰减**，少量噪声不会带跑偏。
@@ -194,7 +194,7 @@ claudefast -p "hi"
 | 难题 | 解法 |
 |---|---|
 | 关键词匹配漏召回 | **BM25 + 语义向量**（multilingual-e5-small, 384 维）做 RRF 融合 + soft-AND 打分 |
-| CLAUDE.md 编译爆 context window | 严格 **3000 token 预算** + **Jaccard 多样性过滤**（去近义条目） |
+| 知识传播挤爆 context window | 严格预算 + **Jaccard 多样性过滤**（去近义条目） |
 | 用户感觉系统在偷偷搞事 | 每次操作都通过 **AttributionBus** 渲染归因块 |
 | Stop hook 阻塞会话关闭 | 全部 **detached spawn** + **永不非零退出** |
 | 重复扫描浪费 token | **scan-cursor.json** 增量扫描，只看新 turn |
@@ -226,7 +226,7 @@ teamagent stats              # 看知识库分布与最近新增
 teamagent review [N]         # 复核最近 N 条新规则
 teamagent pitfall            # 手动录一条经验（交互或 --non-interactive）
 teamagent analyze --commit   # 主动分析最近会话并入库
-teamagent compile            # 重编译 CLAUDE.md
+teamagent compile            # 刷新 Skills / docs 知识传播产物
 teamagent calibrate          # 主动校准（hook 已自动跑）
 
 # 高级
