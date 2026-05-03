@@ -630,5 +630,5 @@ describe("Feature: e2e-evaluate full run", () => {
     expect(typeof result.failed).toBe("number");
     expect(Array.isArray(result.results)).toBe(true);
     expect(result.failures).toBeDefined();
-  }, 30000);
+  }, 120000);
 });

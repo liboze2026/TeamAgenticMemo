@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { openDb } from "@teamagent/adapters";
 import {
+  checkClaudeMd,
   executeDoctor,
   renderDoctorResult,
   parseDoctorArgs,
@@ -99,9 +100,36 @@ describe("parseDoctorArgs", () => {
   });
 });
 
-describe("executeDoctor --fix", () => {
+describe("doctor CLAUDE.md checks", () => {
   it("parseDoctorArgs recognizes --fix", () => {
     expect(parseDoctorArgs(["--fix"]).fix).toBe(true);
+  });
+
+  it("does not require CLAUDE.md or suggest compile as a fix", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-cli-"));
+    try {
+      const claudeMd = checkClaudeMd(path.join(root, "CLAUDE.md"));
+      expect(claudeMd?.status).not.toBe("fail");
+      expect(claudeMd?.fix).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("flags old generated TEAMAGENT blocks without using compile as a fix", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-cli-"));
+    try {
+      fs.writeFileSync(
+        path.join(root, "CLAUDE.md"),
+        "# Manual\n\n<!-- TEAMAGENT:START - old -->\n- generated\n<!-- TEAMAGENT:END -->\n",
+      );
+      const claudeMd = checkClaudeMd(path.join(root, "CLAUDE.md"));
+      expect(claudeMd?.status).toBe("fail");
+      expect(claudeMd?.detail).toContain("旧 TEAMAGENT:START");
+      expect(claudeMd?.fix).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

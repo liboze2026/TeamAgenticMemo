@@ -6,7 +6,6 @@ import {
   ClaudeCodeLLMClient,
   DualLayerStore,
   SqliteEventLog,
-  createRuleCompiler,
   openDb,
   makeSkillCompiler,
   syncRuleVectors,
@@ -25,6 +24,7 @@ import {
 } from "@teamagent/core";
 import type { LLMClient } from "@teamagent/ports";
 import type { KnowledgeEntry, ParsedSession } from "@teamagent/types";
+import { scheduleDocsPropagation } from "./docs-propagate.js";
 
 type AnalyzeEmbedder = {
   embed(texts: string[]): Promise<number[][]>;
@@ -45,8 +45,9 @@ export interface AnalyzeOptions {
   /** 注入 store 路径（测试用） */
   projectDbPath?: string;
   userGlobalDbPath?: string;
-  /** 注入 CLAUDE.md 路径（测试用） */
+  /** @deprecated 新规则路径不再写 CLAUDE.md；保留字段仅为兼容旧测试/调用方。 */
   claudeMdPath?: string;
+  skillsDir?: string;
   /** events DB 路径（测试用；--commit 校准阶段会读它） */
   eventsDbPath?: string;
   cwd?: string;
@@ -71,6 +72,8 @@ export interface AnalyzeOptions {
   onMeta?: (meta: AnalyzeMeta) => void;
   /** 向量 embedder（测试用）；缺省用 XenovaRuleEmbedder */
   embedder?: AnalyzeEmbedder;
+  /** 测试可注入；生产默认后台调度 docs-propagate。 */
+  docsPropagationScheduler?: (ruleIds: string[]) => void | Promise<void>;
 }
 
 export interface AnalyzeMeta {
@@ -213,8 +216,7 @@ async function runCommit(
     opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db");
   const eventsDbPath =
     opts.eventsDbPath ?? path.join(home, ".teamagent", "events.db");
-  const claudeMdPath = opts.claudeMdPath ?? path.join(cwd, "CLAUDE.md");
-  const userRulesDir = path.join(home, ".claude", "teamagent", "rules");
+  const skillsDir = opts.skillsDir ?? path.join(home, ".claude", "skills", "teamagent");
 
   fs.mkdirSync(path.dirname(projectDbPath), { recursive: true });
   fs.mkdirSync(path.dirname(userGlobalDbPath), { recursive: true });
@@ -237,12 +239,7 @@ async function runCommit(
   const recompile = async (_activeFromProject: KnowledgeEntry[]): Promise<void> => {
     await runCompile({
       store: dualStore,
-      markdownCompiler: createRuleCompiler({
-        claudeMdPath,
-        rulesDir: userRulesDir,
-        now: () => now().toISOString(),
-      }),
-      skillCompiler: makeSkillCompiler(),
+      skillCompiler: makeSkillCompiler({ skillsDir }),
     });
   };
 
@@ -335,6 +332,16 @@ async function runCommit(
     try {
       await vectorizeExtractedEntries(result.extracted, projectDbPath, opts.embedder);
     } catch { /* 向量同步失败不阻断 */ }
+    try {
+      const ids = result.extracted.map((e) => e.id);
+      if (opts.docsPropagationScheduler) {
+        await opts.docsPropagationScheduler(ids);
+      } else {
+        scheduleDocsPropagation(ids, { cwd });
+      }
+    } catch {
+      // docs propagation is best-effort
+    }
   }
 
   const lines: string[] = [];
@@ -343,7 +350,7 @@ async function runCommit(
   lines.push(`  识别纠正: ${result.correctionsFound}`);
   lines.push(`  成功提取: ${result.extracted.length}  (跳过 ${result.skipped}, 失败 ${result.failed})`);
   lines.push(`  知识库: ${before} → ${after}`);
-  lines.push(`  CLAUDE.md 已重编译: ${claudeMdPath}`);
+  lines.push(`  Skills 已更新；docs propagation 已调度`);
   if (result.extracted.length > 0) {
     lines.push("");
     lines.push("  新增条目:");
