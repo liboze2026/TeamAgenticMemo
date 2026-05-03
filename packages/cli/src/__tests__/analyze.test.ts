@@ -263,6 +263,7 @@ describe("--commit mode: auto-vectorization", () => {
 
   // 384-dim deterministic stub embedder (no Xenova dependency)
   const stubEmbedder = {
+    modelId: "analyze-test-deterministic",
     async embed(texts: string[]): Promise<number[][]> {
       return texts.map((t) => {
         const v = new Array(384).fill(0.5);
@@ -315,10 +316,14 @@ describe("--commit mode: auto-vectorization", () => {
     const db = openDb(projectDbPath);
     const vecCount = db.prepare("SELECT COUNT(*) as n FROM knowledge_trigger_vec").get() as { n: number };
     const patVecCount = db.prepare("SELECT COUNT(*) as n FROM knowledge_pattern_vec").get() as { n: number };
+    const metadata = db.prepare("SELECT embedder_model_id FROM knowledge WHERE id = ?").get(
+      "pers-vec-test-0001",
+    ) as { embedder_model_id: string };
     db.close();
 
     expect(vecCount.n).toBe(1);
     expect(patVecCount.n).toBe(1);
+    expect(metadata.embedder_model_id).toBe(stubEmbedder.modelId);
   });
 });
 

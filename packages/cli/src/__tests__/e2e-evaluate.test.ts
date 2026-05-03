@@ -4,10 +4,11 @@ import {
   parseE2EEvaluateArgs,
   renderE2EEvaluateResult,
 } from "../commands/e2e-evaluate.js";
+import { deterministicRuleEmbedder } from "./deterministic-rule-embedder.js";
 
 describe("executeE2EEvaluate", () => {
   it("runs the real analyze/SQLite/compile/PreToolUse loop", async () => {
-    const result = await executeE2EEvaluate();
+    const result = await executeE2EEvaluate({ embedder: deterministicRuleEmbedder });
 
     expect(result.ok).toBe(true);
     expect(result.learnedRules).toBe(3);

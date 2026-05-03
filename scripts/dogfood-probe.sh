@@ -26,9 +26,19 @@ mkdir -p "$PROBE_RUN_DIR"
 
 CONTROL_OUT="$PROBE_RUN_DIR/control.jsonl"
 DOGFOOD_OUT="$PROBE_RUN_DIR/dogfood.jsonl"
+HELP_OUT="$PROBE_RUN_DIR/claudefast-help.txt"
+FLAGS_OUT="$PROBE_RUN_DIR/claudefast-stream-json-flags.txt"
+HOOK_DEBUG_OUT="$PROBE_RUN_DIR/claudefast-hooks.debug.log"
 SANDBOX_CFG="$PROBE_RUN_DIR/sandbox-cfg"
 SANDBOX_CODEX="$PROBE_RUN_DIR/sandbox-codex"
 mkdir -p "$SANDBOX_CFG" "$SANDBOX_CODEX"
+source "$REPO_ROOT/docs/feature-verify-kit/claudefast-stream-json-flags.sh"
+STREAM_JSON_FLAGS=()
+while IFS= read -r flag; do
+  STREAM_JSON_FLAGS+=("$flag")
+done < <(claudefast_stream_json_flags claudefast "$HELP_OUT" "$HOOK_DEBUG_OUT")
+printf '%s\n' "${STREAM_JSON_FLAGS[@]}" > "$FLAGS_OUT"
+STREAM_JSON_FLAGS_STRING="${STREAM_JSON_FLAGS[*]}"
 
 # Force a SINGLE bash invocation so we get one tool_result with both lines.
 # Otherwise the agent splits into two calls and a Fact-Forcing-Gate hook in
@@ -44,9 +54,7 @@ run_in_zsh () {
     cd '$REPO_ROOT'
     $setup
     claudefast -p \
-      --output-format stream-json \
-      --include-hook-events \
-      --verbose \
+      $STREAM_JSON_FLAGS_STRING \
       --permission-mode bypassPermissions \
       '$PROMPT'
   " > "$out" 2>&1
@@ -91,9 +99,7 @@ PID_DOGFOOD=$!
   HOME="$TIER3_HOME" zsh -ic "
     cd '$REPO_ROOT'
     claudefast -p \
-      --output-format stream-json \
-      --include-hook-events \
-      --verbose \
+      $STREAM_JSON_FLAGS_STRING \
       --permission-mode bypassPermissions \
       '$PROMPT'
   " > "$TIER3_OUT" 2>&1

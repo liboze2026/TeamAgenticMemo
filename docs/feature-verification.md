@@ -22,6 +22,8 @@ Every feature/fix must include a verification summary in both places:
 Keep updating the code/docs until all three paths agree.
 
 1. Verify with `!claudefast -p`.
+   - It must run `claudefast -h` first and record the supported flags.
+   - `claudefast -p` must receive a prompt argument or stdin.
    - It must run `{MODULE} --help` first, or the module's equivalent help /
      metadata entry point.
    - It must emit JSON using a declared schema or stable JSON format.
@@ -117,9 +119,18 @@ bash docs/feature-verify-kit/run-all.sh
 
 脚本会执行：
 
-1. `verify-claude-stream-json.sh`：`claude -p --model haiku --output-format stream-json` + JSON schema。
+1. `verify-claude-stream-json.sh`：先 `claudefast -h`，再用
+   `--output-format stream-json --include-partial-messages --verbose` 和
+   `--debug hooks --debug-file <path>` 跑 JSON schema。
 2. `hardmatch-features.sh`：对 `fixtures/expected-product-features.json` 做 `jq -S` 后 `diff -u` 硬匹配。
-3. `verify-tmux-interactive.sh`：tmux 启动 `claudefast` 交互模式并执行 `/export`。
+3. `verify-dashboard-health.sh`：生成 dashboard，并用稳定文本
+   `系统健康总结` / `Retrieval Health` 作为健康信号；watch 模式也可用
+   `/health.json` 的 `service=teamagent-dashboard` 与 `status=ok`。
+4. `verify-tmux-interactive.sh`：tmux 启动 `claudefast` 交互模式并执行 `/export`。
+
+不要把 `--include-hook-events` 当成活跃 recipe 或验收证据。hook evidence
+必须来自 `--debug hooks --debug-file <path>`；stream-json 用于原始
+conversation/tool transcript。
 
 固定验收问句：
 
