@@ -43,6 +43,21 @@ env -u GITHUB_TOKEN gh pr view <n> \
 
 If `comments` is `[]` and the top-level review body contains a 👍 reaction, you’re green.
 
+If `comments` is `[]` and there is no Codex 👍 yet, explicitly ask for a review,
+pause for one minute, then fetch inline comments again:
+
+```bash
+env -u GITHUB_TOKEN gh pr comment <n> \
+  --repo libz-renlab-ai/TeamBrain \
+  --body '@codex review'
+
+sleep 60
+
+env -u GITHUB_TOKEN gh api \
+  repos/libz-renlab-ai/TeamBrain/pulls/<n>/comments \
+  --jq '.[] | select(.user.login == "chatgpt-codex-connector[bot]") | {body, path, line}'
+```
+
 ### 2. Triage by priority
 
 Each inline comment opens with a coloured badge:
@@ -93,6 +108,7 @@ So after every fix-PR, **go back to step 1 on that fix-PR**. Stop only when:
 - `fetch the codex review`
 - `chatgpt-codex-connector`
 - `pulls/.*comments`
+- `@codex review`
 - `silent`
 - `loop`
 
