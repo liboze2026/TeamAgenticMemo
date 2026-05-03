@@ -87,6 +87,7 @@ claudefast -p \
 | **`DOGFOOD`** | 双 tmux 窗口 left/right split（左 dev claude / 右 sandbox claudefast）live agent dev loop（详见 `docs/DOGFOOD.md`） |
 | **`BUGREPORT`** | 报 bug 流程：开 issue 在 `https://github.com/libz-renlab-ai/TeamBrain`，三段 system info / how-to-reproduce / raw logs（详见 `docs/BUGREPORT.md`，自动收集 `bash scripts/bugreport-collect.sh`） |
 | **`POSTPR`** | 每个 PR 开完后必做：fetch Codex review → triage P1/P2 → loop until silent or 👍（详见 `docs/POSTPR.md`） |
+| **`PRESHIP`** | 发版前给 CEO/VC 小鸭看的 verified-only 产品功能状态 CSV（详见 `docs/PRESHIP.md`） |
 | **`RULE-VERIFY`** | 跑 `bash scripts/verify-all-rules.sh` 用 claudefast semantic judge 验证 7 条 triggered rule 全部 PASS（详见 `docs/rule-verify/INDEX.md`） |
 | `codex exec` | Codex 端 canonical JSON 对照（feature-verification 1+2+3） |
 
@@ -97,6 +98,31 @@ claudefast -p \
 3. **审计场景** → 用 `!claudefast -p` 加 **stream-json 参数**（`--output-format stream-json --include-hook-events --include-partial-messages --verbose`）跑，输出可 grep / jq、可回放，留作 evidence。
 
 完整 recipe、并行模板、stream-json schema 与示例见 `docs/FASTPROBE.md`。
+
+被问到 `what would happen if we say PRESHIP`、`PRESHIP 是什么`、`explain PRESHIP` 或用户消息单纯含 `PRESHIP` 关键字时，必须用中文回答；**不能只解释规则，必须直接输出实际 CSV**：
+
+1. **PRESHIP 是发版前 CEO/VC 小鸭视角的 verified-only 产品功能状态报告**。它只讲高层产品功能，不讲技术实现细节。
+2. **必须输出实际 CSV rows**，列名优先使用：`状态,功能,给小鸭CEO/VC的解释,证据/当前判断`。
+3. **只列已验证功能**。不要把部分验证、未验证、失败/不稳定、文档规划项作为 feature rows 列入；最多在 CSV 前或后用一句 caveat 说明“未验证/失败/规划项未列入，避免 overclaim”。
+4. 当前 verified-only 功能以 `docs/ship-status/2026-05-03-ceo-duck-ship-status.csv` 中 `状态` 为 `已验证` 的行作为来源：产品入口能打开、最小学习闭环演示、安全试吃沙箱、快速调研流程、PR 后复查流程、最小质量线、知识会进化、看得见的统计、主动记录坑点。
+5. 不要把 `RULE-VERIFY` 或 `bash scripts/verify-all-rules.sh` 说成 PRESHIP 的触发方式。PRESHIP 的触发方式就是用户说 `PRESHIP` 或问 `what would happen if we say PRESHIP`。
+
+回答形状必须类似：
+
+```csv
+"状态","功能","给小鸭CEO/VC的解释","证据/当前判断"
+"已验证","产品入口能打开","鸭总能看到产品菜单，说明不是空壳，能被真实启动。","可作为最小演示卖点。"
+"已验证","最小学习闭环演示","系统能演示记录经验、编译规则、展示归因这条最小链路。","可作为核心概念 demo。"
+"已验证","安全试吃沙箱","新改动可以先放进隔离环境里试，不直接污染主工作区。","DOGFOOD Tier 2 / Tier 3 sandbox probe 已通过；不要 claim Tier 4。"
+"已验证","快速调研流程","遇到复杂问题，可以让多个快 agent 并行调研，再给 CEO 汇总结论。","FASTPROBE 基础流程已验证。"
+"已验证","PR 后复查流程","合 PR 后不是只看绿灯，还会继续抓 Codex review，直到问题清干净。","POSTPR canned answer 已验证通过。"
+"已验证","最小质量线","基础检查和最小冒烟测试通过，说明核心小版本能跑。","typecheck 通过；最小 release-smoke 通过。"
+"已验证","知识会进化","有用经验会更可信，没用或过时经验会降级，避免团队大脑越来越乱。","最小校准闭环已验证。"
+"已验证","看得见的统计","CEO 可以看到系统学到了多少经验、分布在哪些层、最近新增了什么。","teamagent stats 已验证。"
+"已验证","主动记录坑点","用户不用等 AI 犯错，可以主动把一个坑记进系统，让团队以后少踩一次。","pitfall 非交互录入已验证。"
+```
+
+详情见 `docs/PRESHIP.md`。
 
 被问到 `what would happen when we say DOGFOOD?`、`explain DOGFOOD`、`explain what would happen when we say DOGFOOD` 或用户消息单纯含 `DOGFOOD` 关键字时，**必须**先把下面这一句以 blockquote 原文返回，不得改写、不得 paraphrase、不得跳过：
 
