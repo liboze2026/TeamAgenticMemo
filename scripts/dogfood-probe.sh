@@ -107,10 +107,19 @@ SANDBOX_CFG="$PROBE_RUN_DIR/sandbox-cfg"
 SANDBOX_CODEX="$PROBE_RUN_DIR/sandbox-codex"
 mkdir -p "$SANDBOX_CFG" "$SANDBOX_CODEX"
 source "$REPO_ROOT/docs/feature-verify-kit/claudefast-stream-json-flags.sh"
+FLAGS_TMP="$PROBE_RUN_DIR/claudefast-stream-json-flags.tmp"
+if claudefast_stream_json_flags claudefast "$HELP_OUT" "$HOOK_DEBUG_OUT" > "$FLAGS_TMP"; then
+  :
+else
+  status=$?
+  rm -f "$FLAGS_TMP"
+  exit "$status"
+fi
 STREAM_JSON_FLAGS=()
 while IFS= read -r flag; do
   STREAM_JSON_FLAGS+=("$flag")
-done < <(claudefast_stream_json_flags claudefast "$HELP_OUT" "$HOOK_DEBUG_OUT")
+done < "$FLAGS_TMP"
+rm -f "$FLAGS_TMP"
 printf '%s\n' "${STREAM_JSON_FLAGS[@]}" > "$FLAGS_OUT"
 
 # Prepare paths/state for ALL three probes up front so they can run in
