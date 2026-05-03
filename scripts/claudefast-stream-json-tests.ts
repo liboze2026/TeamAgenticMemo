@@ -57,6 +57,7 @@ interface Options {
   streamJsonArgs: string[];
   hookDebugSupported: boolean;
   hookEvidenceMode: "debug-file" | "unsupported";
+  preferLocalBinForBrokenPnpmStub: boolean;
 }
 
 interface ParsedStream {
@@ -269,6 +270,7 @@ function parseArgs(argv: string[]): Options {
     streamJsonArgs: ["--output-format", "stream-json"],
     hookDebugSupported: false,
     hookEvidenceMode: "unsupported",
+    preferLocalBinForBrokenPnpmStub: false,
   };
 
   for (const arg of argv) {
@@ -323,23 +325,64 @@ function printHelp(): void {
   ].join("\n"));
 }
 
-function claudefastEnv(): NodeJS.ProcessEnv {
-  const originalPath = process.env.PATH ?? "";
-  const entries = originalPath
-    .split(path.delimiter)
-    .filter((entry) => !entry.includes(`${path.sep}node_modules${path.sep}.bin`));
-  const localBin = path.join(osHome(), ".local", "bin");
+function claudefastEnv(preferLocalBin = false): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    PATH: [localBin, ...entries].filter(Boolean).join(path.delimiter),
+    PATH: claudefastPath(process.env.PATH ?? "", osHome(), preferLocalBin),
   };
+}
+
+function claudefastPath(originalPath: string, home: string, preferLocalBin = false): string {
+  const entries = originalPath.split(path.delimiter).filter(Boolean);
+  const localBin = home ? path.join(home, ".local", "bin") : "";
+  if (localBin && preferLocalBin) {
+    return [localBin, ...entries.filter((entry) => entry !== localBin)].join(path.delimiter);
+  }
+  if (localBin && !entries.includes(localBin)) {
+    entries.push(localBin);
+  }
+  return entries.join(path.delimiter);
 }
 
 function osHome(): string {
   return process.env.HOME || process.env.USERPROFILE || "";
 }
 
+function runEnvSelfTest(): void {
+  const home = path.join(path.sep, "tmp", "teamagent-claudefast-home");
+  const projectBin = path.join(REPO_ROOT, "node_modules", ".bin");
+  const nestedProjectBin = path.join(REPO_ROOT, "packages", "cli", "node_modules", ".bin");
+  const systemBin = path.join(path.sep, "usr", "bin");
+  const originalPath = [projectBin, nestedProjectBin, systemBin].join(path.delimiter);
+  const actual = claudefastPath(originalPath, home).split(path.delimiter);
+
+  assertEqual(actual[0], projectBin, "keeps leading project node_modules/.bin entry");
+  assertEqual(actual[1], nestedProjectBin, "keeps nested node_modules/.bin entry");
+  assertEqual(actual[2], systemBin, "keeps original PATH order");
+  assertEqual(actual[3], path.join(home, ".local", "bin"), "adds local bin as fallback only");
+  assertEqual(actual.length, 4, "does not add extra PATH entries");
+
+  const fallback = claudefastPath(originalPath, home, true).split(path.delimiter);
+  assertEqual(fallback[0], path.join(home, ".local", "bin"), "narrow fallback can prefer local bin");
+  assertEqual(fallback[1], projectBin, "narrow fallback preserves project node_modules/.bin");
+  assertEqual(shouldRetryWithLocalBin("claudefast", "Error: claude native binary not installed."), true, "detects broken pnpm stub");
+  assertEqual(shouldRetryWithLocalBin("claude", "Error: claude native binary not installed."), false, "does not retry unrelated bins");
+
+  console.log("claudefast env self-test passed");
+}
+
+function assertEqual(actual: unknown, expected: unknown, message: string): void {
+  if (actual !== expected) {
+    throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
+
 async function main(): Promise<number> {
+  if (process.argv.slice(2).includes("--self-test-env")) {
+    runEnvSelfTest();
+    return 0;
+  }
+
   const opts = parseArgs(process.argv.slice(2));
   const selected = opts.only ? CASES.filter((c) => opts.only?.has(c.id)) : CASES;
   if (selected.length === 0) {
@@ -353,6 +396,7 @@ async function main(): Promise<number> {
   opts.streamJsonArgs = capabilities.streamJsonArgs;
   opts.hookDebugSupported = capabilities.hookDebugSupported;
   opts.hookEvidenceMode = capabilities.hookEvidenceMode;
+  opts.preferLocalBinForBrokenPnpmStub = capabilities.preferLocalBinForBrokenPnpmStub;
 
   console.log("🧪 TeamAgent claudefast stream-json test pool");
   console.log(`  cases:       ${selected.length}`);
@@ -547,7 +591,9 @@ async function runCase(testCase: TestCase, opts: Options, runDir: string): Promi
 
   const started = Date.now();
   try {
-    const proc = await spawnCollect(opts.bin, args, opts.timeoutMs);
+    const proc = await spawnCollect(opts.bin, args, opts.timeoutMs, {
+      preferLocalBin: opts.preferLocalBinForBrokenPnpmStub,
+    });
     const durationMs = Date.now() - started;
     writeFileSync(stdoutPath, proc.stdout, "utf-8");
     writeFileSync(stderrPath, proc.stderr, "utf-8");
@@ -628,8 +674,17 @@ async function detectClaudefastCapabilities(bin: string, runDir: string): Promis
   streamJsonArgs: string[];
   hookDebugSupported: boolean;
   hookEvidenceMode: "debug-file" | "unsupported";
+  preferLocalBinForBrokenPnpmStub: boolean;
 }> {
-  const proc = await spawnCollect(bin, ["-h"], 30_000);
+  let preferLocalBinForBrokenPnpmStub = false;
+  let proc = await spawnCollect(bin, ["-h"], 30_000);
+  if (proc.exitCode !== 0 && shouldRetryWithLocalBin(bin, proc.stderr)) {
+    const retry = await spawnCollect(bin, ["-h"], 30_000, { preferLocalBin: true });
+    if (retry.exitCode === 0) {
+      proc = retry;
+      preferLocalBinForBrokenPnpmStub = true;
+    }
+  }
   writeFileSync(path.join(runDir, "claudefast-help.stdout.log"), proc.stdout, "utf-8");
   writeFileSync(path.join(runDir, "claudefast-help.stderr.log"), proc.stderr, "utf-8");
   if (proc.exitCode !== 0) {
@@ -650,8 +705,13 @@ async function detectClaudefastCapabilities(bin: string, runDir: string): Promis
     includeHookEventsUsed: false,
     hookDebugSupported,
     hookEvidenceMode,
+    preferLocalBinForBrokenPnpmStub,
   }, null, 2) + "\n", "utf-8");
-  return { streamJsonArgs, hookDebugSupported, hookEvidenceMode };
+  return { streamJsonArgs, hookDebugSupported, hookEvidenceMode, preferLocalBinForBrokenPnpmStub };
+}
+
+function shouldRetryWithLocalBin(bin: string, stderr: string): boolean {
+  return bin === "claudefast" && stderr.includes("claude native binary not installed");
 }
 
 function isHookExpectation(expectation: ExpectationKind): boolean {
@@ -686,13 +746,14 @@ function spawnCollect(
   bin: string,
   args: string[],
   timeoutMs: number,
+  opts: { preferLocalBin?: boolean } = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
-      env: claudefastEnv(),
+      env: claudefastEnv(opts.preferLocalBin ?? false),
     });
 
     let stdout = "";

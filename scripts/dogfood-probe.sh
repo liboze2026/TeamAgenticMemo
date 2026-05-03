@@ -21,6 +21,80 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Force a SINGLE bash invocation so we get one tool_result with both lines.
+# Otherwise the agent splits into two calls and a Fact-Forcing-Gate hook in
+# the control session can reorder them.
+PROMPT='Use the Bash tool to run THIS EXACT single command (one tool call, copy verbatim):
+printenv HOME; printenv CLAUDE_CONFIG_DIR
+In your final assistant message, output ONLY the two lines that single command produced, separated by a newline.'
+
+run_in_zsh () {
+  # $1 = setup snippet to run before claudefast; $2 = output file
+  local setup="$1"; local out="$2"
+  zsh -ic '
+    repo_root=$1
+    setup=$2
+    prompt=$3
+    shift 3
+
+    cd "$repo_root" || exit
+    if [ -n "$setup" ]; then
+      eval "$setup"
+    fi
+    claudefast -p "$@" --permission-mode bypassPermissions "$prompt"
+  ' dogfood-probe "$REPO_ROOT" "$setup" "$PROMPT" "${STREAM_JSON_FLAGS[@]}" > "$out" 2>&1
+}
+
+self_test_quoting () {
+  local tmp_dir fake_bin fake_claudefast out debug_path setup
+  tmp_dir="$(mktemp -d /tmp/dogfood-probe-quoting.XXXXXX)"
+  fake_bin="$tmp_dir/bin"
+  fake_claudefast="$fake_bin/claudefast"
+  out="$tmp_dir/argv.txt"
+  debug_path="$tmp_dir/path with spaces/hooks debug.log"
+  mkdir -p "$fake_bin" "$(dirname "$debug_path")"
+
+  cat > "$fake_claudefast" <<'FAKE_CLAUDEFAST'
+#!/usr/bin/env bash
+index=0
+for arg in "$@"; do
+  index=$((index + 1))
+  printf 'ARG[%02d]=<%s>\n' "$index" "$arg"
+done
+FAKE_CLAUDEFAST
+  chmod +x "$fake_claudefast"
+
+  STREAM_JSON_FLAGS=(
+    "--output-format" "stream-json"
+    "--include-partial-messages"
+    "--verbose"
+    "--debug" "hooks"
+    "--debug-file" "$debug_path"
+  )
+  PROMPT="self-test prompt with spaces"
+  setup="unalias claudefast 2>/dev/null || true; unfunction claudefast 2>/dev/null || true; export PATH='$fake_bin':\$PATH"
+
+  run_in_zsh "$setup" "$out"
+
+  if ! grep -Fxq "ARG[09]=<$debug_path>" "$out"; then
+    echo "FAIL: --debug-file path with spaces was not preserved as one argv entry" >&2
+    cat "$out" >&2
+    return 1
+  fi
+  if ! grep -Fxq "ARG[12]=<$PROMPT>" "$out"; then
+    echo "FAIL: prompt with spaces was not preserved as one argv entry" >&2
+    cat "$out" >&2
+    return 1
+  fi
+
+  echo "PASS: claudefast argv quoting preserves --debug-file path with spaces"
+}
+
+if [[ "${1:-}" == "--self-test-quoting" ]]; then
+  self_test_quoting
+  exit
+fi
+
 PROBE_RUN_DIR="${DOGFOOD_PROBE_DIR:-.dogfood/probe-$(date +%s)}"
 mkdir -p "$PROBE_RUN_DIR"
 
@@ -38,27 +112,6 @@ while IFS= read -r flag; do
   STREAM_JSON_FLAGS+=("$flag")
 done < <(claudefast_stream_json_flags claudefast "$HELP_OUT" "$HOOK_DEBUG_OUT")
 printf '%s\n' "${STREAM_JSON_FLAGS[@]}" > "$FLAGS_OUT"
-STREAM_JSON_FLAGS_STRING="${STREAM_JSON_FLAGS[*]}"
-
-# Force a SINGLE bash invocation so we get one tool_result with both lines.
-# Otherwise the agent splits into two calls and a Fact-Forcing-Gate hook in
-# the control session can reorder them.
-PROMPT='Use the Bash tool to run THIS EXACT single command (one tool call, copy verbatim):
-printenv HOME; printenv CLAUDE_CONFIG_DIR
-In your final assistant message, output ONLY the two lines that single command produced, separated by a newline.'
-
-run_in_zsh () {
-  # $1 = setup snippet to run before claudefast; $2 = output file
-  local setup="$1"; local out="$2"
-  zsh -ic "
-    cd '$REPO_ROOT'
-    $setup
-    claudefast -p \
-      $STREAM_JSON_FLAGS_STRING \
-      --permission-mode bypassPermissions \
-      '$PROMPT'
-  " > "$out" 2>&1
-}
 
 # Prepare paths/state for ALL three probes up front so they can run in
 # parallel — each call takes ~30-60s and they're fully independent.
@@ -96,13 +149,7 @@ run_in_zsh "
 PID_DOGFOOD=$!
 
 (
-  HOME="$TIER3_HOME" zsh -ic "
-    cd '$REPO_ROOT'
-    claudefast -p \
-      $STREAM_JSON_FLAGS_STRING \
-      --permission-mode bypassPermissions \
-      '$PROMPT'
-  " > "$TIER3_OUT" 2>&1
+  HOME="$TIER3_HOME" run_in_zsh "" "$TIER3_OUT"
 ) &
 PID_TIER3=$!
 
