@@ -15,6 +15,11 @@
 
 The repo has Codex AI configured to auto-review every new PR. Settings: <https://chatgpt.com/codex/cloud/settings/general>. It posts within 1–3 minutes of the PR opening (after the first commit lands and CI starts).
 
+TeamBrain PRs must be normal PRs, never draft PRs. Do not use `--draft` in
+`gh pr create`, `teamagent pr-cycle`, connector calls, or GitHub UI/API flows.
+If the branch is not ready for review, keep working locally and open the PR
+only after the verification gate is green.
+
 ## Three-step recipe
 
 ### 1. Fetch the Codex review

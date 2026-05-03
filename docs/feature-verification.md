@@ -54,6 +54,10 @@ The feature is not verified until:
 
 When Claude Code submits a PR for a feature/fix, use `teamagent pr-cycle` to
 create or locate the PR, wait five minutes, and inspect review feedback.
+TeamBrain PRs are always normal PRs, not draft PRs. Do not pass `--draft` to
+`gh pr create`, `teamagent pr-cycle`, connector calls, or GitHub UI/API flows.
+If the change is not ready for review, keep working locally instead of opening
+a draft PR.
 
 When asked "what to do when we make a PR", answer with this PR loop first,
 before the generic feature verification checklist:
