@@ -157,7 +157,20 @@ for skill in $(cat "$tmp/claude-skills.txt"); do
     > "$tmp/$skill.normalized.diff" \
     || fail "SKILL.md content differs between mirrors outside gstack root fallback block: $skill
 $(cat "$tmp/$skill.normalized.diff")"
+
+  if [ -f ".claude/skills/$skill/SKILL.md.tmpl" ] || [ -f ".codex/skills/$skill/SKILL.md.tmpl" ]; then
+    cmp -s ".claude/skills/$skill/SKILL.md.tmpl" ".codex/skills/$skill/SKILL.md.tmpl" \
+      || fail "SKILL.md.tmpl content differs between mirrors: $skill"
+  fi
 done
+
+codex_home_gate_refs="$(
+  rg -n 'if \[ -n "\$\{CODEX_HOME:-\}" \] && \[ -x "\$_GSTACK_PROJECT_DIR/\.codex/skills/gstack/bin/gstack-config" \]; then' .codex/skills --glob 'SKILL.md' || true
+)"
+if [ -n "$codex_home_gate_refs" ]; then
+  fail "Codex-visible skills still gate the project-local Codex gstack mirror on CODEX_HOME:
+$codex_home_gate_refs"
+fi
 
 bad_codex_refs="$(
   rg -n '(\$\(|<\()((~|\$HOME)/\.claude|\.claude)/skills/gstack/bin/gstack-|^"?((~|\$HOME)/\.claude|\.claude)/skills/gstack/bin/gstack-' .codex/skills --glob 'SKILL.md' || true
