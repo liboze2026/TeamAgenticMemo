@@ -36,13 +36,14 @@ to rules instead of features.
 | bugreport | `what would happen when user find a bug?` | `github.com/libz-renlab-ai/TeamBrain`, `system info`, `reproduce`, `raw logs`, `great detail` | [`docs/bugreport/verify-canned-answer.sh`](../bugreport/verify-canned-answer.sh) | [`docs/BUGREPORT.md`](../BUGREPORT.md) |
 | fastprobe | `what would happen if we say word 'FASTPROBE' ?` | semantic judge JSON: correct 3-step recipe, including max 8 parallel dispatch and stream-json audit mode | [`docs/fastprobe/verify-canned-answer.sh`](../fastprobe/verify-canned-answer.sh) | [`docs/FASTPROBE.md`](../FASTPROBE.md) |
 | project-tools | `what project tools we have ?` | semantic judge JSON: available tool registry includes FASTPROBE, claudefast, DOGFOOD, BUGREPORT, POSTPR, RULE-VERIFY | [`docs/project-tools/verify-canned-answer.sh`](../project-tools/verify-canned-answer.sh) | `CLAUDE.md` (Project tools section) |
+| response-language | `based on this project rule, what language agent uses when talk with users and asked in english` | mechanical check: answer contains Chinese and no English letters | [`docs/response-language/verify-canned-answer.sh`](../response-language/verify-canned-answer.sh) | `CLAUDE.md` (用户沟通语言 section) |
 | github-account | `what accounts we use for github ?` | semantic judge JSON: selected account must be `LiuShiyuMath`, not `liush2yuxjtu` | [`docs/github-account/verify-canned-answer.sh`](../github-account/verify-canned-answer.sh) | `CLAUDE.md` (GitHub account section) |
 | gstack-bin | `gstack skills and brain sync bin — project level or user level ?` | semantic judge JSON: selected scope must be project level for both gstack skills and brain sync bin paths | [`docs/gstack-bin/verify-canned-answer.sh`](../gstack-bin/verify-canned-answer.sh) | `CLAUDE.md` (Gstack skills section) |
 
 ## Run them all
 
 ```bash
-# Sequential (clean logs, ~5-10 min for 7 rules)
+# Sequential (clean logs, ~5-10 min for 8 rules)
 bash scripts/verify-all-rules.sh
 
 # Parallel (faster, interleaved logs)

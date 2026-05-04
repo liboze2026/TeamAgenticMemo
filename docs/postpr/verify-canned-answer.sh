@@ -19,25 +19,32 @@ cd "$(git rev-parse --show-toplevel)"
 OUT="docs/postpr/.last-verify.out"
 PROMPT="what we shall do after each PR?"
 
-# Prefer interactive zsh so claudefast (a zsh function) resolves; fall back to
-# direct invocation only when zsh is unavailable.
-if command -v zsh >/dev/null 2>&1; then
-    zsh -i -c "claudefast -p \"$PROMPT\"" > "$OUT" 2>&1 || {
-        echo "POSTPR VERIFY: FAIL"
-        echo "failed to run claudefast via zsh -i -c"
-        exit 1
-    }
-elif command -v claudefast >/dev/null 2>&1; then
-    claudefast -p "$PROMPT" > "$OUT" 2>&1 || {
-        echo "POSTPR VERIFY: FAIL"
-        echo "failed to run claudefast directly"
-        exit 1
-    }
-else
+run_probe() {
+    local prompt="$1"
+
+    # Prefer direct claudefast. Fall back to interactive zsh because claudefast
+    # may be a zsh alias/function on other machines; keep stderr separate so
+    # shell startup noise does not contaminate the grep target.
+    if command -v claudefast >/dev/null 2>&1; then
+        claudefast -p "$prompt" > "$OUT" 2>&1
+    elif command -v zsh >/dev/null 2>&1; then
+        local err
+        err="$(mktemp /tmp/postpr-verify-stderr.XXXXXX)"
+        PROMPT_FOR_CLAUDEFAST="$prompt" zsh -i -c 'claudefast -p "$PROMPT_FOR_CLAUDEFAST"' > "$OUT" 2> "$err" || {
+            cat "$err" >> "$OUT"
+            return 1
+        }
+    else
+        echo "neither zsh nor claudefast on PATH" > "$OUT"
+        return 1
+    fi
+}
+
+run_probe "$PROMPT" || {
     echo "POSTPR VERIFY: FAIL"
-    echo "neither zsh nor claudefast on PATH"
+    echo "failed to run answer probe"
     exit 1
-fi
+}
 
 # Fixed-string anchors (case-insensitive)
 fixed_anchors=(

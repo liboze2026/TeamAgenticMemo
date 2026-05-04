@@ -1,12 +1,13 @@
 # POSTPR — Post-PR Codex Check
 
 ```
-   PR opened ──► CI ──► Codex review ──► fix ──► merge
-       │                    │              │       │
-       │                    └─ inline       │      │
-       │                       comments    │      │
-       │                       on lines    │      │
-       └──────── repeat for follow-up PR ──┘──────┘
+   PR opened ──► CI ──► Codex review ──► conflict? ──► fix ──► merge
+       │                    │                 │          │       │
+       │                    └─ inline         │          │      │
+       │                       comments      │          │      │
+       │                       on lines      ▼          │      │
+       │                                 resolve locally │      │
+       └──────── repeat for follow-up PR / conflict fix ─┘──────┘
 ```
 
 ## TL;DR
@@ -73,7 +74,35 @@ How to address:
 - **PR not yet merged** → push a fix commit to the same branch; auto-merge will requeue once CI passes.
 - **Already merged** (e.g. you used `--auto` and it landed before Codex commented) → open a follow-up PR; commit message must reference the originating PR: `Refs codex review on PR #<n>`.
 
-### 3. Loop until silent
+### 3. Resolve conflicts before merge
+
+Conflict handling is part of the PR gate, not an afterthought:
+
+```text
+PR opened
+  -> CI / Codex review
+  -> conflict detected
+  -> classify conflict
+  -> resolve locally on the PR branch
+  -> rerun verification
+  -> push the PR branch
+  -> repeat POSTPR loop
+```
+
+Classify the conflict first:
+
+| Conflict type | Required handling |
+|---------------|-------------------|
+| **Merge conflict** | Fetch latest base, rebase or merge base into the PR branch, resolve files manually, preserve both sides' intent, rerun verification, push the same PR branch. |
+| **Codex review vs implementation conflict** | Treat P1/P2 as actionable by default. Update docs/rules first, verify the rule-backed answer, then fix code or explicitly punt with a follow-up issue. |
+| **Rule/document conflict** | Do not silently choose. Prefer current user instruction, then current `CLAUDE.md` / `AGENTS.md`, then current rule docs such as `docs/POSTPR.md`, then archived docs. Update docs to remove ambiguity before continuing. |
+
+Never resolve conflict by editing `main` directly, running `git reset --hard`,
+force-pushing, or dropping someone else's change just to make the conflict go
+away. Conflict resolution is a code change, so rerun `pnpm test`,
+`pnpm typecheck`, and the relevant feature verification 1+2+3 before merge.
+
+### 4. Loop until silent
 
 Codex reviews follow-up PRs too. Real example from this repo:
 
@@ -89,8 +118,10 @@ Codex reviews follow-up PRs too. Real example from this repo:
   └─ Codex 👍 — done
 ```
 
-So after every fix-PR, **go back to step 1 on that fix-PR**. Stop only when:
+So after every fix-PR or conflict-resolution commit, **go back to step 1 on that fix-PR**. Stop only when:
 
+- CI is green,
+- GitHub shows no merge conflict,
 - Codex 👍 reacts with no inline comments, OR
 - Codex makes no comment within ~5 minutes of CI starting (timeout)
 
@@ -99,11 +130,12 @@ So after every fix-PR, **go back to step 1 on that fix-PR**. Stop only when:
 - **`gh` token**: this machine’s `GITHUB_TOKEN` resolves to `liush2yuxjtu`; always run `env -u GITHUB_TOKEN gh ...` so keychain auth picks `LiuShiyuMath` (the repo’s configured account). See the `## GitHub account` section in `CLAUDE.md`.
 - **CI vs Codex are independent**: CI green doesn’t mean Codex 👍 and vice-versa. Both must pass.
 - **Auto-merge race**: `gh pr merge --auto --squash` queues the merge. If Codex finds a P1 *after* CI passes, auto-merge can win the race and your fix lands as a follow-up PR — that’s fine, just treat it as “already merged” in step 2.
+- **Conflict race**: base can move after Codex passes. If GitHub reports a merge conflict, resolve it on the PR branch, rerun verification, and restart the POSTPR loop.
 - **Re-trigger Codex** if you need a re-review: comment `@codex review` on the PR.
 
 ## Verification
 
-`bash docs/postpr/verify-canned-answer.sh` must PASS. It runs `claudefast -p "what we shall do after each PR?"` and greps for the canonical anchors:
+`bash docs/postpr/verify-canned-answer.sh` must PASS. It runs `claudefast -p` with a prompt that first reads `CLAUDE.md`, then answers the trigger `what we shall do after each PR?`, and greps for the canonical anchors:
 
 - `fetch the codex review`
 - `chatgpt-codex-connector`

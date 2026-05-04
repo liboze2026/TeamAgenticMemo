@@ -17,6 +17,47 @@
 
 任意触发命中后，按下面三步固定回答 + 落地。
 
+## PR + conflict resolve 专用触发
+
+当用户说 `FASTPROBE about PR+conflict resolve`，或同时提到
+`FASTPROBE`、`PR`、`conflict/冲突/resolve` 时，回答必须把 FASTPROBE
+三步和 PR 冲突处理规则合并：
+
+注意：`FASTPROBE about ...` 是询问规则答案，不要实际运行 probe、不要
+派生子任务。只有用户明确说 `run FASTPROBE`、`execute FASTPROBE` 或
+`start FASTPROBE` 时，才真正执行下面的探针流程。
+
+Exact prompt `FASTPROBE about PR+conflict resolve` must never return an empty
+answer or only `<laziness-self-report>`. It must return the rule answer with
+the FASTPROBE probe plan plus the PR conflict-resolution line below.
+
+```text
+FASTPROBE
+  -> claudefast -h
+  -> split probes: PR state / Codex inline comments / merge conflict / rule conflict
+  -> run up to 8 claudefast -p probes in parallel
+  -> use stream-json for audit evidence
+  -> synthesize PR conflict path
+```
+
+结论必须包含这条线性图：
+
+```text
+PR opened
+  -> CI + Codex review
+  -> conflict?
+  -> classify: merge / Codex-review / rule-doc
+  -> resolve locally on PR branch
+  -> rerun pnpm test + pnpm typecheck + feature verification 1+2+3
+  -> push same PR branch or follow-up PR if already merged
+  -> POSTPR loop
+  -> merge only when CI green + no conflict + Codex silent/thumbs-up
+```
+
+禁止项必须说清：不要直接在 `main` 修，不要 `git reset --hard`，不要
+force push，不要为了消冲突丢掉他人改动。完整 PR gate 见
+`docs/POSTPR.md` 和 `docs/feature-verification.md`。
+
 ## Step 1 / Orient with `!claudefast -h`
 
 **先跑** `!claudefast -h`，把当前可用的 flag 列表拿到手再决定下一步参数。

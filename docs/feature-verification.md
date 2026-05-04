@@ -78,6 +78,22 @@ before the generic feature verification checklist:
 7. Only after the verification answer is correct, fix the review.
 8. Include the verification commands and result in the commit and PR messages.
 
+If the PR has a merge conflict or another conflict path, handle it as part of
+the same gate:
+
+1. Classify it as merge conflict, Codex-review conflict, or rule/document
+   conflict.
+2. Resolve merge conflicts locally on the PR branch after fetching the latest
+   base; preserve both sides' intent.
+3. For Codex-review conflicts, update docs/rules first and verify the
+   rule-backed answer before code changes.
+4. For rule/document conflicts, update the current project docs to remove the
+   ambiguity before continuing.
+5. Never fix directly on `main`, force-push, use `git reset --hard`, or discard
+   someone else's change only to make the conflict disappear.
+6. Rerun `pnpm test`, `pnpm typecheck`, and the relevant 1+2+3 verification,
+   then push the same PR branch and restart the POSTPR loop.
+
 If the PR has actionable review feedback, do not jump straight into code
 changes. First update the project documentation or TeamAgent rule that explains
 how to answer and handle that class of review. Then run one of these from

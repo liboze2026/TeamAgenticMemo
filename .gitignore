@@ -57,6 +57,8 @@ docs/project-tools/.last-verify.out
 docs/project-tools/.last-judge.out
 docs/project-tools/.last-judge.json
 docs/project-tools/.last-judge-prompt.txt
+docs/response-language/.last-verify.out
+docs/response-language/.last-verify.clean.out
 docs/github-account/.last-verify.out
 docs/github-account/.last-judge.out
 docs/github-account/.last-judge.json
