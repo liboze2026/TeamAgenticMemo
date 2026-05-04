@@ -5,7 +5,7 @@
 1. `claude -p --model haiku`（通过本机 `claudefast` wrapper 走 MiniMax API）
 2. 先运行 `claudefast -h`，再使用 `stream-json` 产出原始 transcript，并用
    `--debug hooks --debug-file <path>` 产出 hook evidence
-3. 对「产品特性清单」做硬编码 JSON schema + hard-match
+3. 对「产品特性清单」做硬编码 JSON schema + value hard-match，并拒绝空白说明文字
 4. 用 `tmux + claudefast` 交互模式执行同一验证并 `/export`
 
 ## 产品特性（硬编码，必须全部命中）
