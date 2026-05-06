@@ -221,7 +221,7 @@ function main(): void {
   const sessionEndText = readIfExists(path.join(REPO_ROOT, "packages/cli/src/bin-session-end.ts"));
   const preCompactText = readIfExists(path.join(REPO_ROOT, "packages/cli/src/bin-pre-compact.ts"));
 
-  const targetPlugins = ["superpowers", "caveman", "sales", "playground"];
+  const targetPlugins = ["superpowers", "sales", "playground"];
   const missingPlugins = targetPlugins.filter((p) => !strict.pluginsSeen.includes(p));
 
   const commonNewEvidence = [

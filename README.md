@@ -218,7 +218,7 @@ claudefast -p "hi"
 teamagent init               # 初始化项目（注册 hook + 创建 .teamagent/ + 预热向量模型）
 teamagent warmup             # 单独预热向量模型 (~120MB，init 已自动跑)
 teamagent doctor             # 环境诊断 + 产品边界状态
-teamagent install-plugins    # 装 superpowers / caveman / sales / playground 等团队标配 skill
+teamagent install-plugins    # 装 superpowers / sales / playground 等团队标配 skill
 teamagent uninstall          # 卸载（保留数据，加 --delete-data 清空）
 
 # 自动更新

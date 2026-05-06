@@ -20,14 +20,12 @@ export interface PluginSpec {
 export const DEFAULT_MARKETPLACES: readonly MarketplaceSpec[] = [
   { name: "claude-plugins-official", repo: "anthropics/claude-plugins-official" },
   { name: "knowledge-work-plugins", repo: "anthropics/knowledge-work-plugins" },
-  { name: "caveman", repo: "JuliusBrussee/caveman" },
 ];
 
 export const DEFAULT_PLUGINS: readonly PluginSpec[] = [
   { plugin: "superpowers", marketplace: "claude-plugins-official" },
   { plugin: "playground", marketplace: "claude-plugins-official" },
   { plugin: "sales", marketplace: "knowledge-work-plugins" },
-  { plugin: "caveman", marketplace: "caveman" },
 ];
 
 export function parsePluginSpec(raw: string): PluginSpec {

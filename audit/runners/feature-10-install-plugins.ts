@@ -44,13 +44,11 @@ const SCENARIOS: ScenarioSpec[] = [
     expectedArgv: [
       ["plugin", "marketplace", "add", "anthropics/claude-plugins-official"],
       ["plugin", "marketplace", "add", "anthropics/knowledge-work-plugins"],
-      ["plugin", "marketplace", "add", "JuliusBrussee/caveman"],
       ["plugin", "install", "superpowers@claude-plugins-official"],
       ["plugin", "install", "playground@claude-plugins-official"],
       ["plugin", "install", "sales@knowledge-work-plugins"],
-      ["plugin", "install", "caveman@caveman"],
     ],
-    stdoutIncludes: ["Marketplaces:", "Plugins:", "7 新装", "重启 Claude Code"],
+    stdoutIncludes: ["Marketplaces:", "Plugins:", "5 新装", "重启 Claude Code"],
   },
   {
     name: "dry-run-project-scope",
@@ -58,22 +56,21 @@ const SCENARIOS: ScenarioSpec[] = [
     args: ["--dry-run", "--scope=project"],
     expectedExit: 0,
     expectedArgv: [],
-    stdoutIncludes: ["预览模式", "dry-run", "7 将执行"],
+    stdoutIncludes: ["预览模式", "dry-run", "5 将执行"],
   },
   {
-    name: "only-caveman-local-scope",
-    label: "only caveman with local scope",
-    args: ["--only=caveman", "--scope=local"],
+    name: "only-sales-local-scope",
+    label: "only sales with local scope",
+    args: ["--only=sales", "--scope=local"],
     expectedExit: 0,
     expectedArgv: [
-      ["plugin", "marketplace", "add", "JuliusBrussee/caveman"],
-      ["plugin", "install", "caveman@caveman", "--scope", "local"],
+      ["plugin", "marketplace", "add", "anthropics/knowledge-work-plugins"],
+      ["plugin", "install", "sales@knowledge-work-plugins", "--scope", "local"],
     ],
-    stdoutIncludes: ["caveman@caveman", "2 新装"],
+    stdoutIncludes: ["sales@knowledge-work-plugins", "2 新装"],
     stdoutExcludes: [
       "superpowers@claude-plugins-official",
       "playground@claude-plugins-official",
-      "sales@knowledge-work-plugins",
     ],
   },
   {
@@ -294,7 +291,7 @@ try {
     status,
     summary:
       status === "passed"
-        ? "通过：runner 创建临时 PATH fake claude，真实执行源码 CLI install-plugins 的默认、dry-run、only=caveman 和 unknown plugin 场景，并由独立 JSONL validator 校验 marketplace/install argv、HOME/PATH 隔离、scope/only/dry-run 行为和渲染输出。"
+        ? "通过：runner 创建临时 PATH fake claude，真实执行源码 CLI install-plugins 的默认、dry-run、only=sales 和 unknown plugin 场景，并由独立 JSONL validator 校验 marketplace/install argv、HOME/PATH 隔离、scope/only/dry-run 行为和渲染输出。"
         : "失败：至少一个 install-plugins 场景没有通过独立 JSONL validator；stdout/stderr、预期文件和 fake claude command log 已落盘。",
     checks,
     artifacts,

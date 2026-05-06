@@ -153,19 +153,19 @@ describe("ClaudePluginInstaller.installPlugin", () => {
     const installer = new ClaudePluginInstaller({
       spawner: fakeSpawner([
         {
-          match: ["plugin", "install", "caveman@caveman"],
+          match: ["plugin", "install", "sales@knowledge-work-plugins"],
           result: {
             kind: "exit",
             code: 0,
-            stdout: "✔ Plugin caveman@caveman is already installed",
+            stdout: "✔ Plugin sales@knowledge-work-plugins is already installed",
             stderr: "",
           },
         },
       ]),
     });
     const out = await installer.installPlugin({
-      plugin: "caveman",
-      marketplace: "caveman",
+      plugin: "sales",
+      marketplace: "knowledge-work-plugins",
     });
     expect(out.status).toBe("already");
   });
@@ -174,11 +174,11 @@ describe("ClaudePluginInstaller.installPlugin", () => {
     const installer = new ClaudePluginInstaller({
       spawner: fakeSpawner([
         {
-          match: ["plugin", "install", "ghost@caveman"],
+          match: ["plugin", "install", "ghost@knowledge-work-plugins"],
           result: {
             kind: "exit",
             code: 0,
-            stdout: "Installing plugin…✘ Failed: plugin 'ghost' not found in marketplace 'caveman'",
+            stdout: "Installing plugin…✘ Failed: plugin 'ghost' not found in marketplace 'knowledge-work-plugins'",
             stderr: "",
           },
         },
@@ -186,7 +186,7 @@ describe("ClaudePluginInstaller.installPlugin", () => {
     });
     const out = await installer.installPlugin({
       plugin: "ghost",
-      marketplace: "caveman",
+      marketplace: "knowledge-work-plugins",
     });
     expect(out.status).toBe("failed");
     expect(out.detail).toMatch(/not found|Failed/);
@@ -206,7 +206,7 @@ describe("ClaudePluginInstaller.installPlugin", () => {
       },
     });
     await installer.installPlugin(
-      { plugin: "caveman", marketplace: "caveman" },
+      { plugin: "sales", marketplace: "knowledge-work-plugins" },
       { scope: "project" },
     );
     expect(capturedArgs).toContain("--scope");

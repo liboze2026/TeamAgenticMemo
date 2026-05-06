@@ -8,12 +8,11 @@ import {
 } from "../default-plugins.js";
 
 describe("DEFAULT_MARKETPLACES", () => {
-  it("contains the 3 team-standard marketplaces", () => {
+  it("contains the 2 team-standard marketplaces", () => {
     const names = DEFAULT_MARKETPLACES.map((m) => m.name);
     expect(names).toEqual([
       "claude-plugins-official",
       "knowledge-work-plugins",
-      "caveman",
     ]);
   });
 
@@ -23,18 +22,16 @@ describe("DEFAULT_MARKETPLACES", () => {
     );
     expect(byName["claude-plugins-official"]).toBe("anthropics/claude-plugins-official");
     expect(byName["knowledge-work-plugins"]).toBe("anthropics/knowledge-work-plugins");
-    expect(byName["caveman"]).toBe("JuliusBrussee/caveman");
   });
 });
 
 describe("DEFAULT_PLUGINS", () => {
-  it("contains the 4 team-standard plugins", () => {
+  it("contains the 3 team-standard plugins", () => {
     const specs = DEFAULT_PLUGINS.map((p) => `${p.plugin}@${p.marketplace}`);
     expect(specs).toEqual([
       "superpowers@claude-plugins-official",
       "playground@claude-plugins-official",
       "sales@knowledge-work-plugins",
-      "caveman@caveman",
     ]);
   });
 
@@ -74,8 +71,8 @@ describe("parsePluginSpec", () => {
 
 describe("formatPluginSpec", () => {
   it('produces "plugin@marketplace"', () => {
-    expect(formatPluginSpec({ plugin: "caveman", marketplace: "caveman" })).toBe(
-      "caveman@caveman",
+    expect(formatPluginSpec({ plugin: "sales", marketplace: "knowledge-work-plugins" })).toBe(
+      "sales@knowledge-work-plugins",
     );
   });
 

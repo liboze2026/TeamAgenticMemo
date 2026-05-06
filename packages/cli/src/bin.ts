@@ -676,7 +676,7 @@ async function main(): Promise<void> {
           "                                   --fix: 自动修复能自动修的问题",
           "                                   --json: 输出机器可读 JSON",
           "  teamagent install-plugins [--dry-run] [--only=a,b] [--scope=user|project|local]",
-          "                                   注册团队标配 plugins（superpowers/caveman/sales/playground）",
+          "                                   注册团队标配 plugins（superpowers/sales/playground）",
           "                                   通过 'claude plugin marketplace add' + 'claude plugin install' 调 CC CLI",
           "                                   默认装全部；--only 限定子集；--dry-run 只预览",
           "  teamagent pair capsule --name=<device> --host=<host> [--user=<user>] [--out=<file>]",

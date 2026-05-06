@@ -42,8 +42,8 @@ describe("parseInstallPluginsArgs", () => {
   });
 
   it("parses --only as comma-separated plugin names", () => {
-    const o = parseInstallPluginsArgs(["--only=superpowers,caveman"]);
-    expect(o.only).toEqual(["superpowers", "caveman"]);
+    const o = parseInstallPluginsArgs(["--only=superpowers,sales"]);
+    expect(o.only).toEqual(["superpowers", "sales"]);
   });
 
   it("parses --scope=user|project|local", () => {
@@ -65,14 +65,14 @@ describe("executeInstallPlugins", () => {
 
   it("--only filters plugins but still registers all required marketplaces", async () => {
     const result = await executeInstallPlugins({
-      only: ["caveman"],
+      only: ["sales"],
       installer: fakeInstaller(),
     });
     expect(result.plugins).toHaveLength(1);
-    expect(result.plugins[0]!.name).toBe("caveman@caveman");
+    expect(result.plugins[0]!.name).toBe("sales@knowledge-work-plugins");
     // marketplace set is just the ones needed by filtered plugins
     const mpNames = result.marketplaces.map((r) => r.name);
-    expect(mpNames).toEqual(["caveman"]);
+    expect(mpNames).toEqual(["knowledge-work-plugins"]);
   });
 
   it("--only with unknown plugin returns failed entry without calling installer", async () => {
@@ -151,17 +151,17 @@ describe("renderInstallPluginsResult", () => {
       dryRun: false,
       marketplaces: [
         { name: "claude-plugins-official", status: "added", detail: "ok" },
-        { name: "caveman", status: "already", detail: "on disk" },
+        { name: "knowledge-work-plugins", status: "already", detail: "on disk" },
       ],
       plugins: [
         { name: "superpowers@claude-plugins-official", status: "added", detail: "ok" },
-        { name: "caveman@caveman", status: "failed", detail: "oops" },
+        { name: "sales@knowledge-work-plugins", status: "failed", detail: "oops" },
       ],
       summary: { added: 2, alreadyPresent: 1, failed: 1, wouldDo: 0 },
     };
     const out = renderInstallPluginsResult(result);
     expect(out).toContain("claude-plugins-official");
-    expect(out).toContain("caveman@caveman");
+    expect(out).toContain("sales@knowledge-work-plugins");
     expect(out).toContain("✅");
     expect(out).toContain("❌");
   });

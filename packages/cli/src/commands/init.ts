@@ -49,7 +49,7 @@ export interface InitOptions {
   /** 显式指定 seed 文件路径（测试用）。 */
   seedPath?: string;
   /**
-   * Opt-in：装团队标配 plugins（superpowers/caveman/sales/playground）。
+   * Opt-in：装团队标配 plugins（superpowers/sales/playground）。
    * 默认 false——插件装在用户全局（~/.claude/settings.json），跨所有项目生效，
    * 与"初始化本项目"不是同一个心智模型，不能默认打开。
    */
@@ -896,7 +896,7 @@ export function renderInitResult(result: InitResult): string {
     );
     if (hasClaude && !pluginsInstalled) {
       lines.push("");
-      lines.push("💡 团队标配插件（superpowers/caveman/sales/playground）默认不装");
+      lines.push("💡 团队标配插件（superpowers/sales/playground）默认不装");
       lines.push("   需要时运行: teamagent install-plugins");
     }
   } else {
