@@ -26,16 +26,9 @@
     "build": "tsup",
     "postinstall": "node postinstall.mjs"
   },
-  "peerDependencies": {
-    "sqlite-vec": ">=0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "sqlite-vec": {
-      "optional": true
-    }
-  },
   "dependencies": {
     "onnxruntime-node": "1.14.0",
+    "sqlite-vec": "^0.1.9",
     "tree-sitter-python": "^0.23.0",
     "tree-sitter-typescript": "^0.23.0",
     "web-tree-sitter": "^0.26.0"
