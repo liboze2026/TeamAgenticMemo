@@ -191,6 +191,13 @@ async function main(): Promise<void> {
       },
     };
     if (terminalSummary) output.systemMessage = terminalSummary;
+
+    // CC 2.1.x systemMessage UI 渲染回归 (issue #50542): 终端不再显示 hook 的
+    // systemMessage。镜像到 stderr 作为 workaround。可用 TEAMAGENT_HOOK_STDERR=0 关闭。
+    if (terminalSummary && process.env.TEAMAGENT_HOOK_STDERR !== "0") {
+      process.stderr.write(`${terminalSummary}\n`);
+    }
+
     process.stdout.write(JSON.stringify(output));
   }
 }

@@ -39,8 +39,21 @@ export interface KnowledgeStore {
   /** 新增条目。重复 id 抛错。 */
   add(entry: KnowledgeEntry): void;
 
+  /**
+   * 新增条目并触发向量同步。实现可选；若 store 注入了 RuleEmbedder 则在
+   * insert 后自动写 knowledge_*_vec 表 + stamp embedder_model_id；否则
+   * 行为等同于 add()。调用方应当在 await 之后再继续，确保 dense 检索在下一
+   * 次 PreToolUse 调用时立即可用。
+   */
+  addWithEmbedding?(entry: KnowledgeEntry): Promise<void>;
+
   /** 更新条目。id 不存在抛错。patch 合并到现有条目上。 */
   update(id: string, patch: Partial<KnowledgeEntry>): void;
+
+  /**
+   * 更新条目并触发向量同步（同 addWithEmbedding 的语义）。实现可选。
+   */
+  updateWithEmbedding?(id: string, patch: Partial<KnowledgeEntry>): Promise<void>;
 
   /** 删除条目。返回是否删除了记录。 */
   delete(id: string): boolean;

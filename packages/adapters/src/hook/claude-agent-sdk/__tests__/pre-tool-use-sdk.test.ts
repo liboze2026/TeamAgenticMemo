@@ -18,7 +18,7 @@ describe("createPreToolUseHandler (SDK)", () => {
     expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({ kind: "hook-pre.passed" }));
   });
 
-  it("returns deny + reason when enforced rule matches", async () => {
+  it("block-tier rule → allow + systemMessage (soft-block, never denies Claude Code)", async () => {
     const enforcedRule = {
       id: "r1",
       current_tier: "enforced",
@@ -41,13 +41,15 @@ describe("createPreToolUseHandler (SDK)", () => {
       tool_use_id: "tu-2",
     } as any);
 
-    expect(result.permissionDecision).toBe("deny");
-    expect(result.permissionDecisionReason).toContain("fetch");
-    expect(result.permissionDecisionReason).toMatch(/\+-- TeamAgent 阻止操作 -+\+/);
-    expect(result.permissionDecisionReason).toMatch(/置信度 0\.\d+/);
+    expect(result.permissionDecision).toBe("allow");
+    expect(result.permissionDecisionReason).toBeUndefined();
+    expect(result.systemMessage).toContain("fetch");
+    expect(result.systemMessage).toMatch(/\+-- TeamAgent 强烈提醒 -+\+/);
+    expect(result.systemMessage).toMatch(/置信度 0\.\d+/);
+    // calibrator / 升档统计仍依赖 hook-pre.blocked 事件，保留不变
     expect(mockEventLog.append).toHaveBeenCalledWith(expect.objectContaining({
       kind: "hook-pre.blocked",
-      tool_name: "Edit",   // NEW: blocked event must carry tool_name for circumvention detection
+      tool_name: "Edit",
     }));
   });
 
@@ -275,7 +277,7 @@ describe("createPreToolUseHandler (SDK)", () => {
       expect(result.systemMessage).toContain("未知学到");
     });
 
-    it("block message includes hit_count in '已触发 N 次'", async () => {
+    it("block-tier rule message includes hit_count in '已触发 N 次' (carried via systemMessage post soft-block)", async () => {
       const blockRule = {
         id: "r-block-hitcount",
         current_tier: "enforced",
@@ -297,8 +299,101 @@ describe("createPreToolUseHandler (SDK)", () => {
         tool_use_id: "tu-hitcount",
       } as any);
 
-      expect(result.permissionDecision).toBe("deny");
-      expect(result.permissionDecisionReason).toMatch(/已触发 \d+ 次/);
+      expect(result.permissionDecision).toBe("allow");
+      expect(result.systemMessage).toMatch(/已触发 \d+ 次/);
+    });
+  });
+
+  describe("passive enforcement (silent observation)", () => {
+    it("passive match → allow + emits hook-pre.passive_matched + NO systemMessage + NO warned event", async () => {
+      const passiveRule = {
+        id: "r-passive-1",
+        current_tier: "experimental",
+        enforcement: "passive",
+        trigger: "observe pattern X",
+        correct_pattern: "do Y instead",
+        reasoning: "evidence still being gathered",
+        confidence: 0.4,
+        created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        hit_count: 0,
+      };
+      const mockMatcher = { match: vi.fn().mockResolvedValue({ matched: [passiveRule] }) };
+      const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
+      const handler = createPreToolUseHandler({
+        matcher: mockMatcher as any,
+        eventLog: mockEventLog as any,
+      });
+
+      const result = await handler({
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "echo hi" },
+        tool_use_id: "tu-passive-1",
+      } as any);
+
+      // Passive design: allow silently
+      expect(result.permissionDecision).toBe("allow");
+      expect(result.systemMessage).toBeUndefined();
+
+      // Must emit passive_matched (knowledge_id + tool_name carried, so PostToolUse can pick it up
+      // via its kind.startsWith("hook-pre.") path and produce hook-post.result → hit_count grows)
+      expect(mockEventLog.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "hook-pre.passive_matched",
+          knowledge_id: "r-passive-1",
+          tool_name: "Bash",
+        }),
+      );
+
+      // Must NOT emit warned (would pollute helped counter and trigger systemMessage)
+      const kinds = mockEventLog.append.mock.calls.map((c: any[]) => c[0]?.kind);
+      expect(kinds).not.toContain("hook-pre.warned");
+    });
+
+    it("warn + passive both matched → top is warn, passive does not silence the warning", async () => {
+      const warnRule = {
+        id: "r-warn",
+        current_tier: "stable",
+        enforcement: "warn",
+        trigger: "use axios",
+        correct_pattern: "use fetch",
+        reasoning: "",
+        confidence: 0.85,
+        created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+        hit_count: 5,
+      };
+      const passiveRule = {
+        id: "r-passive-2",
+        current_tier: "experimental",
+        enforcement: "passive",
+        trigger: "observe",
+        correct_pattern: "do Y",
+        confidence: 0.4,
+        created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        hit_count: 0,
+      };
+      const mockMatcher = {
+        match: vi.fn().mockResolvedValue({ matched: [passiveRule, warnRule] }),
+      };
+      const mockEventLog = { append: vi.fn(), readLast: vi.fn().mockReturnValue([]) };
+      const handler = createPreToolUseHandler({
+        matcher: mockMatcher as any,
+        eventLog: mockEventLog as any,
+      });
+
+      const result = await handler({
+        hook_event_name: "PreToolUse",
+        tool_name: "Edit",
+        tool_input: {},
+        tool_use_id: "tu-mixed-1",
+      } as any);
+
+      // Severity sort: warn > passive → top is warn → emits warned (existing behavior)
+      expect(result.permissionDecision).toBe("allow");
+      expect(result.systemMessage).toContain("fetch");
+      const kinds = mockEventLog.append.mock.calls.map((c: any[]) => c[0]?.kind);
+      expect(kinds).toContain("hook-pre.warned");
+      expect(kinds).not.toContain("hook-pre.passive_matched");
     });
   });
 });

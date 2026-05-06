@@ -83,12 +83,11 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
     );
     const top = sorted[0];
     const nowDate = new Date(now);
-    const reason =
-      top.enforcement === "block"
-        ? formatBlockReason(top, nowDate)
-        : formatWarnMessage(top, nowDate);
 
     if (top.enforcement === "block") {
+      // 软化策略：永远不硬阻塞 Claude Code，只当作"强烈提醒"通过 systemMessage 展示。
+      // 事件 kind 仍记 hook-pre.blocked，保留 calibrator / 升档统计逻辑不变。
+      const reason = formatBlockReason(top, nowDate);
       deps.eventLog.append({
         id: `e-${tool_use_id}-blocked`,
         kind: "hook-pre.blocked",
@@ -98,10 +97,27 @@ export function createPreToolUseHandler(deps: PreToolUseDeps) {
         timestamp: now,
         schema_version: 1,
       });
-      return { permissionDecision: "deny", permissionDecisionReason: reason };
+      return { permissionDecision: "allow", systemMessage: reason };
+    }
+
+    // passive → 静默观察：发 hook-pre.passive_matched (PostToolUse 通过 startsWith("hook-pre.")
+    // 自动累计 hit_count；不发 systemMessage，不污染 helped 计数)。这是 calibrator 升档
+    // passive→suggest→warn→block 的唯一证据来源。
+    if (top.enforcement === "passive") {
+      deps.eventLog.append({
+        id: `e-${tool_use_id}-passive`,
+        kind: "hook-pre.passive_matched",
+        knowledge_id: top.id,
+        tool_use_id,
+        tool_name,
+        timestamp: now,
+        schema_version: 1,
+      });
+      return { permissionDecision: "allow" };
     }
 
     // warn / suggest → allow + systemMessage hint
+    const reason = formatWarnMessage(top, nowDate);
     deps.eventLog.append({
       id: `e-${tool_use_id}-warned`,
       kind: "hook-pre.warned",
@@ -153,7 +169,7 @@ function formatBlockReason(rule: any, now: Date): string {
   if (wrong) lines.push(...formatRuleField("避免", wrong));
   if (correct) lines.push(...formatRuleField("使用", correct));
   if (reasoning) lines.push(...formatRuleField("理由", reasoning));
-  return formatAsciiRuleBlock("TeamAgent 阻止操作", lines);
+  return formatAsciiRuleBlock("TeamAgent 强烈提醒", lines);
 }
 
 const RULE_BOX_WIDTH = 72;

@@ -185,7 +185,11 @@ export async function runExtractPipeline(
         }
       }
 
-      deps.store.add(entry);
+      if (deps.store.addWithEmbedding) {
+        await deps.store.addWithEmbedding(entry);
+      } else {
+        deps.store.add(entry);
+      }
       result.extracted.push(entry);
       deps.markMomentSeen?.(signature);
       emit(deps.bus, {

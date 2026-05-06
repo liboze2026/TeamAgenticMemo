@@ -228,6 +228,13 @@ async function main(): Promise<void> {
       ...(result.systemMessage ? { systemMessage: result.systemMessage } : {}),
     };
 
+    // CC 2.1.x systemMessage UI 渲染回归 (issue #50542): 终端不再显示 hook 的
+    // systemMessage。镜像到 stderr 作为 workaround；CC 在 verbose / debug 模式
+    // 下会展示 hook stderr。可用 TEAMAGENT_HOOK_STDERR=0 关闭。
+    if (result.systemMessage && process.env.TEAMAGENT_HOOK_STDERR !== "0") {
+      process.stderr.write(`${result.systemMessage}\n`);
+    }
+
     process.stdout.write(JSON.stringify(wrapped));
     process.exit(0);
   } catch (err) {
