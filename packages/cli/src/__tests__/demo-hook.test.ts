@@ -37,7 +37,7 @@ describe("parseDemoHookArgs", () => {
 
   it("parses tool name + key=value args", () => {
     const out = parseDemoHookArgs(["Bash", "command=npm install moment"]);
-    expect(out).toEqual({
+    expect(out).toMatchObject({
       toolName: "Bash",
       toolInput: { command: "npm install moment" },
     });
@@ -49,7 +49,7 @@ describe("parseDemoHookArgs", () => {
       'url="https://x.com"',
       "prompt=fetch",
     ]);
-    expect(out?.toolInput.url).toBe("https://x.com");
+    expect(out?.toolInput!.url).toBe("https://x.com");
   });
 });
 
@@ -72,8 +72,8 @@ describe("executeDemoHook", () => {
       cwd: tmp.cwd,
       homeDir: tmp.home,
     });
-    expect(out).toContain("通过 (无规则命中)");
-    expect(out).toContain("🟢");
+    expect(out.output).toContain("通过 (无规则命中)");
+    expect(out.output).toContain("🟢");
   });
 
   it("warn-level match → 💡 + AI 提示", () => {
@@ -95,9 +95,9 @@ describe("executeDemoHook", () => {
       homeDir: tmp.home,
     });
 
-    expect(out).toContain("💡");
-    expect(out).toContain("决策: allow");
-    expect(out).toContain("dayjs");
+    expect(out.output).toContain("💡");
+    expect(out.output).toContain("决策: allow");
+    expect(out.output).toContain("dayjs");
   });
 
   it("block-level match → 🚫 + 拦截原因", () => {
@@ -149,9 +149,9 @@ describe("executeDemoHook", () => {
       userGlobalDbPath,
     });
 
-    expect(out).toContain("🚫");
-    expect(out).toContain("决策: deny");
-    expect(out).toContain("git clean");
+    expect(out.output).toContain("🚫");
+    expect(out.output).toContain("决策: deny");
+    expect(out.output).toContain("git clean");
   });
 
   // B-066: demo hook is an offline diagnostic command and MUST NOT write

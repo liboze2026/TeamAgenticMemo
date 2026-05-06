@@ -12,6 +12,20 @@ export interface DemoHookOptions {
   homeDir?: string;
   projectDbPath?: string;
   userGlobalDbPath?: string;
+  /** Aliases used by sandbox-style callers (mirror of toolName/toolInput). */
+  tool?: string;
+  input?: Record<string, unknown>;
+}
+
+/** Structured result of executeDemoHook: human text + machine-readable decision. */
+export interface DemoHookResult {
+  output: string;
+  decision: "allow" | "deny";
+}
+
+function decisionFor(rule: KnowledgeEntry | undefined): "allow" | "deny" {
+  if (rule && rule.enforcement === "block") return "deny";
+  return "allow";
 }
 
 function formatBlockReason(rule: KnowledgeEntry): string {
@@ -44,9 +58,11 @@ function formatWarnMessage(rule: KnowledgeEntry): string {
  * （历史上实测 0.70 → 0.83）。任何修改本函数的人都必须保持这个不变量；
  * `__tests__/demo-hook.test.ts` 里有 lock 这条约束的两条单元测试。
  */
-export function executeDemoHook(opts: DemoHookOptions): string {
+export function executeDemoHook(opts: DemoHookOptions): DemoHookResult {
   const cwd = normalizeCwd(opts.cwd ?? process.cwd());
   const home = opts.homeDir ?? os.homedir();
+  const toolName = opts.toolName ?? opts.tool ?? "";
+  const toolInput = opts.toolInput ?? opts.input ?? {};
 
   const projectDbPath = opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db");
   const userGlobalDbPath = opts.userGlobalDbPath ?? path.join(home, ".teamagent", "global.db");
@@ -67,47 +83,49 @@ export function executeDemoHook(opts: DemoHookOptions): string {
     // store 打开失败时降级为空规则集
   }
 
-  const matches = matchRules({ toolName: opts.toolName, input: opts.toolInput }, rules);
+  const matches = matchRules({ toolName, input: toolInput }, rules);
 
   if (matches.length === 0) {
-    return [
+    const out = [
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       "🟢 TeamAgent · 模拟 PreToolUse 结果",
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      `▸ 工具: ${opts.toolName}`,
-      `▸ 输入: ${JSON.stringify(opts.toolInput)}`,
+      `▸ 工具: ${toolName}`,
+      `▸ 输入: ${JSON.stringify(toolInput)}`,
       "▸ 决策: 通过 (无规则命中)",
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       "",
     ].join("\n");
+    return { output: out, decision: "allow" };
   }
 
   const top = matches[0]!;
 
   if (top.enforcement === "block") {
     const reason = formatBlockReason(top);
-    return [
+    const out = [
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       "🚫 TeamAgent · 模拟 PreToolUse 结果",
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      `▸ 工具: ${opts.toolName}`,
-      `▸ 输入: ${JSON.stringify(opts.toolInput)}`,
+      `▸ 工具: ${toolName}`,
+      `▸ 输入: ${JSON.stringify(toolInput)}`,
       "▸ 决策: deny",
       "▸ 拦截原因:",
       ...reason.split("\n").map((ln) => `    ${ln}`),
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       "",
     ].join("\n");
+    return { output: out, decision: "deny" };
   }
 
   if (top.enforcement === "warn") {
     const msg = formatWarnMessage(top);
-    return [
+    const out = [
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       "💡 TeamAgent · 模拟 PreToolUse 结果",
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      `▸ 工具: ${opts.toolName}`,
-      `▸ 输入: ${JSON.stringify(opts.toolInput)}`,
+      `▸ 工具: ${toolName}`,
+      `▸ 输入: ${JSON.stringify(toolInput)}`,
       "▸ 决策: allow",
       "▸ 给 AI 的提示:",
       ...msg.split("\n").map((ln) => `    ${ln}`),
@@ -115,19 +133,21 @@ export function executeDemoHook(opts: DemoHookOptions): string {
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       "",
     ].join("\n");
+    return { output: out, decision: "allow" };
   }
 
   // suggest / passive 默认通过
-  return [
+  const out = [
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     "🟢 TeamAgent · 模拟 PreToolUse 结果",
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    `▸ 工具: ${opts.toolName}`,
-    `▸ 输入: ${JSON.stringify(opts.toolInput)}`,
-    "▸ 决策: 通过 (无规则命中)",
+    `▸ 工具: ${toolName}`,
+    `▸ 输入: ${JSON.stringify(toolInput)}`,
+    "▸ 决策: 通过 (suggest/passive)",
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     "",
   ].join("\n");
+  return { output: out, decision: decisionFor(top) };
 }
 
 /** 解析 demo-hook 的 CLI 参数：argv[0]=tool, argv[1..]=key=value */
@@ -149,5 +169,5 @@ export function parseDemoHookArgs(args: string[]): DemoHookOptions | null {
     }
   }
 
-  return { toolName, toolInput };
+  return { toolName, toolInput, tool: toolName, input: toolInput };
 }

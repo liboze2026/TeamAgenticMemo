@@ -11,7 +11,6 @@ export interface PrCycleOptions {
   base?: string;
   head?: string;
   repo?: string;
-  draft?: boolean;
   dryRun?: boolean;
   claudefastBin?: string;
   codexfastgBin?: string;
@@ -131,8 +130,8 @@ export async function executePrCycle(opts: PrCycleOptions = {}): Promise<PrCycle
   }
 }
 
-export function parsePrCycleArgs(argv: string[]): PrCycleOptions {
-  const opts: PrCycleOptions = {};
+export function parsePrCycleArgs(argv: string[]): PrCycleOptions & { dryRun: boolean; pr?: number } {
+  const opts: PrCycleOptions = { dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--pr" && argv[i + 1]) {
@@ -144,7 +143,7 @@ export function parsePrCycleArgs(argv: string[]): PrCycleOptions {
     } else if (a === "--dry-run") {
       opts.dryRun = true;
     } else if (a === "--draft") {
-      opts.draft = true;
+      throw new Error("TeamBrain PRs must be normal PRs; --draft is not supported.");
     } else if (a === "--wait-ms" && argv[i + 1]) {
       opts.waitMs = parseNonNegativeInt(argv[++i]!, "--wait-ms");
     } else if (a.startsWith("--wait-ms=")) {
@@ -187,7 +186,7 @@ export function parsePrCycleArgs(argv: string[]): PrCycleOptions {
       opts.codexfastgBin = a.slice("--codexfastg-bin=".length);
     }
   }
-  return opts;
+  return { ...opts, dryRun: opts.dryRun ?? false, pr: opts.prNumber };
 }
 
 function buildCreateCommand(opts: PrCycleOptions): string {
@@ -195,7 +194,6 @@ function buildCreateCommand(opts: PrCycleOptions): string {
   if (opts.repo) parts.push("--repo", opts.repo);
   if (opts.base) parts.push("--base", opts.base);
   if (opts.head) parts.push("--head", opts.head);
-  if (opts.draft) parts.push("--draft");
   if (opts.title) parts.push("--title", opts.title);
   if (opts.body) parts.push("--body", opts.body);
   if (opts.bodyFile) parts.push("--body-file", opts.bodyFile);

@@ -68,7 +68,7 @@ describe("executePitfall", () => {
     expect(entry.scope.level).toBe("personal");
   });
 
-  it("creates CLAUDE.md with TEAMAGENT block", async () => {
+  it("exports a SKILL.md and does not create a CLAUDE.md managed block", async () => {
     await executePitfall(
       {
         trigger: "t",
@@ -80,13 +80,18 @@ describe("executePitfall", () => {
     );
 
     const mdPath = path.join(tmp.cwd, "CLAUDE.md");
-    expect(fs.existsSync(mdPath)).toBe(true);
-    const content = fs.readFileSync(mdPath, "utf-8");
-    expect(content).toContain("TEAMAGENT:START");
-    expect(content).toContain("使用 c 而非 w");
+    expect(fs.existsSync(mdPath)).toBe(false);
+
+    const skillsRoot = path.join(tmp.home, ".claude", "skills", "teamagent");
+    const skillFiles = fs.readdirSync(skillsRoot, { recursive: true }) as string[];
+    const skillMd = skillFiles.find((file) => file.endsWith("SKILL.md"));
+    expect(skillMd).toBeTruthy();
+    const skillContent = fs.readFileSync(path.join(skillsRoot, skillMd!), "utf-8");
+    expect(skillContent).toContain("c");
+    expect(skillContent).toContain("w");
   });
 
-  it("preserves existing CLAUDE.md content when updating", async () => {
+  it("preserves existing CLAUDE.md content without adding TEAMAGENT block", async () => {
     const mdPath = path.join(tmp.cwd, "CLAUDE.md");
     fs.writeFileSync(mdPath, "# My Project\n\nRule: always X\n", "utf-8");
 
@@ -98,7 +103,7 @@ describe("executePitfall", () => {
     const content = fs.readFileSync(mdPath, "utf-8");
     expect(content).toContain("# My Project");
     expect(content).toContain("Rule: always X");
-    expect(content).toContain("TEAMAGENT:START");
+    expect(content).not.toContain("TEAMAGENT:START");
   });
 
   it("returns attribution block in smart mode by default", async () => {
@@ -115,14 +120,13 @@ describe("executePitfall", () => {
     expect(out).toContain("添加知识条目");
     expect(out).toContain("知识库变化: 0 → 1 条");
     expect(out).toContain("传播到:");
-    expect(out).toContain("CLAUDE.md");
+    expect(out).toContain("SKILL.md");
+    expect(out).not.toContain("CLAUDE.md");
+    expect(out).toContain("docs propagation 已调度");
     expect(out).toContain("dayjs");
   });
 
-  // B-065: avoidance pitfall 实际写入 CLAUDE.md 知识块；归因消息以前
-  // 硬编码 count: 0 → 显示 "第 0 行"，让用户怀疑规则没生效。修复后
-  // count 应反映实际写入的块行数 ≥ 1。
-  it("avoidance pitfall: 传播到 显示真实的 CLAUDE.md 行数 (>0, 不再是 '第 0 行')", async () => {
+  it("avoidance pitfall: attribution points at SKILL.md and scheduled docs propagation", async () => {
     const out = await executePitfall(
       {
         trigger: "moment 用法",
@@ -132,12 +136,9 @@ describe("executePitfall", () => {
       },
       { cwd: tmp.cwd, homeDir: tmp.home, now: () => fixedNow, env: {}, embedder: stubEmbedder },
     );
-    // 显示到 CLAUDE.md
-    expect(out).toMatch(/传播到:.*CLAUDE\.md/);
-    // 不再显示 "第 0 行"
-    expect(out).not.toMatch(/CLAUDE\.md\s*第\s*0\s*行/);
-    // 真实写入的块至少 1 行
-    expect(out).toMatch(/CLAUDE\.md\s*第\s*[1-9]\d*\s*行/);
+    expect(out).toMatch(/传播到:.*SKILL\.md/);
+    expect(out).not.toContain("CLAUDE.md");
+    expect(out).toContain("docs propagation 已调度");
   });
 
   // B-065: practice pitfall (无 wrong_pattern) 不进 CLAUDE.md，只
@@ -156,6 +157,28 @@ describe("executePitfall", () => {
     expect(out).toContain("传播到:");
     // practice 类规则总是写入 skill 路径
     expect(out).toMatch(/SKILL\.md/);
+    expect(out).toContain("docs propagation 已调度");
+  });
+
+  it("schedules docs propagation once with all newly created rule ids", async () => {
+    const scheduled: string[][] = [];
+    await executePitfall(
+      { trigger: "t", wrong: "w", correct: "c", reason: "r" },
+      {
+        cwd: tmp.cwd,
+        homeDir: tmp.home,
+        now: () => fixedNow,
+        env: {},
+        embedder: stubEmbedder,
+        docsPropagationScheduler: (ids) => {
+          scheduled.push(ids);
+        },
+      },
+    );
+
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]).toHaveLength(1);
+    expect(scheduled[0]![0]).toMatch(/^pers-/);
   });
 
   it("silent mode returns empty output", async () => {
@@ -388,8 +411,8 @@ describe("parsePitfallArgs", () => {
     ).toThrow(/缺少必填字段.*--trigger/);
   });
 
-  // B-067: pitfall 字段无长度上限会让 10000 字符的 trigger 入库 + 向量化 +
-  // 编译进 CLAUDE.md 的 3000 token 预算，造成知识被一条恶性条目占满。
+  // B-067: pitfall 字段无长度上限会让 10000 字符的 trigger 入库 + 向量化，
+  // 造成生成文档/Skill 被一条恶性条目占满。
   describe("B-067 length validation", () => {
     it("rejects trigger over 1000 chars", () => {
       const longText = "a".repeat(1001);

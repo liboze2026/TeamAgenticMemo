@@ -6,28 +6,39 @@ import {
   MarkdownCompiler,
   makeSkillCompiler,
 } from "@teamagent/adapters";
-import { runCompile, type CompilePipelineResult } from "@teamagent/core";
+import {
+  runCompile,
+  type CompilePipelineResult,
+  type MarkdownCompilerLike,
+} from "@teamagent/core";
 import type { SkillCompiler, SkillArtifact } from "@teamagent/ports";
 import type { KnowledgeEntry } from "@teamagent/types";
 
 export interface CompileOptions {
   dryRun?: boolean;
-  /** Markdown target. Defaults to historical CLAUDE.md output. */
+  /** Install target for exposing Skills. Defaults to Claude Skills only. */
   target?: "claude" | "codex" | "both";
-  /** 只写 CLAUDE.md，跳过 skills 出口 */
+  /** Legacy flag: CLAUDE.md block output is disabled by default, so this writes nothing. */
   markdownOnly?: boolean;
-  /** 只写 skills，跳过 CLAUDE.md */
+  /** Skills-only compile. This is also the default behavior. */
   skillsOnly?: boolean;
   /** 强制重写（当前实现：默认就是幂等重写，此 flag 预留） */
   force?: boolean;
-  /** 编译元原则模式：只输出 source='preset' 的条目 */
+  /** Legacy markdown option; Skills output ignores it. */
   presetOnly?: boolean;
+  /**
+   * Legacy opt-in: compile rules into the generated CLAUDE.md managed block.
+   * Default commands do not write CLAUDE.md; propagation happens through Skills/docs.
+   */
+  legacyClaudeMd?: boolean;
   // 路径注入，供测试使用
   cwd?: string;
   homeDir?: string;
   claudeMdPath?: string;
   agentsMdPath?: string;
   skillsDir?: string;
+  /** 用户级 nested rule store 根目录。默认 `~/.claude/teamagent/rules` */
+  userRulesDir?: string;
   projectDbPath?: string;
   userGlobalDbPath?: string;
 }
@@ -43,6 +54,10 @@ function resolvePaths(opts: CompileOptions) {
     opts.skillsDir ??
     process.env["TEAMAGENT_SKILLS_DIR"] ??
     path.join(home, ".claude", "skills", "teamagent");
+  const userRulesDir =
+    opts.userRulesDir ??
+    process.env["TEAMAGENT_RULES_DIR"] ??
+    path.join(home, ".claude", "teamagent", "rules");
   return {
     projectDbPath:
       opts.projectDbPath ?? path.join(cwd, ".teamagent", "knowledge.db"),
@@ -52,12 +67,16 @@ function resolvePaths(opts: CompileOptions) {
     agentsMdPath: opts.agentsMdPath ?? path.join(cwd, "AGENTS.md"),
     skillsDir: opts.skillsDir,
     teamagentSkillsDir,
+    userRulesDir,
     codexSkillsDir: path.join(cwd, ".codex", "skills"),
   };
 }
 
-function targetIncludesClaude(target: NonNullable<CompileOptions["target"]>): boolean {
-  return target === "claude" || target === "both";
+function resolveLegacyFlag(opts: CompileOptions): boolean {
+  if (opts.legacyClaudeMd !== undefined) return opts.legacyClaudeMd;
+  const env = process.env["TEAMAGENT_LEGACY_CLAUDE_MD"];
+  if (env === undefined) return false;
+  return env === "1" || env.toLowerCase() === "true" || env.toLowerCase() === "yes";
 }
 
 function targetIncludesCodex(target: NonNullable<CompileOptions["target"]>): boolean {
@@ -79,21 +98,10 @@ function makeNoopSkillCompiler(): SkillCompiler {
   };
 }
 
-/** 不做任何写操作的 MarkdownCompiler stub（用于 --skills-only 模式）。 */
-function makeNoopMarkdownCompiler() {
-  return {
-    compile(_entries: KnowledgeEntry[]): string {
-      return "";
-    },
-    writeToFile(_entries: KnowledgeEntry[]) {
-      return { filePath: "(skipped)", blockLineCount: 0, blockStartLine: 0 };
-    },
-  };
-}
-
 export async function executeCompile(opts: CompileOptions = {}): Promise<CompileCommandResult> {
   const paths = resolvePaths(opts);
   const target = opts.target ?? "claude";
+  const legacy = resolveLegacyFlag(opts);
 
   fs.mkdirSync(path.dirname(paths.projectDbPath), { recursive: true });
   fs.mkdirSync(path.dirname(paths.userGlobalDbPath), { recursive: true });
@@ -103,20 +111,15 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
     userGlobalDbPath: paths.userGlobalDbPath,
   });
 
-  const primaryMarkdownPath = paths.claudeMdPath;
-
-  const markdownCompiler = opts.skillsOnly
-    ? makeNoopMarkdownCompiler()
-    : new MarkdownCompiler(
-        primaryMarkdownPath,
+  const skillCompiler = opts.markdownOnly
+    ? makeNoopSkillCompiler()
+    : makeSkillCompiler({ skillsDir: paths.teamagentSkillsDir });
+  const markdownCompiler: MarkdownCompilerLike | undefined = legacy
+    ? new MarkdownCompiler(
+        paths.claudeMdPath,
         opts.presetOnly ? { compileOptions: { presetOnly: true } } : undefined,
-      );
-
-  const shouldWriteSkills =
-    !opts.markdownOnly && (targetIncludesClaude(target) || targetIncludesCodex(target));
-  const skillCompiler = shouldWriteSkills
-    ? makeSkillCompiler({ skillsDir: paths.teamagentSkillsDir })
-    : makeNoopSkillCompiler();
+      )
+    : undefined;
 
   try {
     const result: CompileCommandResult = await runCompile({
@@ -124,11 +127,13 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
       markdownCompiler,
       skillCompiler,
       dryRun: opts.dryRun,
+      writeMarkdown: legacy && !opts.skillsOnly && !opts.markdownOnly,
     });
-    if (targetIncludesCodex(target) && !opts.skillsOnly) {
+    if (targetIncludesCodex(target) && !opts.skillsOnly && !opts.markdownOnly) {
       if (opts.dryRun) {
         result.agentsMarkdown = { path: "(dry-run)", blockLineCount: 0 };
-      } else {
+      } else if (legacy) {
+        // Legacy CLAUDE.md mode：保持 AGENTS.md → CLAUDE.md 软链接行为。
         fs.mkdirSync(paths.teamagentSkillsDir, { recursive: true });
         ensureSymlink(paths.agentsMdPath, paths.claudeMdPath, "file", () => new Date());
         ensureSymlink(paths.codexSkillsDir, paths.teamagentSkillsDir, "dir", () => new Date());
@@ -136,6 +141,10 @@ export async function executeCompile(opts: CompileOptions = {}): Promise<Compile
           path: paths.agentsMdPath,
           blockLineCount: result.markdown.blockLineCount,
         };
+      } else {
+        // Skills/docs propagation mode：只让 Codex 看到 skills 目录，不再创建 AGENTS.md → CLAUDE.md 链接。
+        fs.mkdirSync(paths.teamagentSkillsDir, { recursive: true });
+        ensureSymlink(paths.codexSkillsDir, paths.teamagentSkillsDir, "dir", () => new Date());
       }
     }
     return result;
@@ -181,6 +190,8 @@ export function parseCompileArgs(argv: string[]): CompileOptions {
     else if (a === "--markdown-only") opts.markdownOnly = true;
     else if (a === "--force") opts.force = true;
     else if (a === "--preset-only") opts.presetOnly = true;
+    else if (a === "--legacy-claude-md") opts.legacyClaudeMd = true;
+    else if (a === "--no-legacy-claude-md") opts.legacyClaudeMd = false;
     else if (a === "--codex") opts.target = "codex";
     else if (a === "--claude") opts.target = "claude";
     else if (a === "--both") opts.target = "both";
@@ -207,14 +218,22 @@ export function renderCompileResult(
   lines.push(`🔧 TeamAgent Compile${tag}`);
   lines.push("");
 
+  const isNestedRoot = result.markdown.path.endsWith(`${path.sep}rules${path.sep}INDEX.md`)
+    || result.markdown.path.endsWith("/rules/INDEX.md");
   const label =
     result.markdown.path === "(skipped)" || result.markdown.path === "(dry-run)"
       ? "Markdown"
-      : path.basename(result.markdown.path);
+      : isNestedRoot
+        ? "Rules"
+        : path.basename(result.markdown.path);
   if (result.markdown.path === "(skipped)") {
-    lines.push(`  ${label.padEnd(12)}(skipped)`);
+    lines.push("  CLAUDE.md    (disabled; no generated rule block)");
   } else if (result.markdown.path === "(dry-run)") {
     lines.push(`  ${label.padEnd(12)}(dry-run, 未写入)`);
+  } else if (isNestedRoot) {
+    lines.push(
+      `  ${label.padEnd(12)}${result.markdown.path}  (${result.markdown.blockLineCount} files)`,
+    );
   } else {
     lines.push(
       `  ${label.padEnd(12)}${result.markdown.path}  (${result.markdown.blockLineCount} lines)`,
@@ -255,6 +274,8 @@ export function renderCompileResult(
     }
   }
 
+  lines.push("");
+  lines.push("  Docs propagation is handled by `teamagent docs-propagate` when new rules are added.");
   lines.push("");
   return lines.join("\n");
 }

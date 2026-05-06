@@ -33,7 +33,7 @@ export interface ScanErrorsOptions {
 
 const SCAN_STATE_FILENAME = "scan-state.json";
 
-function resolveSince(sinceRaw: string | undefined, homeDir: string, now: Date): Date {
+export function resolveSince(sinceRaw: string | undefined, homeDir: string, now: Date): Date {
   if (!sinceRaw) {
     const statePath = path.join(homeDir, ".teamagent", SCAN_STATE_FILENAME);
     try {
@@ -47,6 +47,10 @@ function resolveSince(sinceRaw: string | undefined, homeDir: string, now: Date):
   if (/^\d+h$/.test(sinceRaw)) {
     const hours = parseInt(sinceRaw, 10);
     return new Date(now.getTime() - hours * 60 * 60 * 1000);
+  }
+  if (/^\d+d$/.test(sinceRaw)) {
+    const days = parseInt(sinceRaw, 10);
+    return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   }
   const d = new Date(sinceRaw);
   if (isNaN(d.getTime())) {

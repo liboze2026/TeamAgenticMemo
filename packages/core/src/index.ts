@@ -7,6 +7,15 @@ export {
   type CompileMarkdownOptions,
 } from "./compiler/markdown.js";
 export {
+  compileNestedRuleArtifacts,
+  formatRuleAsMarkdown,
+  formatTierIndex,
+  formatRootIndex,
+  NESTED_TIERS,
+  type NestedRuleArtifact,
+  type CompileNestedRuleOptions,
+} from "./compiler/nested-rules.js";
+export {
   matchRules,
   type ToolCallContext,
 } from "./matcher/legacy/keyword-matcher.js";

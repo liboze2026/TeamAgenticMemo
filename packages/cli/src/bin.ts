@@ -46,18 +46,26 @@ import {
   parseDogfoodReportArgs,
 } from "./commands/dogfood-report.js";
 import {
+  executeBugReport,
+  parseBugReportArgs,
+} from "./commands/bug-report.js";
+import {
   DashboardArgsError,
   launchDashboard,
   parseDashboardArgs,
   renderDashboardLaunch,
 } from "./commands/dashboard.js";
 import { executeIngest, parseIngestArgs } from "./commands/ingest.js";
-import { executeRecordingCommand } from "./commands/recording.js";
 import {
   executeCompile,
   parseCompileArgs,
   renderCompileResult,
 } from "./commands/compile.js";
+import {
+  executeDocsPropagate,
+  parseDocsPropagateArgs,
+  renderDocsPropagationResult,
+} from "./commands/docs-propagate.js";
 import { executeConfig } from "./commands/config.js";
 import {
   executeDoctor,
@@ -86,6 +94,11 @@ import {
   renderPairKnockResult,
   renderPairList,
 } from "./commands/pair.js";
+import {
+  executeRecording,
+  parseRecordingArgs,
+  renderRecordingResult,
+} from "./commands/recording.js";
 
 function findPackageVersion(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
@@ -202,7 +215,7 @@ async function main(): Promise<void> {
           );
           process.exit(1);
         }
-        process.stdout.write(executeDemoHook(opts));
+        process.stdout.write(executeDemoHook(opts).output);
         return;
       }
       process.stderr.write(`未知 demo 子命令: ${sub}\n`);
@@ -366,21 +379,29 @@ async function main(): Promise<void> {
       process.stdout.write(output);
       return;
     }
-    case "recording": {
-      try {
-        process.stdout.write(await executeRecordingCommand(rest, { cwd: process.cwd() }));
-      } catch (err) {
-        process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-        process.exit(2);
-      }
-      return;
-    }
     case "dogfood-report": {
       const opts = parseDogfoodReportArgs(rest);
       const r = await executeDogfoodReport(opts);
       process.stdout.write(
         `📊 自举报告生成: ${r.outputPath}\n  ${r.totalEntries} 条知识 / ${r.totalEvents} 个事件 / ${r.archivedCount} 自动归档\n`,
       );
+      return;
+    }
+    case "bug-report": {
+      const opts = parseBugReportArgs(rest);
+      const result = await executeBugReport({
+        ...opts,
+        cwd: process.cwd(),
+        teamagentVersion: findPackageVersion(),
+      });
+      if (opts.stdout) {
+        process.stdout.write(result.markdown);
+      } else {
+        process.stdout.write(
+          `Bug report written: ${result.outputPath}\n` +
+            "Attach this file when reporting first-install or hook failures.\n",
+        );
+      }
       return;
     }
     case "dashboard": {
@@ -400,10 +421,28 @@ async function main(): Promise<void> {
       }
       return;
     }
+    case "recording": {
+      try {
+        const opts = parseRecordingArgs(rest);
+        const result = await executeRecording({ ...opts, cwd: process.cwd() });
+        process.stdout.write(renderRecordingResult(result));
+      } catch (err) {
+        process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+        process.exit(2);
+      }
+      return;
+    }
     case "compile": {
       const opts = parseCompileArgs(rest);
       const result = await executeCompile(opts);
       process.stdout.write(renderCompileResult(result, opts.dryRun));
+      return;
+    }
+    case "docs-propagate": {
+      const opts = parseDocsPropagateArgs(rest);
+      const result = await executeDocsPropagate(opts);
+      process.stdout.write(renderDocsPropagationResult(result));
+      if (!result.ok) process.exit(1);
       return;
     }
     case "config": {
@@ -623,15 +662,15 @@ async function main(): Promise<void> {
           "  teamagent uninstall-user-hook    移除用户级 SessionStart hook 注册",
           "  teamagent analyze [--session=<id|path>] [--verbose] [--commit]",
           "                                   分析 Claude Code 会话日志，识别纠正时刻+成功信号",
-          "                                   --commit: 通过 LLM 提取成知识条目并写入知识库 + 重编译 CLAUDE.md",
+          "                                   --commit: 通过 LLM 提取成知识条目并写入知识库 + 更新 Skills + 调度 docs propagation",
           "  teamagent review [N] [--scope=personal|team|global]",
           "                                   列出最近 N 条知识（默认 10），供人工复核",
           "  teamagent init [--dry-run] [--skip-import] [--skip-hook] [--install-plugins] [--target=claude|codex|both]",
-          "                                   一键安装到当前项目：建目录 + 注入元原则 + 导入已有规则 + 注册 Hook + 编译规则文件",
-          "                                   默认 target=claude；codex 会创建 AGENTS.md/.codex/skills 软链接且不注册 Claude hook",
+          "                                   一键安装到当前项目：建目录 + 注入元原则 + 导入已有规则 + 注册 Hook + 导出 Skills",
+          "                                   默认 target=claude；codex 会创建 .codex/skills 软链接且不注册 Claude hook",
           "                                   --install-plugins: 同时注册团队标配插件（opt-in，改写用户全局 settings）",
           "  teamagent install-codex [--dry-run] [--skip-import]",
-          "                                   Codex 快捷安装：编译 CLAUDE.md，并创建 AGENTS.md -> CLAUDE.md",
+          "                                   Codex 快捷安装：导出 Skills，并创建 .codex/skills 软链接",
           "  teamagent doctor [--fix] [--json]",
           "                                   诊断安装环境（Node版本/Claude Code/sqlite-vec/Hook/CLAUDE.md）",
           "                                   --fix: 自动修复能自动修的问题",
@@ -661,14 +700,19 @@ async function main(): Promise<void> {
           "                                   Recording Memory 导入、检索、注入、指标和 golden benchmark",
           "  teamagent dogfood-report [--output=path]",
           "                                   扫 events.jsonl + knowledge.jsonl + git log，自动生成自举报告",
+          "  teamagent bug-report [--out=path] [--stdout]",
+          "                                   生成可附到 issue 的诊断报告：系统信息 + hook 配置 + 原始日志（自动脱敏）",
           "  teamagent dashboard --watch [--open] [--port=8787] [--interval=2s]",
           "                                   启动实时 HTML dashboard：生成 docs/dashboard.html，周期刷新真实规则/事件数据并本地服务",
           "  teamagent dashboard --once",
           "                                   只生成一次 docs/dashboard.html，不启动服务器",
-          "  teamagent compile [--dry-run] [--skills-only] [--markdown-only] [--force] [--target=claude|codex|both]",
-          "                                   编译出口：CLAUDE.md (canonical+, 3000 token 预算) + Claude Agent Skills (stable+)；Codex 通过软链接读取",
+          "  teamagent compile [--dry-run] [--skills-only] [--markdown-only] [--force] [--legacy-claude-md] [--target=claude|codex|both]",
+          "                                   编译 Agent Skills (stable+)；CLAUDE.md 规则块输出已禁用",
+          "                                   --legacy-claude-md: 显式恢复旧 CLAUDE.md managed block 输出",
           "                                   --dry-run: 预览将写/删哪些文件，不实际写入",
-          "                                   --skills-only / --markdown-only: 只写其中一路出口",
+          "                                   --skills-only / --markdown-only: legacy flags",
+          "  teamagent docs-propagate --rule-id=<id>",
+          "                                   将新规则自然传播到 docs/ 并用 cheap runner 验证",
           "  teamagent config stop-mode <sync|async>  切换 Stop hook 运行模式（默认 sync）",
           "  teamagent config show                    查看当前配置",
           "  teamagent scan-errors [--mode=efficient|full] [--since=<duration|ISO>] [--min-freq=N] [--dry-run] [--quiet]",

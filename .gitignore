@@ -35,3 +35,35 @@ CLAUDE.md.tmp-*
 packages/*/.cache/
 # Chaos QA verification scratch scripts (paired with BUGS.md, not formal tests).
 chaos-verify*.mjs
+# FASTPROBE timestamped scratch dirs (raw .result/.jsonl from claudefast probes; regenerated per run).
+.fastprobe/
+# DOGFOOD verify capture (regenerated each `bash docs/dogfood/verify-canned-answer.sh` run).
+docs/dogfood/.last-verify.out
+# DOGFOOD active-sandbox state file (written by scripts/dogfood.sh; per-machine).
+.dogfood/
+# VERIFY judge-harness raw stdout/stderr/coverage/judge.json (transient evidence; bundle into PR if needed).
+.judge/
+# feature-verify-kit LLM output (regenerated per run by verify-claude-stream-json.sh).
+docs/feature-verify-kit/runs/
+.gstack/
+.sandbox/
+docs/bugreport/.last-verify.out
+docs/postpr/.last-verify.out
+docs/fastprobe/.last-verify.out
+docs/fastprobe/.last-judge.out
+docs/fastprobe/.last-judge.json
+docs/fastprobe/.last-judge-prompt.txt
+docs/project-tools/.last-verify.out
+docs/project-tools/.last-judge.out
+docs/project-tools/.last-judge.json
+docs/project-tools/.last-judge-prompt.txt
+docs/response-language/.last-verify.out
+docs/response-language/.last-verify.clean.out
+docs/github-account/.last-verify.out
+docs/github-account/.last-judge.out
+docs/github-account/.last-judge.json
+docs/github-account/.last-judge-prompt.txt
+docs/gstack-bin/.last-verify.out
+docs/gstack-bin/.last-judge.out
+docs/gstack-bin/.last-judge.json
+docs/gstack-bin/.last-judge-prompt.txt

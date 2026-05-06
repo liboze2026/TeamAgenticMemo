@@ -8,7 +8,7 @@ import {
   SqliteEventLog,
 } from "@teamagent/adapters";
 import { matchRulesAsync } from "@teamagent/core";
-import type { LLMClient } from "@teamagent/ports";
+import type { LLMClient, RuleEmbedder } from "@teamagent/ports";
 import { executeAnalyze, type AnalyzeMeta } from "./analyze.js";
 
 type ProbeKind = "positive" | "generalization" | "negative";
@@ -26,6 +26,7 @@ export interface E2EEvaluateOptions {
   keepTemp?: boolean;
   json?: boolean;
   llmClient?: LLMClient;
+  embedder?: RuleEmbedder;
   now?: () => Date;
 }
 
@@ -36,8 +37,10 @@ export interface E2EEvaluateResult {
   learnedRules: number;
   correctionsFound: number;
   extracted: number;
-  compiledClaudeMd: boolean;
-  claudeMdHasRules: boolean;
+  skillsExported: boolean;
+  skillsHaveRules: boolean;
+  docsPropagationScheduled: boolean;
+  claudeMdUntouched: boolean;
   metrics: {
     extractionYield: number;
     positiveTriggerRate: number;
@@ -45,6 +48,7 @@ export interface E2EEvaluateResult {
     falsePositiveRate: number;
     helpfulRate: number;
     onboardingCoverage: number;
+    docsPropagationCoverage: number;
   };
   probes: Array<{
     id: string;
@@ -57,6 +61,30 @@ export interface E2EEvaluateResult {
   }>;
   failures: string[];
   tempCleaned: boolean;
+  /** Derived sandbox-style summary fields (alias view of probes). */
+  passed: number;
+  failed: number;
+  results: Array<{
+    id: string;
+    kind: ProbeKind;
+    triggered: boolean;
+    helpful: boolean;
+    expectedTrigger: boolean;
+    decision: string;
+    message: string;
+    pass: boolean;
+  }>;
+}
+
+function deriveSummary(
+  probes: E2EEvaluateResult["probes"],
+): Pick<E2EEvaluateResult, "passed" | "failed" | "results"> {
+  const results = probes.map((p) => ({
+    ...p,
+    pass: p.triggered === p.expectedTrigger,
+  }));
+  const passed = results.filter((r) => r.pass).length;
+  return { passed, failed: results.length - passed, results };
 }
 
 interface EvalCase {
@@ -263,9 +291,11 @@ export async function executeE2EEvaluate(
   const userGlobalDbPath = path.join(homeDir, ".teamagent", "global.db");
   const eventsDbPath = path.join(homeDir, ".teamagent", "events.db");
   const claudeMdPath = path.join(workspaceDir, "CLAUDE.md");
+  const skillsDir = path.join(homeDir, ".claude", "skills", "teamagent");
   const now = opts.now ?? (() => new Date("2026-04-24T00:00:00Z"));
   const llmClient = opts.llmClient ?? deterministicLLM();
   const failures: string[] = [];
+  const scheduledDocsRuleIds: string[] = [];
   let correctionsFound = 0;
   let extracted = 0;
   let idSeq = 0;
@@ -286,9 +316,14 @@ export async function executeE2EEvaluate(
         userGlobalDbPath,
         eventsDbPath,
         claudeMdPath,
+        skillsDir,
         idGen: () => `e2e-${++idSeq}`,
         now,
         skipCalibrate: true,
+        embedder: opts.embedder,
+        docsPropagationScheduler: (ids) => {
+          scheduledDocsRuleIds.push(...ids);
+        },
         onMeta: (m) => {
           meta = m;
         },
@@ -356,15 +391,25 @@ export async function executeE2EEvaluate(
     const generalizations = probes.filter((p) => p.kind === "generalization");
     const negatives = probes.filter((p) => p.kind === "negative");
     const triggeredHelpful = probes.filter((p) => p.expectedTrigger && p.triggered);
-    const compiledClaudeMd = fs.existsSync(claudeMdPath);
-    const claudeMd = compiledClaudeMd ? fs.readFileSync(claudeMdPath, "utf-8") : "";
-    const claudeMdLower = claudeMd.toLowerCase();
-    const claudeMdHasRules = CASES.every((c) => claudeMdLower.includes(c.expectedCorrect.toLowerCase()));
+    const skillFiles = rules.map((r) => path.join(skillsDir, r.id, "SKILL.md"));
+    const skillContents = skillFiles
+      .filter((file) => fs.existsSync(file))
+      .map((file) => fs.readFileSync(file, "utf-8"));
+    const skillCorpusLower = skillContents.join("\n").toLowerCase();
+    const skillsExported = skillFiles.length > 0 && skillFiles.every((file) => fs.existsSync(file));
+    const skillsHaveRules = CASES.every((c) => skillCorpusLower.includes(c.expectedCorrect.toLowerCase()));
+    const scheduledDocsSet = new Set(scheduledDocsRuleIds);
+    const docsPropagationCoverage = rate(
+      rules.filter((r) => scheduledDocsSet.has(r.id)).length,
+      rules.length,
+    );
+    const docsPropagationScheduled = docsPropagationCoverage === 1;
+    const claudeMdUntouched = !fs.existsSync(claudeMdPath);
     const onboardingCoverage = CASES.length === 0
       ? 1
       : CASES.filter((c) =>
-          claudeMdLower.includes(c.expectedWrong.toLowerCase()) &&
-          claudeMdLower.includes(c.expectedCorrect.toLowerCase()),
+          skillCorpusLower.includes(c.expectedWrong.toLowerCase()) &&
+          skillCorpusLower.includes(c.expectedCorrect.toLowerCase()),
         ).length / CASES.length;
 
     const metrics = {
@@ -374,6 +419,7 @@ export async function executeE2EEvaluate(
       falsePositiveRate: rate(negatives.filter((p) => p.triggered).length, negatives.length),
       helpfulRate: rate(triggeredHelpful.filter((p) => p.helpful).length, triggeredHelpful.length),
       onboardingCoverage,
+      docsPropagationCoverage,
     };
 
     if (rules.length < CASES.length) failures.push(`Only learned ${rules.length}/${CASES.length} rules.`);
@@ -382,9 +428,11 @@ export async function executeE2EEvaluate(
     if (metrics.generalizationRate < 1) failures.push(`Generalization rate ${fmtPct(metrics.generalizationRate)} is below 100%.`);
     if (metrics.falsePositiveRate > 0) failures.push(`False positive rate ${fmtPct(metrics.falsePositiveRate)} is above 0%.`);
     if (metrics.helpfulRate < 1) failures.push(`Helpful message rate ${fmtPct(metrics.helpfulRate)} is below 100%.`);
-    if (!compiledClaudeMd) failures.push("CLAUDE.md was not compiled.");
-    if (!claudeMdHasRules) failures.push("CLAUDE.md does not contain every learned correction.");
-    if (metrics.onboardingCoverage < 1) failures.push(`Onboarding coverage ${fmtPct(metrics.onboardingCoverage)} is below 100%.`);
+    if (!skillsExported) failures.push("Skills were not exported for every learned rule.");
+    if (!skillsHaveRules) failures.push("Exported Skills do not contain every learned correction.");
+    if (!docsPropagationScheduled) failures.push(`Docs propagation coverage ${fmtPct(metrics.docsPropagationCoverage)} is below 100%.`);
+    if (!claudeMdUntouched) failures.push("CLAUDE.md was written even though Skills are the compile output.");
+    if (metrics.onboardingCoverage < 1) failures.push(`Skills onboarding coverage ${fmtPct(metrics.onboardingCoverage)} is below 100%.`);
 
     const shouldClean = !opts.keepTemp && !opts.cwd && !opts.homeDir;
     if (shouldClean) cleanupTempRoot(tempRoot);
@@ -396,12 +444,15 @@ export async function executeE2EEvaluate(
       learnedRules: rules.length,
       correctionsFound,
       extracted,
-      compiledClaudeMd,
-      claudeMdHasRules,
+      skillsExported,
+      skillsHaveRules,
+      docsPropagationScheduled,
+      claudeMdUntouched,
       metrics,
       probes,
       failures,
       tempCleaned: shouldClean,
+      ...deriveSummary(probes),
     };
   } catch (err) {
     failures.push(err instanceof Error ? err.message : String(err));
@@ -413,8 +464,10 @@ export async function executeE2EEvaluate(
       learnedRules: 0,
       correctionsFound,
       extracted,
-      compiledClaudeMd: fs.existsSync(claudeMdPath),
-      claudeMdHasRules: false,
+      skillsExported: false,
+      skillsHaveRules: false,
+      docsPropagationScheduled: false,
+      claudeMdUntouched: !fs.existsSync(claudeMdPath),
       metrics: {
         extractionYield: correctionsFound === 0 ? 0 : extracted / correctionsFound,
         positiveTriggerRate: 0,
@@ -422,10 +475,12 @@ export async function executeE2EEvaluate(
         falsePositiveRate: 0,
         helpfulRate: 0,
         onboardingCoverage: 0,
+        docsPropagationCoverage: 0,
       },
       probes: [],
       failures,
       tempCleaned: !opts.keepTemp && !opts.cwd && !opts.homeDir,
+      ...deriveSummary([]),
     };
   }
 }
@@ -436,8 +491,10 @@ export function renderE2EEvaluateResult(result: E2EEvaluateResult): string {
     "",
     `Rules learned: ${result.learnedRules}`,
     `Corrections found/extracted: ${result.correctionsFound}/${result.extracted}`,
-    `CLAUDE.md compiled: ${result.compiledClaudeMd ? "yes" : "no"}`,
-    `Onboarding rules in CLAUDE.md: ${fmtPct(result.metrics.onboardingCoverage)}`,
+    `Skills exported: ${result.skillsExported ? "yes" : "no"}`,
+    `Docs propagation scheduled: ${result.docsPropagationScheduled ? "yes" : "no"}`,
+    `CLAUDE.md untouched: ${result.claudeMdUntouched ? "yes" : "no"}`,
+    `Onboarding rules in Skills: ${fmtPct(result.metrics.onboardingCoverage)}`,
     "",
     "Metrics:",
     `  extraction yield: ${fmtPct(result.metrics.extractionYield)}`,
@@ -445,6 +502,7 @@ export function renderE2EEvaluateResult(result: E2EEvaluateResult): string {
     `  generalization rate: ${fmtPct(result.metrics.generalizationRate)}`,
     `  false positive rate: ${fmtPct(result.metrics.falsePositiveRate)}`,
     `  helpful message rate: ${fmtPct(result.metrics.helpfulRate)}`,
+    `  docs propagation coverage: ${fmtPct(result.metrics.docsPropagationCoverage)}`,
     "",
     "Probe results:",
     ...result.probes.map((p) => {

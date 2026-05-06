@@ -117,10 +117,11 @@ describe("executeAnalyze", () => {
       complete: async () => response,
     });
 
-    it("extracts corrections via LLM and writes to store + CLAUDE.md", async () => {
+    it("extracts corrections via LLM, writes to store, exports Skills, and schedules docs propagation", async () => {
       const projectDbPath = path.join(tmp.dir, "knowledge.db");
       const userGlobalDbPath = path.join(tmp.dir, "global.db");
       const claudeMdPath = path.join(tmp.dir, "CLAUDE.md");
+      const scheduled: string[][] = [];
 
       const llm = stubLLM(
         "```json\n" +
@@ -149,6 +150,9 @@ describe("executeAnalyze", () => {
         idGen: () => "pers-test-0001",
         now: () => new Date("2026-04-14T12:00:00Z"),
         skipCalibrate: true,
+        docsPropagationScheduler: (ids) => {
+          scheduled.push(ids);
+        },
       });
 
       expect(out).toContain("--commit 模式");
@@ -164,10 +168,11 @@ describe("executeAnalyze", () => {
       expect(all[0]!.id).toBe("pers-test-0001");
       expect(all[0]!.wrong_pattern).toBe("axios");
 
-      // CLAUDE.md 写入
-      const md = nodeFs.readFileSync(claudeMdPath, "utf-8");
-      expect(md).toContain("TEAMAGENT:START");
-      expect(md).toContain("fetch");
+      expect(nodeFs.existsSync(claudeMdPath)).toBe(false);
+      const skillPath = path.join(tmp.dir, ".claude", "skills", "teamagent", "pers-test-0001", "SKILL.md");
+      expect(nodeFs.existsSync(skillPath)).toBe(true);
+      expect(nodeFs.readFileSync(skillPath, "utf-8")).toContain("fetch");
+      expect(scheduled).toEqual([["pers-test-0001"]]);
     });
 
     it("LLM returning null → skipped, nothing written", async () => {
@@ -242,6 +247,7 @@ describe("--commit mode: auto-vectorization", () => {
 
   // 384-dim deterministic stub embedder (no Xenova dependency)
   const stubEmbedder = {
+    modelId: "analyze-test-deterministic",
     async embed(texts: string[]): Promise<number[][]> {
       return texts.map((t) => {
         const v = new Array(384).fill(0.5);
@@ -294,10 +300,14 @@ describe("--commit mode: auto-vectorization", () => {
     const db = openDb(projectDbPath);
     const vecCount = db.prepare("SELECT COUNT(*) as n FROM knowledge_trigger_vec").get() as { n: number };
     const patVecCount = db.prepare("SELECT COUNT(*) as n FROM knowledge_pattern_vec").get() as { n: number };
+    const metadata = db.prepare("SELECT embedder_model_id FROM knowledge WHERE id = ?").get(
+      "pers-vec-test-0001",
+    ) as { embedder_model_id: string };
     db.close();
 
     expect(vecCount.n).toBe(1);
     expect(patVecCount.n).toBe(1);
+    expect(metadata.embedder_model_id).toBe(stubEmbedder.modelId);
   });
 });
 

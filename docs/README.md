@@ -13,7 +13,13 @@ the indexes below to choose what to read first.
 | Look up implementation details | [SYSTEM.md](SYSTEM.md) |
 | Launch the real-time dashboard | Run `pnpm teamagent dashboard --watch --open` |
 | Verify or test a feature/fix, including PR review gates | [feature-verification.md](feature-verification.md) |
+| Prepare a verified-only CEO/VC ship-status CSV | [PRESHIP.md](PRESHIP.md) |
+| Live-preview / dogfood agent edits in two tmux panes | [DOGFOOD.md](DOGFOOD.md) |
+| Report a bug — system info + repro + raw logs to GitHub | [BUGREPORT.md](BUGREPORT.md) |
+| Look up per-feature canned answers (auto-capture, real-time intercept, calibrator, team-share, multi-tool) | [features/INDEX.md](features/INDEX.md) |
+| Author / extend a feature canned answer (6-section template, status enum, line budget) | [features/CONVENTIONS.md](features/CONVENTIONS.md) |
 | Check PR #14 status | [pr-14-status.md](pr-14-status.md) |
+| Understand project knowledge propagation | [knowledge/INDEX.md](knowledge/INDEX.md) |
 | Find foundational specs | [specs/README.md](specs/README.md) |
 | Find later milestone specs and plans | [superpowers/README.md](superpowers/README.md) |
 | Review historical Phase 1 and superseded docs | [backup/README.md](backup/README.md) |
@@ -23,8 +29,8 @@ the indexes below to choose what to read first.
 ### Product and Positioning
 
 1. [系统展示.md](系统展示.md) for the user-facing product story.
-2. [superpowers/specs/2026-04-22-product-roadmap-v3.md](superpowers/specs/2026-04-22-product-roadmap-v3.md) for the latest roadmap.
-3. [specs/2026-04-21-team-memory-direction.md](specs/2026-04-21-team-memory-direction.md) for the team-memory direction.
+2. [backup/phase2-superseded/2026-04-22-product-roadmap-v3.md](backup/phase2-superseded/2026-04-22-product-roadmap-v3.md) for the (archived) Phase 2 roadmap.
+3. [archive/conflict-governance/2026-04-21-team-memory-direction.legacy.md](archive/conflict-governance/2026-04-21-team-memory-direction.legacy.md) for the (archived) team-memory direction memo, superseded by [specs/2026-04-30-experience-governance-redesign.md](specs/2026-04-30-experience-governance-redesign.md).
 
 ### Architecture and Mechanics
 
@@ -54,9 +60,11 @@ the indexes below to choose what to read first.
 | `specs/` | Foundational product specs, backlog, and direction memos. |
 | `superpowers/specs/` | Later milestone design specs and roadmaps. |
 | `superpowers/plans/` | Task-level implementation plans for later milestones. |
-| `.gstack/projects/` | Approved `/office-hours` design docs that downstream gstack review skills can discover automatically. |
+| `gstack/` | Approved `/office-hours` design docs that downstream gstack review skills can discover automatically. |
 | `notes/` | Small decision records. |
 | `feature-verification.md` | Feature/fix verification gate and evidence requirements. |
+| `features/` | Short per-feature canned answer docs and conventions. |
+| `knowledge/` | Project knowledge index and docs propagation notes. |
 | `pr-14-status.md` | PR #14 local status index for restricted verification sessions. |
 | `research/` | Research notes that informed roadmap decisions. |
 | `dogfood/` | Current dogfood reports. |

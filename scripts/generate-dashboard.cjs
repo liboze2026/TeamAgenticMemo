@@ -27,6 +27,18 @@ const allRules = [
 ];
 
 const recentEvents = queryDb(eventsDbPath, "SELECT kind, knowledge_id, timestamp FROM events ORDER BY timestamp DESC LIMIT 2000");
+const recordingMetricsPath = path.join(cwd, '.teamagent', 'recording-memory', 'metrics.jsonl');
+
+function readJsonl(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf-8')
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map(line => JSON.parse(line));
+  } catch (e) { return []; }
+}
+
+const recordingMetrics = readJsonl(recordingMetricsPath).slice(-500);
 
 // Compute stats
 const active = allRules.filter(r => r.status === 'active').length;
@@ -52,6 +64,25 @@ const topByEvents = Object.entries(ruleEventCount).sort((a,b)=>b[1]-a[1]).slice(
   const r = allRules.find(x=>x.id===id);
   return {id, count:cnt, trigger:r?.trigger||id, tier:r?.current_tier, conf:r?.confidence};
 });
+
+const recordingLatencies = recordingMetrics.map(m => Number(m.latencyMs || 0)).sort((a,b)=>a-b);
+function percentile(arr, p) {
+  if (!arr.length) return 0;
+  return arr[Math.min(arr.length - 1, Math.floor((arr.length - 1) * p))] || 0;
+}
+const recordingPerf = {
+  total: recordingMetrics.length,
+  imports: recordingMetrics.filter(m => m.operation === 'import').length,
+  searches: recordingMetrics.filter(m => m.operation === 'search').length,
+  injections: recordingMetrics.filter(m => m.operation === 'inject').length,
+  p50: percentile(recordingLatencies, 0.5),
+  p95: percentile(recordingLatencies, 0.95),
+  slow: recordingMetrics.filter(m => m.slow).length,
+  empty: recordingMetrics.filter(m => m.empty).length,
+  failed: recordingMetrics.filter(m => m.failed).length,
+  oversized: recordingMetrics.filter(m => m.oversized).length,
+  latest: recordingMetrics.slice(-5).reverse(),
+};
 
 // Confidence distribution
 const confBuckets = [[0,20,0],[20,40,0],[40,60,0],[60,80,0],[80,100,0]];
@@ -92,6 +123,14 @@ function categoryBadge(c) {
   const names = {E:'工程层',K:'认知层',S:'策略层',C:'代码层',W:'工作流'};
   const color = map[c]||'#6b7280';
   return `<span class="cat-badge" style="background:${color}22;color:${color}">${c} ${names[c]||''}</span>`;
+}
+
+function h(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 const now = new Date().toLocaleString('zh-CN', {timeZone:'Asia/Shanghai'});
@@ -393,6 +432,50 @@ const html = `<!DOCTYPE html>
           <span style="color:var(--purple);font-weight:700">${confBuckets[0][2]+confBuckets[1][2]} 条</span>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Recording Memory Performance -->
+  <div class="section-title">🎙️ Recording Memory 性能</div>
+  <div class="grid-3" data-testid="recording-memory-performance">
+    <div class="card">
+      <div class="card-title">⏱️ Latency</div>
+      <div class="grid-2">
+        <div class="event-item">
+          <div class="event-kind">p50 latency</div>
+          <div class="event-count" style="color:var(--cyan)" data-testid="recording-p50">${recordingPerf.p50}ms</div>
+        </div>
+        <div class="event-item">
+          <div class="event-kind">p95 latency</div>
+          <div class="event-count" style="color:var(--purple)" data-testid="recording-p95">${recordingPerf.p95}ms</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--muted)">
+        import ${recordingPerf.imports} · search ${recordingPerf.searches} · inject ${recordingPerf.injections}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🚦 Retrieval Health</div>
+      <div class="event-grid">
+        <div class="event-item"><div class="event-kind">slow queries</div><div class="event-count" style="color:var(--amber)" data-testid="recording-slow">${recordingPerf.slow}</div></div>
+        <div class="event-item"><div class="event-kind">empty queries</div><div class="event-count" style="color:var(--blue)" data-testid="recording-empty">${recordingPerf.empty}</div></div>
+        <div class="event-item"><div class="event-kind">failed queries</div><div class="event-count" style="color:var(--red)" data-testid="recording-failed">${recordingPerf.failed}</div></div>
+        <div class="event-item"><div class="event-kind">oversized injections</div><div class="event-count" style="color:var(--orange)" data-testid="recording-oversized">${recordingPerf.oversized}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🧾 Latest Activity</div>
+      ${recordingPerf.latest.length ? recordingPerf.latest.map(m => `
+        <div style="padding:7px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px">
+            <span style="color:var(--text);font-weight:600">${h(m.operation)} · ${h(m.status)}</span>
+            <span style="color:var(--cyan);font-weight:700">${Number(m.latencyMs || 0)}ms</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${h(m.recordingId || m.query || m.sourceReference || 'no match')}
+          </div>
+        </div>
+      `).join('') : `<div style="font-size:12px;color:var(--muted)">No recording-memory activity yet.</div>`}
     </div>
   </div>
 

@@ -22,6 +22,8 @@ Every feature/fix must include a verification summary in both places:
 Keep updating the code/docs until all three paths agree.
 
 1. Verify with `!claudefast -p`.
+   - It must run `claudefast -h` first and record the supported flags.
+   - `claudefast -p` must receive a prompt argument or stdin.
    - It must run `{MODULE} --help` first, or the module's equivalent help /
      metadata entry point.
    - It must emit JSON using a declared schema or stable JSON format.
@@ -52,6 +54,10 @@ The feature is not verified until:
 
 When Claude Code submits a PR for a feature/fix, use `teamagent pr-cycle` to
 create or locate the PR, wait five minutes, and inspect review feedback.
+TeamBrain PRs are always normal PRs, not draft PRs. Do not pass `--draft` to
+`gh pr create`, `teamagent pr-cycle`, connector calls, or GitHub UI/API flows.
+If the change is not ready for review, keep working locally instead of opening
+a draft PR.
 
 When asked "what to do when we make a PR", answer with this PR loop first,
 before the generic feature verification checklist:
@@ -71,6 +77,22 @@ before the generic feature verification checklist:
 
 7. Only after the verification answer is correct, fix the review.
 8. Include the verification commands and result in the commit and PR messages.
+
+If the PR has a merge conflict or another conflict path, handle it as part of
+the same gate:
+
+1. Classify it as merge conflict, Codex-review conflict, or rule/document
+   conflict.
+2. Resolve merge conflicts locally on the PR branch after fetching the latest
+   base; preserve both sides' intent.
+3. For Codex-review conflicts, update docs/rules first and verify the
+   rule-backed answer before code changes.
+4. For rule/document conflicts, update the current project docs to remove the
+   ambiguity before continuing.
+5. Never fix directly on `main`, force-push, use `git reset --hard`, or discard
+   someone else's change only to make the conflict disappear.
+6. Rerun `pnpm test`, `pnpm typecheck`, and the relevant 1+2+3 verification,
+   then push the same PR branch and restart the POSTPR loop.
 
 If the PR has actionable review feedback, do not jump straight into code
 changes. First update the project documentation or TeamAgent rule that explains
@@ -109,7 +131,7 @@ diff -u claudefast.sorted.json codex.sorted.json
 
 ## Claude stream-json + tmux 固定脚本（haiku / MiniMax）
 
-当需求明确要求 `claude -p --bypass --model haiku`、`stream-json`、硬匹配产品特性、以及 tmux 交互 `/export` 时，直接使用：
+当需求明确要求 `claude -p --model haiku`、`stream-json`、硬匹配产品特性、以及 tmux 交互 `/export` 时，直接使用：
 
 ```bash
 bash docs/feature-verify-kit/run-all.sh
@@ -117,9 +139,18 @@ bash docs/feature-verify-kit/run-all.sh
 
 脚本会执行：
 
-1. `verify-claude-stream-json.sh`：`claude -p --bypass --model haiku --output-format stream-json` + JSON schema。
+1. `verify-claude-stream-json.sh`：先 `claudefast -h`，再用
+   `--output-format stream-json --include-partial-messages --verbose` 和
+   `--debug hooks --debug-file <path>` 跑 JSON schema。
 2. `hardmatch-features.sh`：对 `fixtures/expected-product-features.json` 做 `jq -S` 后 `diff -u` 硬匹配。
-3. `verify-tmux-interactive.sh`：tmux 启动 `claudefast` 交互模式并执行 `/export`。
+3. `verify-dashboard-health.sh`：生成 dashboard，并用稳定文本
+   `系统健康总结` / `Retrieval Health` 作为健康信号；watch 模式也可用
+   `/health.json` 的 `service=teamagent-dashboard` 与 `status=ok`。
+4. `verify-tmux-interactive.sh`：tmux 启动 `claudefast` 交互模式并执行 `/export`。
+
+不要把 `--include-hook-events` 当成活跃 recipe 或验收证据。hook evidence
+必须来自 `--debug hooks --debug-file <path>`；stream-json 用于原始
+conversation/tool transcript。
 
 固定验收问句：
 
