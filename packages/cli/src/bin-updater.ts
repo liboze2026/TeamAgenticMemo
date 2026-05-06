@@ -27,7 +27,11 @@ function rollbackDir(): string { return path.join(teamagentHome(), "rollback"); 
 const REPO_OWNER = "libz-renlab-ai";
 const REPO_NAME = "TeamBrain";
 const REPO_BRANCH = "release";
-const PACKAGE_SPEC = `github:${REPO_OWNER}/${REPO_NAME}#${REPO_BRANCH}`;
+// Use the tarball URL instead of the npm `github:` shorthand: the shorthand
+// resolves to `git+ssh://git@github.com/...`, which fails on machines without
+// an SSH key configured for GitHub. The tarball goes over plain HTTPS and
+// avoids the entire git-clone path (faster + works in restricted networks).
+const PACKAGE_SPEC = `https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${REPO_BRANCH}.tar.gz`;
 const BACKUP_KEEP = 3;
 
 function ensureDir(p: string): void {
